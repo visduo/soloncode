@@ -126,7 +126,8 @@ public class WebController {
                 }
             }
 
-            ChatModel chatModel = engine.getMainModel();
+            String selectedModel = (String) session.getContext().get(HarnessFlags.VAR_MODEL_SELECTED);
+            ChatModel chatModel = engine.getModelOrMain(selectedModel);
             ReActAgent agent = engine.getAgentOrMain(agentName);
 
             StringBuilder resultBuilder = new StringBuilder();

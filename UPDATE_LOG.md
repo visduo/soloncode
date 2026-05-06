@@ -1,4 +1,9 @@
 
+
+### v2026.5.6
+
+* 修复 soloncode web loop 任务没有用会话选中的模型
+
 ### v2026.5.6
 
 * 新增 soloncode web 微信接入
