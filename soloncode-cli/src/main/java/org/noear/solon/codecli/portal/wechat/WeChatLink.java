@@ -20,6 +20,7 @@ import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.harness.HarnessFlags;
 import org.noear.solon.codecli.portal.WebSessionSink;
 import org.noear.solon.codecli.portal.WebStreamBuilder;
 import org.noear.solon.core.util.Assert;
@@ -253,7 +254,7 @@ public class WeChatLink implements Runnable {
             }
 
             // 调用 AI 并回复
-            handleWeChatMessage(sessionId, text, binding);
+            handleWeChatMessage(sessionId, text);
 
             // 停止输入状态
             if (binding.typingTicket != null) {
@@ -268,10 +269,12 @@ public class WeChatLink implements Runnable {
     /**
      * 处理微信消息：调用 AI agent，收集回复，发回微信
      */
-    private void handleWeChatMessage(String sessionId, String userInput, WeChatBinding binding) {
+    private void handleWeChatMessage(String sessionId, String userInput) {
         try {
             AgentSession session = engine.getSession(sessionId);
-            ChatModel chatModel = engine.getMainModel();
+            String selectedModel = session.getContext().getOrDefault(HarnessFlags.VAR_MODEL_SELECTED,
+                    engine.getMainModel().getNameOrModel());
+            final ChatModel chatModel = engine.getModelOrMain(selectedModel);
             ReActAgent agent = engine.getMainAgent();
 
             streamBuilder.buildStreamFlux(session, agent, chatModel, null, Prompt.of(userInput))
