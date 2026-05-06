@@ -1,4 +1,9 @@
 
+### v2026.5.6
+
+* 新增 soloncode web 微信接入
+* 优化 soloncode acp 输出
+
 ### v2026.5.5
 
 * 优化 soloncode 启动打印（非 cli 模式，改用 err 通道打印）
