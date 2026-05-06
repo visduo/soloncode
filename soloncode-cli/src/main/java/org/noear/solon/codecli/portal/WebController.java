@@ -649,6 +649,23 @@ public class WebController {
      * */
     @Mapping("/chat/input")
     public void chat_input(Context ctx, String input, UploadedFile[] attachments, String attachmentTypes[], String model, String sessionId) throws Throwable {
+        try {
+            chat_input_do(ctx, input, attachments, attachmentTypes, model, sessionId);
+        } catch (Throwable e) {
+            ctx.contentType(MimeType.TEXT_EVENT_STREAM_UTF8_VALUE);
+            Flux<String> commandFlux = Flux.create(sink -> {
+                ONode chunk = new ONode();
+                chunk.set("type", "error");
+                chunk.set("text", "! Error: " + e.getMessage());
+                sink.next(chunk.toJson());
+                sink.next("[DONE]");
+                sink.complete();
+            });
+            ctx.returnValue(commandFlux);
+        }
+    }
+
+    private void chat_input_do(Context ctx, String input, UploadedFile[] attachments, String attachmentTypes[], String model, String sessionId) throws Throwable {
         if (sessionId == null || sessionId.isEmpty()) {
             sessionId = ctx.headerOrDefault("X-Session-Id", "web");
         }
