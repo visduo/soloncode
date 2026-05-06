@@ -2,7 +2,12 @@
 ### v2026.5.6
 
 * 新增 soloncode web 微信接入
+* 添加 soloncode `/loop` cron 表达式支持
 * 优化 soloncode acp 输出
+
+```
+/loop cron:'0 */5 * * * ?' check status
+```
 
 ### v2026.5.5
 
