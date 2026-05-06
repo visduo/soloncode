@@ -169,11 +169,12 @@ public class AcpLink implements Runnable {
                                 }
                                 // === 最终回复阶段 ===
                                 else if (chunk instanceof ReActChunk) {
-                                    String finalContent = chunk.getContent();
+                                    String traceInfo = buildTraceInfo(((ReActChunk) chunk).getTrace(), startTime);
+
+                                    String finalContent = chunk.getContent() + traceInfo;
 
                                     // 发送最终文本内容
                                     return acpContext.sendMessage(finalContent)
-                                            .then(acpContext.sendThought(buildTraceInfo(((ReActChunk) chunk).getTrace(), startTime)))
                                             .thenReturn(chunk);
                                 }
 
