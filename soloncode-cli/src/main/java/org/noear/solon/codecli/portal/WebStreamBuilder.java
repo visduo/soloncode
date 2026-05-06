@@ -180,7 +180,7 @@ public class WebStreamBuilder {
         if (weChatLink != null) {
             if (weChatLink.isBound(session.getSessionId())) {
                 //回复微信
-                weChatLink.sendReplyAsync(session.getSessionId(), thought.getContent());
+                weChatLink.sendReply(session.getSessionId(), thought.getContent());
             }
         }
 
@@ -240,7 +240,7 @@ public class WebStreamBuilder {
         if (weChatLink != null) {
             if (weChatLink.isBound(session.getSessionId())) {
                 //回复微信
-                weChatLink.sendReplyAsync(session.getSessionId(), traceInfo.toString());
+                weChatLink.sendReply(session.getSessionId(), traceInfo.toString());
             }
         }
 

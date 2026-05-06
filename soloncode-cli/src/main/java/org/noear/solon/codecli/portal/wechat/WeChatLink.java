@@ -300,7 +300,7 @@ public class WeChatLink implements Runnable {
         }
     }
 
-    public void sendReplyAsync(String sessionId, String reply) {
+    public void sendReply(String sessionId, String reply) {
         WeChatBinding binding = bindings.get(sessionId);
         if (binding == null) {
             return;
@@ -310,12 +310,12 @@ public class WeChatLink implements Runnable {
             return;
         }
 
-        RunUtil.asyncAndTry(() -> {
-            sendReplyAsyncDo(binding, reply);
+        RunUtil.runAndTry(() -> {
+            sendReplyDo(binding, reply);
         });
     }
 
-    private void sendReplyAsyncDo(WeChatBinding binding, String reply) {
+    private void sendReplyDo(WeChatBinding binding, String reply) {
         // 清理 markdown 标记，微信不渲染 markdown
         String cleanReply = reply
                 .replaceAll("`{3}[\\s\\S]*?`{3}", "") // 去掉代码块
