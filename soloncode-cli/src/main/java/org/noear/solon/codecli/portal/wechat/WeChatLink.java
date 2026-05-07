@@ -271,11 +271,10 @@ public class WeChatLink implements Runnable {
      */
     private void handleWeChatMessage(String sessionId, String userInput) {
         try {
-            AgentSession session = engine.getSession(sessionId);
-            String selectedModel = session.getContext().getOrDefault(HarnessFlags.VAR_MODEL_SELECTED,
-                    engine.getMainModel().getNameOrModel());
+            final AgentSession session = engine.getSession(sessionId);
+            final String selectedModel = session.getContext().getAs(HarnessFlags.VAR_MODEL_SELECTED);
             final ChatModel chatModel = engine.getModelOrMain(selectedModel);
-            ReActAgent agent = engine.getMainAgent();
+            final ReActAgent agent = engine.getMainAgent();
 
             streamBuilder.buildStreamFlux(session, agent, chatModel, null, Prompt.of(userInput))
                     .filter(line -> !"[DONE]".equals(line))
