@@ -1529,15 +1529,8 @@ function handleRewind(sess, count) {
 }
 
 /* ===== WebChunk Handling (Session-Aware) ===== */
-function onWebChunk(sess, raw) {
-    if (raw === '[DONE]') {
-        console.log("Stream finished");
-        finishStream(sess);
-        return;
-    }
-
+function onWebChunk(sess, chunk) {
     try {
-        var chunk = JSON.parse(raw);
         if (sess.silenceTimer) {
             clearTimeout(sess.silenceTimer);
         }
@@ -1632,7 +1625,7 @@ function connectWebGate() {
             var chunk = JSON.parse(raw);
             var sid = chunk.sessionId;
 
-            // 处理 [DONE] 的 JSON 包装（type=done）
+            // WebSocket 流结束信号
             if (chunk.type === 'done') {
                 if (!sid) return;
                 var sess = sessionMap[sid];
@@ -1655,7 +1648,7 @@ function connectWebGate() {
                 resetStreamState(sess2);
                 showThinking(sess2);
             }
-            onWebChunk(sess2, raw);
+            onWebChunk(sess2, chunk);
         } catch(e) {
             // 非 JSON 消息忽略
         }
