@@ -6,10 +6,10 @@ import org.noear.solon.ai.harness.HarnessProperties;
 import org.noear.solon.ai.skills.memory.MemorySearchProvider;
 import org.noear.solon.ai.skills.memory.MemorySolution;
 import org.noear.solon.ai.skills.memory.MemoryStoreProvider;
-import org.noear.solon.ai.skills.memory.search.MemorySearchProviderLuceneImpl;
-import org.noear.solon.ai.skills.memory.store.MemoryStoreProviderRogueImpl;
+import org.noear.solon.ai.skills.memory.md.MemoryMdData;
+import org.noear.solon.ai.skills.memory.search.MemorySearchProviderMdImpl;
+import org.noear.solon.ai.skills.memory.store.MemoryStoreProviderMdImpl;
 
-import java.io.IOException;
 import java.nio.file.Paths;
 
 /**
@@ -22,15 +22,13 @@ public class MemorySolutionImpl implements MemorySolution {
     private MemoryStoreProvider storeProvider;
 
     public MemorySolutionImpl(String __cwd, HarnessProperties props) {
-        String lucenePath = Paths.get(__cwd, props.getHarnessMemory(), "lucene").toAbsolutePath().toString();
-        String roguePath = Paths.get(__cwd, props.getHarnessMemory(), "rogue").toAbsolutePath().toString();
+        MemoryMdData mdData = new MemoryMdData(Paths.get(__cwd, props.getHarnessMemory()));
 
-        try {
-            searchProvider = new MemorySearchProviderLuceneImpl(lucenePath);
-            storeProvider = new MemoryStoreProviderRogueImpl(roguePath);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        //String lucenePath = Paths.get(__cwd, props.getHarnessMemory(), "lucene").toAbsolutePath().toString();
+        //String roguePath = Paths.get(__cwd, props.getHarnessMemory(), "rogue").toAbsolutePath().toString();
+
+        searchProvider = new MemorySearchProviderMdImpl(mdData); //new MemorySearchProviderLuceneImpl(lucenePath);
+        storeProvider = new MemoryStoreProviderMdImpl(mdData); //new MemoryStoreProviderRogueImpl(roguePath);
     }
 
     @Override

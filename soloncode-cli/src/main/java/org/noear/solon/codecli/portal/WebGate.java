@@ -120,6 +120,10 @@ public class WebGate extends SimpleWebSocketListener {
         // 确保消息中包含 sessionId
         String enriched = ONode.serialize(jsonChunk);
 
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("emit: " + enriched);
+        }
+
         // 广播给所有连接（每条消息都带 sessionId，前端自行路由）
         for (WebSocket socket : connections) {
             if (socket != null) {
