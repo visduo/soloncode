@@ -479,7 +479,6 @@
 
 <script>
     var SSE_ENDPOINT = "/chat/input";
-    var WEBSOCKET_ENDPOINT = "wss://" + window.location.host + "/web/gate";
     // 启动时拉取页面元信息（appTitle / appVersion / workspace / workname），回填标题/侧栏
     fetch('/chat/meta').then(function (r) { return r.json(); }).then(function (res) {
         var meta = (res && res.data) ? res.data : res;
