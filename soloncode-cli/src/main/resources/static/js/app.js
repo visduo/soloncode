@@ -1644,8 +1644,8 @@ function sendWithFormDataGrouped(sess, text, filesToSend) {
 /* ===== Rewind Handling ===== */
 function handleRewind(sess, count) {
     if (count <= 0) return;
-    // 每轮对话 = 1个user + 1个assistant，从末尾倒序删除
-    var toRemove = count * 2;
+    // count = 要删除的消息条数，从末尾倒序删除
+    var toRemove = count;
     var rows = sess.container.querySelectorAll('.msg-row');
     var actual = Math.min(toRemove, rows.length);
     for (var i = 0; i < actual; i++) {

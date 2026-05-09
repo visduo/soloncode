@@ -21,7 +21,7 @@ import org.noear.solon.ai.harness.command.CommandType;
 import org.noear.solon.core.util.Assert;
 
 /**
- * /rewind 命令，用于回退最近 N 轮对话记录
+ * /rewind 命令，用于回退最近 N 条对话记录
  *
  * @author noear
  * @since 2026.5.8
