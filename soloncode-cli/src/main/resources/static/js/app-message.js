@@ -35,19 +35,14 @@ function appendUserMessage(sess, text, imageDataUrls, fileAttachments, createdAt
     }
 
     var span = document.createElement('span');
+    span.className = 'user-msg-text';
     span.textContent = text;
     bubble.appendChild(span);
 
-    // 时间戳
-    var ts = createdAt || Date.now();
-    var timeEl = document.createElement('div');
-    timeEl.className = 'msg-time';
-    timeEl.textContent = formatMsgTime(ts);
-    bubble.appendChild(timeEl);
-
     var copyBtn = row.querySelector('.user-copy-btn');
     copyBtn.addEventListener('click', function() {
-        var txt = bubble.innerText || '';
+        var txt = bubble.querySelector('.user-msg-text');
+        txt = txt ? txt.textContent : '';
         if (navigator.clipboard) {
             navigator.clipboard.writeText(txt).then(function() {
                 copyBtn.classList.add('copied');

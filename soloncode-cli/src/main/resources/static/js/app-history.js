@@ -411,8 +411,8 @@ function extractUserMessages() {
     for (var i = rows.length - 1; i >= 0; i--) {
         var bubble = rows[i].querySelector('.msg-bubble');
         if (!bubble) continue;
-        // 用户文本在 .msg-bubble 内的最后一个 <span> 中
-        var lastSpan = bubble.querySelector('span:last-child');
+        // 用户文本在 .msg-bubble 内的 .user-msg-text 中
+        var lastSpan = bubble.querySelector('.user-msg-text');
         var text = lastSpan ? lastSpan.textContent.trim() : '';
         if (text && texts.indexOf(text) === -1) {
             texts.push(text);
