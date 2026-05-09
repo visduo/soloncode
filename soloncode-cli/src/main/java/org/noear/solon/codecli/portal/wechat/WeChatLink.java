@@ -208,6 +208,7 @@ public class WeChatLink implements Runnable {
             unbindSession(sessionId);
             // 通知前端
             webGate.emitToClient(sessionId, WebChunk.ofError("微信连接已过期，请重新扫码绑定"));
+            webGate.emitToClient(sessionId, WebChunk.ofDone());
             return;
         }
 

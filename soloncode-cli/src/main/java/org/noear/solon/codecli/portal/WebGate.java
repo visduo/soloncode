@@ -120,9 +120,9 @@ public class WebGate extends SimpleWebSocketListener {
         // 确保消息中包含 sessionId
         String enriched = ONode.serialize(jsonChunk);
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("emit: " + enriched);
-        }
+//        if (LOG.isDebugEnabled()) {
+//            LOG.debug("emit: " + enriched);
+//        }
 
         // 广播给所有连接（每条消息都带 sessionId，前端自行路由）
         for (WebSocket socket : connections) {
@@ -248,9 +248,9 @@ public class WebGate extends SimpleWebSocketListener {
                 // 流式处理：输出通过 WebSocket 推送
                 performAgentTask(session, sessionCwd, prompt, selectedModel, agentName);
             }
-        } catch (Exception e) {
-            LOG.error("[WebGate] input error: {}", e.getMessage());
-            emitToClient(sessionId, WebChunk.ofError(e));
+        } catch (Exception err) {
+            LOG.error("[WebGate] onChatInput error:", err);
+            emitToClient(sessionId, WebChunk.ofError(err));
             emitToClient(sessionId, WebChunk.ofDone());
         }
     }
@@ -265,6 +265,7 @@ public class WebGate extends SimpleWebSocketListener {
                 .subscribe(
                         line -> emitToClient(sessionId, line),
                         err -> {
+                            LOG.error("[WebGate] performAgentTask error:", err);
                             emitToClient(sessionId, WebChunk.ofError(err));
                             emitToClient(sessionId, WebChunk.ofDone());
                         }

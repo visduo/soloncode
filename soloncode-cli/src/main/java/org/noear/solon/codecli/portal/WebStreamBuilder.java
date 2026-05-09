@@ -105,7 +105,7 @@ public class WebStreamBuilder {
                 .onErrorResume(e -> {
                     LOG.error("Task fail: {}", e.getMessage(), e);
 
-                    return Mono.just(WebChunk.ofError(e.getMessage()));
+                    return Mono.just(WebChunk.ofError(e));
                 })
                 .concatWith(Flux.defer(() -> {
                     // Check HITL state after stream completes
@@ -121,6 +121,7 @@ public class WebStreamBuilder {
                             return Flux.just(hitlChuck, WebChunk.ofDone());
                         }
                     }
+
                     return Flux.just(WebChunk.ofDone());
                 }))
                 .doFinally(signal -> {
