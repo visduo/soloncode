@@ -7,7 +7,8 @@
 * 添加 soloncode web 微信通道命令支持
 * 调整 soloncode 心智记忆改为 md 文件保存（之前的会失效）
 * 调整 soloncode web 改用 websocket 统一输出
-* 修复 soloncode web loop 任务没有用会话选中的模型
+* 修复 soloncode web `/loop` 任务没有用会话选中模型的问题
+* 细节优化
 
 ### v2026.5.6
 
