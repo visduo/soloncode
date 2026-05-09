@@ -18,6 +18,7 @@ package org.noear.solon.codecli.portal.wechat;
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.snack4.Options;
+import org.noear.solon.codecli.config.AgentProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,19 +40,14 @@ import java.util.*;
 public class WeChatCredentialStore {
     private static final Logger LOG = LoggerFactory.getLogger(WeChatCredentialStore.class);
 
-    private static final String STORE_DIR = ".soloncode";
     private static final String STORE_FILE = "wechat-bindings.json";
 
     private final Path storePath;
 
-    public WeChatCredentialStore() {
-        // 优先使用项目工作目录，回退到用户 home
-        String userDir = System.getProperty("user.dir");
-        if (userDir != null && Files.isDirectory(Paths.get(userDir))) {
-            storePath = Paths.get(userDir, STORE_DIR, STORE_FILE);
-        } else {
-            storePath = Paths.get(System.getProperty("user.home", "."), STORE_DIR, STORE_FILE);
-        }
+    public WeChatCredentialStore(AgentProperties agentProps) {
+        storePath = Paths.get(AgentProperties.getUserDir(),
+                agentProps.getHarnessHome(),
+                STORE_FILE).toAbsolutePath();
     }
 
     /**
@@ -93,7 +89,7 @@ public class WeChatCredentialStore {
             LOG.info("[WeChatStore] Loaded {} bindings from {}", result.size(), storePath);
             return result;
         } catch (Exception e) {
-            LOG.warn("[WeChatStore] Failed to load credentials: {}", e.getMessage());
+            LOG.warn("[WeChatStore] Failed to load credentials from {}: {}", storePath, e.toString());
             return Collections.emptyMap();
         }
     }
@@ -133,7 +129,7 @@ public class WeChatCredentialStore {
             Files.write(storePath, root.toJson().getBytes());
             LOG.debug("[WeChatStore] Saved {} bindings to {}", bindings.size(), storePath);
         } catch (IOException e) {
-            LOG.error("[WeChatStore] Failed to save credentials: {}", e.getMessage());
+            LOG.error("[WeChatStore] Failed to save credentials to {}: {}", storePath, e.toString());
         }
     }
 }

@@ -16,6 +16,7 @@
 package org.noear.solon.codecli.portal.wechat;
 
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.codecli.config.AgentProperties;
 import org.noear.solon.codecli.portal.WebChunk;
 import org.noear.solon.codecli.portal.WebGate;
 import org.noear.solon.core.util.Assert;
@@ -63,7 +64,7 @@ public class WeChatLink implements Runnable {
     public WeChatLink(HarnessEngine engine, WebGate webGate) {
         this.engine = engine;
         this.webGate = webGate;
-        this.credentialStore = new WeChatCredentialStore();
+        this.credentialStore = new WeChatCredentialStore((AgentProperties)engine.getProps());
 
         webGate.getStreamBuilder().bind(this);
     }
