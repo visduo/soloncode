@@ -15,7 +15,6 @@
  */
 package org.noear.solon.codecli.portal;
 
-import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActChunk;
@@ -34,7 +33,6 @@ import org.noear.solon.codecli.portal.wechat.WeChatLink;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -95,13 +93,6 @@ public class WebStreamBuilder {
                     return WebChunk.EMPTY;
                 })
                 .filter(WebChunk::isNotEmpty)
-                .doOnSubscribe(subscription -> {
-                    // 将 Subscription 包装为 Disposable
-                    Disposable disposable = subscription::cancel;
-
-                    // 在订阅开始时，将 disposable 存入 session
-                    session.attrs().put("disposable", disposable);
-                })
                 .onErrorResume(e -> {
                     LOG.error("Task fail: {}", e.getMessage(), e);
 
@@ -123,11 +114,7 @@ public class WebStreamBuilder {
                     }
 
                     return Flux.just(WebChunk.ofDone());
-                }))
-                .doFinally(signal -> {
-                    // 流结束或被取消后，清理掉引用，避免内存泄漏
-                    session.attrs().remove("disposable");
-                });
+                }));
     }
 
     private StringBuilder getTraceInfo(ReActTrace trace) {

@@ -35,13 +35,12 @@ import org.noear.solon.codecli.command.WebCommandContext;
 import org.noear.solon.codecli.config.AgentProperties;
 import org.noear.solon.core.handle.UploadedFile;
 import org.noear.solon.core.util.Assert;
-import org.noear.solon.core.util.MimeType;
 import org.noear.solon.net.websocket.WebSocket;
 import org.noear.solon.net.websocket.listener.SimpleWebSocketListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Disposable;
-import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.util.*;
@@ -261,7 +260,8 @@ public class WebGate extends SimpleWebSocketListener {
         ChatModel chatModel = engine.getModelOrMain(selectedModel);
         ReActAgent agent = engine.getAgentOrMain(agentName);
 
-        streamBuilder.buildStreamFlux(session, agent, chatModel, sessionCwd, prompt)
+        Disposable disposable = streamBuilder.buildStreamFlux(session, agent, chatModel, sessionCwd, prompt)
+                .subscribeOn(Schedulers.boundedElastic())
                 .subscribe(
                         line -> emitToClient(sessionId, line),
                         e -> {
@@ -270,6 +270,8 @@ public class WebGate extends SimpleWebSocketListener {
                             emitToClient(sessionId, WebChunk.ofDone());
                         }
                 );
+
+        session.attrs().put("disposable", disposable);
     }
 
     private boolean isCommand(AgentSession session, String sessionCwd, String input, String selectedModel, String agentName) throws Exception {
