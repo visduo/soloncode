@@ -334,7 +334,7 @@ public class WebGate extends SimpleWebSocketListener {
                 if (streamBuilder.getWeChatLink() != null) {
                     //命令执行后也通知给微信
                     if (streamBuilder.getWeChatLink().isBound(session.getSessionId())) {
-                        streamBuilder.getWeChatLink().sendReply(session.getSessionId(), text);
+                        streamBuilder.getWeChatLink().sendReply(session.getSessionId(), text, true);
                     }
                 }
 
