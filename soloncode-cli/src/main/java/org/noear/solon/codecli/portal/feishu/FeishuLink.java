@@ -15,8 +15,13 @@
  */
 package org.noear.solon.codecli.portal.feishu;
 
-import java.net.SocketException;
 import java.net.URI;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.noear.java_websocket.client.SimpleWebSocketClient;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.codecli.config.AgentProperties;
@@ -25,12 +30,6 @@ import org.noear.solon.codecli.portal.WebGate;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 飞书 Bot 通道（基于飞书 WebSocket 长连接 + Protobuf 协议）
@@ -67,9 +66,9 @@ public class FeishuLink implements IMLink, Runnable {
     private volatile String appSecret;
 
     /**
-     * 纯手工 WebSocket 客户端实例
+     * WebSocket 客户端实例（基于 java-websocket-ns，与钉钉通道统一技术栈）
      */
-    private volatile RawWsClient wsClient;
+    private volatile SimpleWebSocketClient wsClient;
 
     /**
      * WebSocket 连接是否已启动
@@ -126,6 +125,12 @@ public class FeishuLink implements IMLink, Runnable {
      * 从 WS URL 提取的 device_id（连接标识）
      */
     private volatile String connId;
+
+    /**
+     * 心跳调度器（飞书协议需要发送 Protobuf 二进制 ping 帧，不能用框架内置心跳）
+     */
+    private volatile ScheduledFuture<?> heartbeatFuture;
+    private volatile ScheduledExecutorService heartbeatScheduler;
 
     public FeishuLink(HarnessEngine engine, WebGate webGate) {
         this.engine = engine;
@@ -295,12 +300,13 @@ public class FeishuLink implements IMLink, Runnable {
             LOG.info("[Feishu] WS params: serviceId={}, connId={}", serviceId,
                     connId != null ? connId.substring(0, Math.min(8, connId.length())) + "..." : "null");
 
-            // 第三步：建立纯手工 WebSocket 连接（完全自主控制帧解析与解压缩）
-            wsClient = new RawWsClient(URI.create(wssUrl), new RawWsClient.Listener() {
+            // 第三步：建立 WebSocket 连接（使用 java-websocket-ns，与钉钉通道统一技术栈）
+            final int sid = serviceId;
+            wsClient = new SimpleWebSocketClient(wssUrl) {
                 @Override
-                public void onBinary(ByteBuffer data) {
+                public void onMessage(ByteBuffer bytes) {
                     try {
-                        FeishuPbCodec.Frame frame = FeishuPbCodec.decode(data);
+                        FeishuPbCodec.Frame frame = FeishuPbCodec.decode(bytes);
                         handlePbFrame(frame);
                     } catch (Exception e) {
                         LOG.error("[Feishu] Failed to parse binary frame: {}", e.getMessage(), e);
@@ -308,14 +314,8 @@ public class FeishuLink implements IMLink, Runnable {
                 }
 
                 @Override
-                public void onOpen() {
-                    LOG.info("[Feishu] Raw WS connection opened");
-                    startHeartbeat();
-                }
-
-                @Override
-                public void onClose(int code, String reason) {
-                    LOG.info("[Feishu] Raw WS closed: code={}, reason={}", code, reason);
+                public void onClose(int code, String reason, boolean remote) {
+                    LOG.info("[Feishu] WS closed: code={}, reason={}, remote={}", code, reason, remote);
                     stopHeartbeat();
                     if (running.get() && streamStarted) {
                         streamStarted = false;
@@ -325,17 +325,17 @@ public class FeishuLink implements IMLink, Runnable {
 
                 @Override
                 public void onError(Exception ex) {
-                    LOG.error("[Feishu] Raw WS error: {}", ex.getMessage(), ex);
+                    LOG.error("[Feishu] WS error: {}", ex.getMessage(), ex);
                 }
-            });
+            };
 
-            boolean connected = wsClient.connect();
-            if (!connected) {
-                throw new RuntimeException("Raw WebSocket connect returned false");
-            }
+            wsClient.connectBlocking(30, TimeUnit.SECONDS);
             streamStarted = true;
 
-            LOG.info("[Feishu] Raw WebSocket connected successfully");
+            // 启动自定义心跳（飞书协议要求发送 Protobuf 二进制 ping 帧）
+            startHeartbeat();
+
+            LOG.info("[Feishu] WebSocket connected successfully");
 
             // 保持线程存活
             while (!Thread.currentThread().isInterrupted() && running.get()) {
@@ -354,13 +354,44 @@ public class FeishuLink implements IMLink, Runnable {
         }
     }
 
-    // ==================== 飞书 WebSocket 客户端（Protobuf 二进制协议） ====================
+    // ==================== 心跳管理 ====================
 
     /**
-     * 心跳调度器
+     * 启动自定义心跳（飞书协议需要发送 Protobuf 二进制 ping 帧，不能用框架内置文本心跳）
      */
-    private volatile ScheduledFuture<?> heartbeatFuture;
-    private volatile ScheduledExecutorService heartbeatScheduler;
+    private void startHeartbeat() {
+        stopHeartbeat();
+        if (pingIntervalMs > 0) {
+            final int sid = serviceId;
+            heartbeatScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "feishu-heartbeat");
+                t.setDaemon(true);
+                return t;
+            });
+            heartbeatFuture = heartbeatScheduler.scheduleAtFixedRate(() -> {
+                try {
+                    if (wsClient != null && wsClient.isOpen()) {
+                        byte[] pingBytes = FeishuPbCodec.buildPing(sid);
+                        wsClient.send(pingBytes);
+                        LOG.debug("[Feishu] Sent ping, serviceId={}", sid);
+                    }
+                } catch (Exception e) {
+                    LOG.warn("[Feishu] Heartbeat error: {}", e.getMessage());
+                }
+            }, pingIntervalMs, pingIntervalMs, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private void stopHeartbeat() {
+        if (heartbeatFuture != null) {
+            heartbeatFuture.cancel(false);
+            heartbeatFuture = null;
+        }
+        if (heartbeatScheduler != null) {
+            heartbeatScheduler.shutdownNow();
+            heartbeatScheduler = null;
+        }
+    }
 
     // ==================== Protobuf 帧处理 ====================
 
@@ -492,7 +523,7 @@ public class FeishuLink implements IMLink, Runnable {
 
         // 发送 DATA 响应帧（与 SDK 一致：preserve payloadEncoding/payloadType, 添加 biz_rt header）
         byte[] respBytes = FeishuPbCodec.buildDataResponse(frame, respPayload, elapsedMs);
-        if (wsClient != null && wsClient.isRunning()) {
+        if (wsClient != null && wsClient.isOpen()) {
             wsClient.send(respBytes);
             LOG.debug("[Feishu] Sent DATA response code={}, elapsed={}ms", code, elapsedMs);
         }
@@ -612,9 +643,10 @@ public class FeishuLink implements IMLink, Runnable {
      */
     private void scheduleReconnect() {
         synchronized (reconnectLock) {
+            stopHeartbeat();
             if (wsClient != null) {
                 try {
-                    wsClient.disconnect();
+                    wsClient.release();
                 } catch (Exception ignored) {
                 }
                 wsClient = null;
@@ -636,51 +668,12 @@ public class FeishuLink implements IMLink, Runnable {
         }
     }
 
-    /**
-     * 停止 Stream 连接
-     */
-    // ==================== 心跳管理 ====================
-
-    private void startHeartbeat() {
-        stopHeartbeat();
-        if (pingIntervalMs > 0) {
-            final int sid = serviceId;
-            heartbeatScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-                Thread t = new Thread(r, "feishu-heartbeat");
-                t.setDaemon(true);
-                return t;
-            });
-            heartbeatFuture = heartbeatScheduler.scheduleAtFixedRate(() -> {
-                try {
-                    if (wsClient != null && wsClient.isRunning()) {
-                        byte[] pingBytes = FeishuPbCodec.buildPing(sid);
-                        wsClient.send(pingBytes);
-                        LOG.debug("[Feishu] Sent ping, serviceId={}", sid);
-                    }
-                } catch (Exception e) {
-                    LOG.warn("[Feishu] Heartbeat error: {}", e.getMessage());
-                }
-            }, pingIntervalMs, pingIntervalMs, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    private void stopHeartbeat() {
-        if (heartbeatFuture != null) {
-            heartbeatFuture.cancel(false);
-            heartbeatFuture = null;
-        }
-        if (heartbeatScheduler != null) {
-            heartbeatScheduler.shutdownNow();
-            heartbeatScheduler = null;
-        }
-    }
-
     private void stopStream() {
         streamStarted = false;
         stopHeartbeat();
         if (wsClient != null) {
             try {
-                wsClient.disconnect();
+                wsClient.release();
             } catch (Exception ignored) {
             }
             wsClient = null;
@@ -746,7 +739,6 @@ public class FeishuLink implements IMLink, Runnable {
             pendingSessionId = null;
         }
 
-        // 清除当前 wsClient 的 pending 状态（如果有 SocketException）
         credentialStore.save(bindings);
         LOG.info("[Feishu] Session {} bound to Feishu user {}", sessionId, openId);
     }
