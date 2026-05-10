@@ -59,6 +59,14 @@ function appendUserMessage(sess, text, imageDataUrls, fileAttachments, createdAt
     if (sess.sessionId === activeSessionId) scrollToBottom(true);
 }
 
+function appendSystemNotice(sess, text) {
+    var row = document.createElement('div');
+    row.className = 'msg-row system-notice';
+    row.innerHTML = '<div class="system-notice-bubble">' + escapeHtml(text) + '</div>';
+    sess.container.appendChild(row);
+    if (sess.sessionId === activeSessionId) scrollToBottom(true);
+}
+
 function ensureAssistantBubble(sess) {
     if (!sess.currentBubbleEl) {
         console.log('[ensureAssistantBubble] 新建 AI bubble, isStreaming=%s', sess.isStreaming, new Error().stack.split('\n').slice(1,4).join('\n'));

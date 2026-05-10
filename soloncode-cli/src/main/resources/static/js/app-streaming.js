@@ -438,13 +438,10 @@ function startWechatPoll(qrcode, sessionId) {
                             closeWechatModal();
                             updateWechatUI();
                             switchToChatMode();
-                            // 连接成功后，自动发一条初始消息创建服务端会话记录
-                            // 这样微信消息才能通过 session 互通到前端
                             var initSess = getOrCreateSession(SESSION_ID);
                             if (!initSess._wechatInited) {
                                 initSess._wechatInited = true;
-                                chatInput.value = '你好，微信已连接成功。';
-                                welcomeSendBtn.click();
+                                appendSystemNotice(initSess, '微信已连接成功，现在可以在微信上给机器人发条消息试试了。');
                             }
                         }, 1200);
                     } else if (status === 'expired') {
