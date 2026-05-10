@@ -16,14 +16,10 @@
 package org.noear.solon.codecli.portal.dingtalk;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.net.http.HttpResponse;
+import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 
 /**
  * 钉钉 API 客户端
@@ -182,59 +178,54 @@ public class DingTalkClient {
         }
     }
 
+    /**
+     * 通过 sessionWebhook 回复消息（替代 BotReplier）
+     *
+     * @param webhook sessionWebhook URL
+     * @param text    回复文本
+     * @return true 发送成功
+     */
+    public static boolean replyViaWebhook(String webhook, String text) {
+        try {
+            ONode body = new ONode();
+            body.set("msgtype", "text");
+            ONode textNode = body.getOrNew("text");
+            textNode.set("content", text);
+            String resp = httpPost(webhook, body.toJson(), null);
+            if (resp == null) return false;
+            return true;
+        } catch (Exception e) {
+            LOG.error("[DingTalk] replyViaWebhook error: {}", e.getMessage());
+            return false;
+        }
+    }
+
     // ==================== HTTP 工具方法 ====================
 
-    private static String httpPost(String urlStr, String jsonBody, String accessToken) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
-        conn.setRequestMethod("POST");
-        conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+    public static String httpPost(String urlStr, String jsonBody, String accessToken) throws Exception {
+        HttpUtils http = HttpUtils.http(urlStr).timeout(10, 10, 15);
+
         if (accessToken != null && !accessToken.isEmpty()) {
-            conn.setRequestProperty("x-acs-dingtalk-access-token", accessToken);
+            http.header("x-acs-dingtalk-access-token", accessToken);
         }
-        conn.setDoOutput(true);
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(15000);
 
         if (jsonBody != null && !jsonBody.isEmpty()) {
-            conn.getOutputStream().write(jsonBody.getBytes(StandardCharsets.UTF_8));
+            http.bodyOfJson(jsonBody);
         }
 
-        int code = conn.getResponseCode();
-        if (code >= 200 && code < 300) {
-            return readResponse(conn);
-        } else {
-            // 尝试读取错误响应
-            String errorBody = "";
-            try {
-                errorBody = readErrorResponse(conn);
-            } catch (Exception ignored) {
+        try (HttpResponse resp = http.exec("POST")) {
+            int code = resp.code();
+            if (code >= 200 && code < 300) {
+                return resp.bodyAsString();
+            } else {
+                String errorBody = "";
+                try {
+                    errorBody = resp.bodyAsString();
+                } catch (Exception ignored) {
+                }
+                LOG.warn("[DingTalk] HTTP POST {} returned {}: {}", urlStr, code, errorBody);
+                return errorBody;
             }
-            LOG.warn("[DingTalk] HTTP POST {} returned {}: {}", urlStr, code, errorBody);
-            return errorBody; // 某些错误场景 body 包含有用信息
         }
-    }
-
-    private static String readResponse(HttpURLConnection conn) throws Exception {
-        BufferedReader reader = new BufferedReader(
-                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            sb.append(line);
-        }
-        reader.close();
-        return sb.toString();
-    }
-
-    private static String readErrorResponse(HttpURLConnection conn) throws Exception {
-        BufferedReader reader = new BufferedReader(
-                new InputStreamReader(conn.getErrorStream(), StandardCharsets.UTF_8));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            sb.append(line);
-        }
-        reader.close();
-        return sb.toString();
     }
 }

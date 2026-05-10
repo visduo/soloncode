@@ -15,17 +15,9 @@
  */
 package org.noear.solon.codecli.portal.feishu;
 
-import com.lark.oapi.Client;
-import com.lark.oapi.core.utils.Jsons;
-import com.lark.oapi.event.EventDispatcher;
-import com.lark.oapi.service.im.ImService;
-import com.lark.oapi.service.im.v1.model.CreateMessageReq;
-import com.lark.oapi.service.im.v1.model.CreateMessageReqBody;
-import com.lark.oapi.service.im.v1.model.CreateMessageResp;
-import com.lark.oapi.service.im.v1.model.EventMessage;
-import com.lark.oapi.service.im.v1.model.EventSender;
-import com.lark.oapi.service.im.v1.model.P2MessageReceiveV1;
-import com.lark.oapi.service.im.v1.model.P2MessageReceiveV1Data;
+import org.java_websocket.client.WebSocketClient;
+import org.java_websocket.handshake.ServerHandshake;
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.codecli.config.AgentProperties;
 import org.noear.solon.codecli.portal.IMLink;
@@ -34,19 +26,26 @@ import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
+import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 飞书 Bot 通道（基于飞书官方 SDK WebSocket 长连接）
+ * 飞书 Bot 通道（基于飞书 WebSocket 长连接 + Protobuf 协议）
  *
- * <p>使用飞书官方 SDK（com.larksuite.oapi:oapi-sdk）的 WebSocket 长连接接收消息，
- * 通过会话绑定将飞书用户与 Web 前端会话关联。</p>
+ * <p>飞书 WebSocket 使用 Pbbp2 Protobuf 二进制协议：</p>
+ * <ul>
+ *   <li>method=0 → CONTROL（ping/pong、disconnect）</li>
+ *   <li>method=1 → DATA（业务事件推送）</li>
+ *   <li>method=2 → ACK（确认回复）</li>
+ * </ul>
  *
  * <p>绑定流程：
  * <ol>
- *   <li>前端提交 App ID + App Secret → 调用 {@link #startStream}，WebSocket 连接启动</li>
+ *   <li>前端提交 App ID + App secret → 调用 {@link #startStream}，WebSocket 连接启动</li>
  *   <li>进入 pending 状态（等待用户在飞书端发消息给机器人）</li>
  *   <li>机器人收到消息 → 自动提取 sender.openId → 绑定到 pending 会话</li>
  *   <li>前端轮询 {@link #getStreamStatus()} 获取绑定结果</li>
@@ -69,9 +68,9 @@ public class FeishuLink implements IMLink, Runnable {
     private volatile String appSecret;
 
     /**
-     * 飞书 API Client（SDK 管理 token 刷新）
+     * WebSocket 客户端实例
      */
-    private volatile Client apiClient;
+    private volatile FeishuWsClient wsClient;
 
     /**
      * WebSocket 连接是否已启动
@@ -108,6 +107,21 @@ public class FeishuLink implements IMLink, Runnable {
     private volatile Thread streamThread;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
+
+    /**
+     * 重连锁（防止并发重连）
+     */
+    private final Object reconnectLock = new Object();
+
+    /**
+     * 序列号（递增）
+     */
+    private final AtomicLong seqIdCounter = new AtomicLong(0);
+
+    /**
+     * 飞书返回的心跳间隔（毫秒）
+     */
+    private volatile long pingIntervalMs = 20_000;
 
     public FeishuLink(HarnessEngine engine, WebGate webGate) {
         this.engine = engine;
@@ -148,8 +162,8 @@ public class FeishuLink implements IMLink, Runnable {
             return;
         }
 
-        if (apiClient == null) {
-            LOG.warn("[Feishu] Cannot send reply: API client not initialized");
+        if (appId == null || appSecret == null) {
+            LOG.warn("[Feishu] Cannot send reply: credentials not initialized");
             return;
         }
 
@@ -189,11 +203,6 @@ public class FeishuLink implements IMLink, Runnable {
 
     /**
      * 动态启动 Stream 连接（由前端绑定操作触发）
-     *
-     * @param appId     飞书应用 App ID
-     * @param appSecret 飞书应用 App Secret
-     * @param sessionId 等待绑定的 Web 会话 ID
-     * @return true=启动成功并进入 pending 等待状态
      */
     public synchronized boolean startStream(String appId, String appSecret, String sessionId) {
         if (appId == null || appId.isEmpty() || appSecret == null || appSecret.isEmpty()) {
@@ -217,11 +226,8 @@ public class FeishuLink implements IMLink, Runnable {
         this.appSecret = appSecret;
         this.pendingSessionId = sessionId;
 
-        // 初始化飞书 API Client（SDK 自动管理 token）
-        this.apiClient = Client.newBuilder(appId, appSecret).build();
-
         // 在新线程中启动 WebSocket
-        streamThread = new java.lang.Thread(() -> doStartStream(), "feishu-stream");
+        streamThread = new Thread(() -> doStartStream(), "feishu-stream");
         streamThread.setDaemon(true);
         streamThread.start();
 
@@ -229,33 +235,51 @@ public class FeishuLink implements IMLink, Runnable {
     }
 
     /**
-     * 内部方法：建立飞书 WebSocket 长连接并阻塞
+     * 内部方法：建立飞书 WebSocket 长连接
+     *
+     * <p>第一步：HTTP POST 获取 WebSocket 端点 URL</p>
+     * <p>第二步：建立 WebSocket 连接，接收二进制 Protobuf 消息</p>
      */
     private void doStartStream() {
         LOG.info("[Feishu] Starting WebSocket connection, appId={}",
                 appId != null ? appId.substring(0, Math.min(8, appId.length())) + "..." : "null");
 
         try {
-            // 构建事件处理器
-            EventDispatcher eventHandler = EventDispatcher.newBuilder("", "")
-                    .onP2MessageReceiveV1(new ImService.P2MessageReceiveV1Handler() {
-                        @Override
-                        public void handle(P2MessageReceiveV1 event) throws Exception {
-                            onFeishuEvent(event);
-                        }
-                    })
-                    .build();
+            // 第一步：获取 WebSocket 端点
+            ONode endpointData = FeishuClient.getWsEndpoint(appId, appSecret);
+            if (endpointData == null) {
+                throw new RuntimeException("Failed to get WS endpoint");
+            }
 
-            // 构建 WebSocket 客户端（使用全限定名避免与 com.lark.oapi.Client 冲突）
-            com.lark.oapi.ws.Client wsClient = new com.lark.oapi.ws.Client.Builder(appId, appSecret)
-                    .eventHandler(eventHandler)
-                    .build();
+            String wssUrl = endpointData.get("url").getString();
+            if (wssUrl == null || wssUrl.isEmpty()) {
+                throw new RuntimeException("WS endpoint URL is empty");
+            }
 
-            // start() 会阻塞直到连接建立成功（内部自动重连）
-            wsClient.start();
+            long pingInterval = 20_000; // 默认20秒
+            ONode clientConfig = endpointData.get("clientConfig");
+            if (clientConfig != null && !clientConfig.isNull()) {
+                try {
+                    Long interval = clientConfig.get("pingInterval").getLong();
+                    if (interval != null && interval > 0) {
+                        pingInterval = interval;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+
+            pingIntervalMs = pingInterval;
+            LOG.info("[Feishu] Got WS endpoint, pingInterval={}ms", pingInterval);
+
+            // 第二步：建立 WebSocket 连接
+            wsClient = new FeishuWsClient(URI.create(wssUrl));
+            boolean connected = wsClient.connectBlocking(30, TimeUnit.SECONDS);
+            if (!connected) {
+                throw new RuntimeException("WebSocket connectBlocking returned false");
+            }
             streamStarted = true;
 
-            LOG.info("[Feishu] WebSocket client started successfully");
+            LOG.info("[Feishu] WebSocket connected successfully (binary Protobuf mode)");
 
             // 保持线程存活
             while (!Thread.currentThread().isInterrupted() && running.get()) {
@@ -267,8 +291,345 @@ public class FeishuLink implements IMLink, Runnable {
                 }
             }
         } catch (Exception e) {
-            LOG.error("[Feishu] WebSocket client error: {}", e.getMessage(), e);
+            LOG.error("[Feishu] WebSocket connection error: {}", e.getMessage(), e);
             streamStarted = false;
+            // 自动重连
+            scheduleReconnect();
+        }
+    }
+
+    // ==================== 飞书 WebSocket 客户端（Protobuf 二进制协议） ====================
+
+    /**
+     * 飞书专用 WebSocket 客户端，覆写二进制消息处理
+     */
+    private class FeishuWsClient extends WebSocketClient {
+        private ScheduledFuture<?> heartbeatFuture;
+
+        public FeishuWsClient(URI serverUri) {
+            super(serverUri);
+        }
+
+        @Override
+        public void onOpen(ServerHandshake handshake) {
+            LOG.info("[Feishu] WS connection opened");
+            // 启动心跳
+            startHeartbeat();
+        }
+
+        @Override
+        public void onMessage(String message) {
+            // 飞书一般不会发送文本帧，但作为兜底处理
+            LOG.debug("[Feishu] Received text message (unexpected): {}",
+                    message.substring(0, Math.min(message.length(), 200)));
+        }
+
+        @Override
+        public void onMessage(ByteBuffer bytes) {
+            try {
+                // 解析 Protobuf 帧
+                FeishuPbCodec.Frame frame = FeishuPbCodec.decode(bytes);
+                handlePbFrame(frame);
+            } catch (Exception e) {
+                LOG.error("[Feishu] Failed to parse binary frame: {}", e.getMessage(), e);
+            }
+        }
+
+        @Override
+        public void onClose(int code, String reason, boolean remote) {
+            LOG.info("[Feishu] WS closed: code={}, reason={}, remote={}", code, reason, remote);
+            stopHeartbeat();
+            if (running.get() && streamStarted) {
+                streamStarted = false;
+                scheduleReconnect();
+            }
+        }
+
+        @Override
+        public void onError(Exception ex) {
+            LOG.error("[Feishu] WS error: {}", ex.getMessage(), ex);
+        }
+
+        private void startHeartbeat() {
+            stopHeartbeat();
+            if (pingIntervalMs > 0) {
+                heartbeatFuture = Executors.newSingleThreadScheduledExecutor(r -> {
+                    Thread t = new Thread(r, "feishu-heartbeat");
+                    t.setDaemon(true);
+                    return t;
+                }).scheduleAtFixedRate(() -> {
+                    try {
+                        if (isOpen()) {
+                            long seqId = seqIdCounter.incrementAndGet();
+                            byte[] pingBytes = FeishuPbCodec.buildPing(seqId);
+                            send(pingBytes);
+                            LOG.debug("[Feishu] Sent ping, seqId={}", seqId);
+                        }
+                    } catch (Exception e) {
+                        LOG.warn("[Feishu] Heartbeat error: {}", e.getMessage());
+                    }
+                }, pingIntervalMs, pingIntervalMs, TimeUnit.MILLISECONDS);
+            }
+        }
+
+        private void stopHeartbeat() {
+            if (heartbeatFuture != null) {
+                heartbeatFuture.cancel(false);
+                heartbeatFuture = null;
+            }
+        }
+    }
+
+    // ==================== Protobuf 帧处理 ====================
+
+    /**
+     * 处理解析后的 Protobuf 帧
+     *
+     * <p>帧类型：</p>
+     * <ul>
+     *   <li>method=0 (CONTROL)：ping/pong、disconnect</li>
+     *   <li>method=1 (DATA)：业务事件推送（消息接收等）</li>
+     * </ul>
+     */
+    private void handlePbFrame(FeishuPbCodec.Frame frame) {
+        LOG.debug("[Feishu] PB frame: method={}, service={}, seqId={}, headers={}",
+                frame.method, frame.service, frame.seqId, frame.headers.size());
+
+        switch (frame.method) {
+            case 0: // CONTROL
+                handleControl(frame);
+                break;
+            case 1: // DATA
+                handleData(frame);
+                break;
+            case 2: // ACK
+                LOG.debug("[Feishu] Received ACK for seqId={}", frame.seqId);
+                break;
+            default:
+                LOG.debug("[Feishu] Unknown frame method: {}", frame.method);
+                break;
+        }
+    }
+
+    /**
+     * 处理 CONTROL 帧
+     */
+    private void handleControl(FeishuPbCodec.Frame frame) {
+        String type = frame.getHeader("type");
+        if (type == null) {
+            LOG.debug("[Feishu] CONTROL frame without type header");
+            return;
+        }
+
+        switch (type) {
+            case "ping": {
+                // 飞书服务端发来 ping，回复 pong
+                String connId = frame.getHeader("conn_id");
+                FeishuPbCodec.Frame pong = new FeishuPbCodec.Frame();
+                pong.seqId = frame.seqId;
+                pong.service = frame.service;
+                pong.method = 0; // CONTROL
+                if (connId != null) {
+                    pong.headers.add(new FeishuPbCodec.Header("conn_id", connId));
+                }
+                pong.headers.add(new FeishuPbCodec.Header("type", "pong"));
+                byte[] pongBytes = FeishuPbCodec.encode(pong);
+                if (wsClient != null && wsClient.isOpen()) {
+                    wsClient.send(pongBytes);
+                    LOG.debug("[Feishu] Sent pong, seqId={}", frame.seqId);
+                }
+                break;
+            }
+            case "pong": {
+                LOG.debug("[Feishu] Received pong, seqId={}", frame.seqId);
+                break;
+            }
+            case "disconnect": {
+                LOG.warn("[Feishu] Server sent disconnect, triggering reconnect...");
+                String reason = frame.getHeader("reason");
+                LOG.warn("[Feishu] Disconnect reason: {}", reason);
+                streamStarted = false;
+                scheduleReconnect();
+                break;
+            }
+            case "hello": {
+                // 初始化握手响应
+                String connId = frame.getHeader("conn_id");
+                LOG.info("[Feishu] Received hello, connId={}", connId);
+                break;
+            }
+            default: {
+                LOG.debug("[Feishu] Unknown CONTROL type: {}", type);
+                break;
+            }
+        }
+    }
+
+    /**
+     * 处理 DATA 帧
+     *
+     * <p>收到 DATA 帧后需要回复 ACK，然后解析 payload 中的事件 JSON。</p>
+     */
+    private void handleData(FeishuPbCodec.Frame frame) {
+        // 1. 回复 ACK
+        byte[] ackBytes = FeishuPbCodec.buildAck(frame);
+        if (wsClient != null && wsClient.isOpen()) {
+            wsClient.send(ackBytes);
+            LOG.debug("[Feishu] Sent ACK for seqId={}", frame.seqId);
+        }
+
+        // 2. 解析 payload（JSON 格式的事件数据）
+        String payloadJson = frame.getPayloadAsString();
+        if (payloadJson == null || payloadJson.isEmpty()) {
+            LOG.debug("[Feishu] DATA frame with empty payload");
+            return;
+        }
+
+        LOG.debug("[Feishu] DATA payload: {}", payloadJson.substring(0, Math.min(payloadJson.length(), 300)));
+
+        try {
+            ONode eventNode = ONode.ofJson(payloadJson);
+            onWsEvent(eventNode);
+        } catch (Exception e) {
+            LOG.error("[Feishu] Failed to parse event JSON: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 处理解析后的事件 JSON
+     *
+     * <p>飞书事件格式：</p>
+     * <pre>
+     * {
+     *   "schema": "2.0",
+     *   "header": { "event_type": "im.message.receive_v1", ... },
+     *   "event": { "sender": {...}, "message": {...} }
+     * }
+     * </pre>
+     */
+    private void onWsEvent(ONode eventNode) {
+        ONode header = eventNode.get("header");
+        if (header == null || header.isNull()) {
+            LOG.debug("[Feishu] Ignored event without header");
+            return;
+        }
+
+        String eventType = header.get("event_type").getString();
+        if (eventType == null) {
+            return;
+        }
+
+        if ("im.message.receive_v1".equals(eventType)) {
+            onImMessageReceive(eventNode);
+        }
+        // 其他事件类型忽略
+    }
+
+    /**
+     * 处理飞书 im.message.receive_v1 事件
+     */
+    private void onImMessageReceive(ONode msg) {
+        ONode event = msg.get("event");
+        if (event == null || event.isNull()) return;
+
+        ONode sender = event.get("sender");
+        if (sender == null || sender.isNull()) return;
+
+        ONode senderId = sender.get("sender_id");
+        if (senderId == null || senderId.isNull()) return;
+
+        String openId = senderId.get("open_id").getString();
+        if (openId == null || openId.isEmpty()) return;
+
+        ONode messageNode = event.get("message");
+        if (messageNode == null || messageNode.isNull()) return;
+
+        String msgId = messageNode.get("message_id").getString();
+        String msgType = messageNode.get("message_type").getString();
+
+        // 只处理文本消息
+        String text = null;
+        if ("text".equals(msgType)) {
+            String contentJson = messageNode.get("content").getString();
+            if (contentJson != null && !contentJson.isEmpty()) {
+                try {
+                    // content 格式: {"text":"xxx"}
+                    ONode contentNode = ONode.ofJson(contentJson);
+                    text = contentNode.get("text").getString();
+                } catch (Exception e) {
+                    // 降级：直接用 content
+                    text = contentJson;
+                }
+            }
+        }
+
+        if (text == null || text.isEmpty()) {
+            LOG.debug("[Feishu] Ignored non-text message from {}", openId);
+            return;
+        }
+
+        LOG.info("[Feishu] Received from {}: {}", openId, text.substring(0, Math.min(text.length(), 50)));
+
+        // 如果有 pending 会话，自动绑定
+        if (pendingSessionId != null) {
+            bindSession(pendingSessionId, openId);
+        }
+
+        // 路由到已绑定的会话
+        String sessionId = openIdToSession.get(openId);
+        if (sessionId == null) {
+            LOG.warn("[Feishu] Received message from unbound user: openId={}", openId);
+            return;
+        }
+
+        FeishuBinding binding = bindings.get(sessionId);
+        if (binding == null) return;
+
+        // 防重复处理
+        if (msgId != null && msgId.equals(binding.lastMessageId)) {
+            return;
+        }
+        binding.lastMessageId = msgId;
+
+        final String finalSessionId = sessionId;
+        final String finalText = text;
+        messageExecutor.execute(() -> {
+            try {
+                webGate.onFeishuMessage(finalSessionId, finalText);
+            } catch (Exception e) {
+                LOG.error("[Feishu] Message processing error: {}", e.getMessage(), e);
+            }
+        });
+    }
+
+    // ==================== 重连机制 ====================
+
+    /**
+     * 延迟重连（避免频繁重连）
+     */
+    private void scheduleReconnect() {
+        synchronized (reconnectLock) {
+            if (wsClient != null) {
+                try {
+                    wsClient.close();
+                } catch (Exception ignored) {
+                }
+                wsClient = null;
+            }
+
+            LOG.info("[Feishu] Reconnecting in 5 seconds...");
+            Thread reconnectThread = new Thread(() -> {
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                if (!streamStarted && appId != null && appSecret != null && running.get()) {
+                    doStartStream();
+                }
+            }, "feishu-reconnect");
+            reconnectThread.setDaemon(true);
+            reconnectThread.start();
         }
     }
 
@@ -277,6 +638,13 @@ public class FeishuLink implements IMLink, Runnable {
      */
     private void stopStream() {
         streamStarted = false;
+        if (wsClient != null) {
+            try {
+                wsClient.close();
+            } catch (Exception ignored) {
+            }
+            wsClient = null;
+        }
         if (streamThread != null) {
             streamThread.interrupt();
             streamThread = null;
@@ -373,7 +741,6 @@ public class FeishuLink implements IMLink, Runnable {
             if (this.appId == null && binding.appId != null && !binding.appId.isEmpty()) {
                 this.appId = binding.appId;
                 this.appSecret = binding.appSecret;
-                this.apiClient = Client.newBuilder(appId, appSecret).build();
                 LOG.info("[Feishu] Restored credentials, appId={}", appId.substring(0, Math.min(8, appId.length())) + "...");
             }
         }
@@ -386,94 +753,17 @@ public class FeishuLink implements IMLink, Runnable {
         return Collections.unmodifiableSet(bindings.keySet());
     }
 
-    // ==================== 消息处理 ====================
-
-    /**
-     * 处理从飞书 SDK 收到的事件
-     */
-    private void onFeishuEvent(P2MessageReceiveV1 event) {
-        try {
-            P2MessageReceiveV1Data eventData = event.getEvent();
-            if (eventData == null) return;
-
-            EventSender sender = eventData.getSender();
-            if (sender == null) return;
-
-            String openId = sender.getSenderId().getOpenId();
-            EventMessage message = eventData.getMessage();
-            if (message == null) return;
-
-            String msgId = message.getMessageId();
-            String msgType = message.getMessageType();
-
-            // 只处理文本消息
-            String text = null;
-            if ("text".equals(msgType)) {
-                String contentJson = message.getContent();
-                if (contentJson != null && !contentJson.isEmpty()) {
-                    try {
-                        // content 格式: {"text":"xxx"}
-                        java.util.Map<String, Object> contentObj = Jsons.DEFAULT.fromJson(contentJson, java.util.Map.class);
-                        if (contentObj != null && contentObj.get("text") != null) {
-                            text = contentObj.get("text").toString();
-                        }
-                    } catch (Exception e) {
-                        // 降级：直接用 content
-                        text = contentJson;
-                    }
-                }
-            }
-
-            if (text == null || text.isEmpty()) {
-                LOG.debug("[Feishu] Ignored non-text message from {}", openId);
-                return;
-            }
-
-            LOG.info("[Feishu] Received from {}: {}", openId, text.substring(0, Math.min(text.length(), 50)));
-
-            // 如果有 pending 会话，自动绑定
-            if (pendingSessionId != null) {
-                bindSession(pendingSessionId, openId);
-            }
-
-            // 路由到已绑定的会话
-            String sessionId = openIdToSession.get(openId);
-            if (sessionId == null) {
-                LOG.warn("[Feishu] Received message from unbound user: openId={}", openId);
-                return;
-            }
-
-            FeishuBinding binding = bindings.get(sessionId);
-            if (binding == null) return;
-
-            // 防重复处理
-            if (msgId != null && msgId.equals(binding.lastMessageId)) {
-                return;
-            }
-            binding.lastMessageId = msgId;
-
-            final String finalSessionId = sessionId;
-            final String finalText = text;
-            messageExecutor.execute(() -> {
-                try {
-                    webGate.onFeishuMessage(finalSessionId, finalText);
-                } catch (Exception e) {
-                    LOG.error("[Feishu] Message processing error: {}", e.getMessage(), e);
-                }
-            });
-
-        } catch (Exception e) {
-            LOG.error("[Feishu] Event handling error: {}", e.getMessage(), e);
-        }
-    }
+    // ==================== 消息发送 ====================
 
     private void sendReplyDo(FeishuBinding binding, String reply) {
-        if (apiClient == null) {
-            LOG.error("[Feishu] Cannot send reply: API client not initialized");
-            return;
-        }
-
         try {
+            // 获取 tenant_access_token
+            String token = FeishuClient.getTenantAccessToken(appId, appSecret);
+            if (token == null) {
+                LOG.error("[Feishu] Cannot send reply: failed to get access token");
+                return;
+            }
+
             // 清理 markdown 标记（飞书文本消息不渲染 markdown）
             String cleanReply = cleanMarkdown(reply);
             if (cleanReply.isEmpty()) {
@@ -483,7 +773,7 @@ public class FeishuLink implements IMLink, Runnable {
             // 飞书消息长度限制约 4000 字符
             int maxLen = 4000;
             if (cleanReply.length() <= maxLen) {
-                sendTextMessage(binding.openId, cleanReply);
+                FeishuClient.sendMessage(token, "open_id", binding.openId, cleanReply);
             } else {
                 int pos = 0;
                 int part = 1;
@@ -493,32 +783,13 @@ public class FeishuLink implements IMLink, Runnable {
                     if (part > 1) {
                         chunk = "(" + part + ") " + chunk;
                     }
-                    sendTextMessage(binding.openId, chunk);
+                    FeishuClient.sendMessage(token, "open_id", binding.openId, chunk);
                     pos = end;
                     part++;
                 }
             }
         } catch (Exception e) {
             LOG.error("[Feishu] sendReplyDo error: {}", e.getMessage(), e);
-        }
-    }
-
-    /**
-     * 通过飞书 SDK 发送文本消息
-     */
-    private void sendTextMessage(String openId, String text) throws Exception {
-        CreateMessageReq req = CreateMessageReq.newBuilder()
-                .receiveIdType("open_id")
-                .createMessageReqBody(CreateMessageReqBody.newBuilder()
-                        .receiveId(openId)
-                        .msgType("text")
-                        .content("{\"text\":\"" + escapeJson(text) + "\"}")
-                        .build())
-                .build();
-
-        CreateMessageResp resp = apiClient.im().message().create(req);
-        if (resp == null || resp.getData() == null) {
-            LOG.warn("[Feishu] sendMessage response is empty");
         }
     }
 
@@ -532,18 +803,6 @@ public class FeishuLink implements IMLink, Runnable {
                 .replaceAll("\\*\\*([^*]+)\\*\\*", "$1")      // 去掉加粗
                 .replaceAll("\\*([^*]+)\\*", "$1")             // 去掉斜体
                 .trim();
-    }
-
-    /**
-     * JSON 字符串转义
-     */
-    private String escapeJson(String text) {
-        return text
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
     }
 
     // ==================== 内部数据类 ====================

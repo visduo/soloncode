@@ -16,14 +16,12 @@
 package org.noear.solon.codecli.portal.wechat;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.net.http.HttpResponse;
+import org.noear.solon.net.http.HttpUtils;
+import org.noear.solon.net.http.impl.HttpSslSupplierAny;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
@@ -34,8 +32,8 @@ import java.util.*;
  *
  * @author noear 2026/5/5 created
  */
-public class ILinkClient {
-    private static final Logger LOG = LoggerFactory.getLogger(ILinkClient.class);
+public class WeChatClient {
+    private static final Logger LOG = LoggerFactory.getLogger(WeChatClient.class);
 
     private static final String BASE_URL = "https://ilinkai.weixin.qq.com";
 
@@ -301,88 +299,49 @@ public class ILinkClient {
     // ==================== HTTP 工具方法 ====================
 
     private static String httpGet(String urlStr) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
-        conn.setRequestMethod("GET");
-        conn.setRequestProperty(HEADER_CONTENT_TYPE, "application/json");
-        conn.setRequestProperty(HEADER_UIN, generateUin());
-        // iLink 协议要求状态轮询等 GET 请求携带此版本头
-        conn.setRequestProperty("iLink-App-ClientVersion", "1");
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(15000);
-        conn.setInstanceFollowRedirects(true);
+        HttpUtils http = HttpUtils.http(urlStr)
+                .ssl(HttpSslSupplierAny.getInstance())
+                .timeout(10, 10, 15)
+                .header(HEADER_CONTENT_TYPE, "application/json")
+                .header(HEADER_UIN, generateUin())
+                .header("iLink-App-ClientVersion", "1");
 
-        // 跳过 HTTPS 证书验证（ilinkai.weixin.qq.com 证书链可能不在 JDK truststore 中）
-        setSSLSocketFactory(conn);
-
-        int code = conn.getResponseCode();
-        if (code != 200) {
-            LOG.warn("HTTP GET {} returned {}", urlStr, code);
-            return null;
+        try (HttpResponse resp = http.exec("GET")) {
+            int code = resp.code();
+            if (code != 200) {
+                LOG.warn("HTTP GET {} returned {}", urlStr, code);
+                return null;
+            }
+            return resp.bodyAsString();
         }
-
-        return readResponse(conn);
     }
 
     private static String httpPost(String urlStr, String jsonBody, String botToken) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
-        conn.setRequestMethod("POST");
-        conn.setRequestProperty(HEADER_CONTENT_TYPE, "application/json");
-        conn.setRequestProperty(HEADER_AUTH_TYPE, "ilink_bot_token");
-        conn.setRequestProperty(HEADER_AUTH, "Bearer " + botToken);
-        conn.setRequestProperty(HEADER_UIN, generateUin());
-        conn.setDoOutput(true);
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(45000); // getupdates 长轮询需要较长超时
-        conn.setInstanceFollowRedirects(true);
-
-        setSSLSocketFactory(conn);
+        HttpUtils http = HttpUtils.http(urlStr)
+                .ssl(HttpSslSupplierAny.getInstance())
+                .timeout(10, 10, 45)  // getupdates 长轮询需要较长超时
+                .header(HEADER_CONTENT_TYPE, "application/json")
+                .header(HEADER_AUTH_TYPE, "ilink_bot_token")
+                .header(HEADER_AUTH, "Bearer " + botToken)
+                .header(HEADER_UIN, generateUin());
 
         if (jsonBody != null && !jsonBody.isEmpty()) {
-            conn.getOutputStream().write(jsonBody.getBytes(StandardCharsets.UTF_8));
+            http.bodyOfJson(jsonBody);
         }
 
-        int code = conn.getResponseCode();
-        if (code != 200) {
-            LOG.warn("HTTP POST {} returned {}", urlStr, code);
-            return null;
-        }
-
-        return readResponse(conn);
-    }
-
-    private static String readResponse(HttpURLConnection conn) throws Exception {
-        BufferedReader reader = new BufferedReader(
-                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            sb.append(line);
-        }
-        reader.close();
-        return sb.toString();
-    }
-
-    private static void setSSLSocketFactory(HttpURLConnection conn) {
-        if (conn instanceof javax.net.ssl.HttpsURLConnection) {
-            try {
-                javax.net.ssl.SSLContext sc = javax.net.ssl.SSLContext.getInstance("TLS");
-                sc.init(null, new javax.net.ssl.TrustManager[]{
-                        new javax.net.ssl.X509TrustManager() {
-                            public java.security.cert.X509Certificate[] getAcceptedIssuers() { return new java.security.cert.X509Certificate[0]; }
-                            public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
-                            public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
-                        }
-                }, new java.security.SecureRandom());
-                ((javax.net.ssl.HttpsURLConnection) conn).setSSLSocketFactory(sc.getSocketFactory());
-                ((javax.net.ssl.HttpsURLConnection) conn).setHostnameVerifier((hostname, session) -> true);
-            } catch (Exception ignored) {
+        try (HttpResponse resp = http.exec("POST")) {
+            int code = resp.code();
+            if (code != 200) {
+                LOG.warn("HTTP POST {} returned {}", urlStr, code);
+                return null;
             }
+            return resp.bodyAsString();
         }
     }
 
     private static String generateUin() {
         return Base64.getEncoder().encodeToString(
-                String.valueOf(new Random().nextInt(Integer.MAX_VALUE)).getBytes(StandardCharsets.UTF_8));
+                String.valueOf(new Random().nextInt(Integer.MAX_VALUE)).getBytes());
     }
 
     private static String encodeURIComponent(String s) {

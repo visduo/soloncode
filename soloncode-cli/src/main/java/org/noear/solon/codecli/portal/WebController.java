@@ -28,6 +28,7 @@ import org.noear.solon.codecli.config.AgentFlags;
 import org.noear.solon.codecli.command.builtin.LoopScheduler;
 import org.noear.solon.codecli.portal.dingtalk.DingTalkLink;
 import org.noear.solon.codecli.portal.feishu.FeishuLink;
+import org.noear.solon.codecli.portal.wechat.WeChatClient;
 import org.noear.solon.codecli.portal.wechat.WeChatLink;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Result;
@@ -335,7 +336,7 @@ public class WebController {
             return Result.failure("Invalid sessionId");
         }
 
-        Map<String, String> qrResult = org.noear.solon.codecli.portal.wechat.ILinkClient.fetchQRCode();
+        Map<String, String> qrResult = WeChatClient.fetchQRCode();
         if (qrResult == null) {
             return Result.failure("获取微信二维码失败，请确认网络可访问 ilinkai.weixin.qq.com");
         }
@@ -361,7 +362,7 @@ public class WebController {
             return Result.failure("Invalid sessionId");
         }
 
-        Map<String, String> statusResult = org.noear.solon.codecli.portal.wechat.ILinkClient.pollQRStatus(qrcode);
+        Map<String, String> statusResult = WeChatClient.pollQRStatus(qrcode);
         if (statusResult == null) {
             Map<String, Object> errData = new LinkedHashMap<>();
             errData.put("status", "error");

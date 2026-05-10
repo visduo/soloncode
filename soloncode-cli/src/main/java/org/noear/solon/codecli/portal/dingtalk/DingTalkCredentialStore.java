@@ -49,7 +49,7 @@ public class DingTalkCredentialStore {
 
     public DingTalkCredentialStore(AgentProperties agentProps) {
         storePath = Paths.get(AgentProperties.getUserDir(),
-                agentProps.getHarnessHome(),
+                agentProps.getHarnessChannels(),
                 STORE_FILE).toAbsolutePath();
     }
 

@@ -15,12 +15,8 @@
  */
 package org.noear.solon.codecli.portal.dingtalk;
 
-import com.dingtalk.open.app.api.OpenDingTalkClient;
-import com.dingtalk.open.app.api.OpenDingTalkStreamClientBuilder;
-import com.dingtalk.open.app.api.callback.OpenDingTalkCallbackListener;
-import com.dingtalk.open.app.api.chatbot.BotReplier;
-import com.dingtalk.open.app.api.models.bot.ChatbotMessage;
-import com.dingtalk.open.app.api.security.AuthClientCredential;
+import org.noear.java_websocket.client.SimpleWebSocketClient;
+import org.noear.snack4.ONode;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.codecli.config.AgentProperties;
 import org.noear.solon.codecli.portal.IMLink;
@@ -33,10 +29,9 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /**
- * 钉钉 Bot 通道（基于钉钉 Stream SDK）
+ * 钉钉 Bot 通道（基于钉钉 Stream 协议 + WebSocket 长连接）
  *
- * <p>使用钉钉官方 Stream SDK（OpenClaw 机器人应用）建立长连接，
- * 通过 {@link OpenDingTalkStreamClientBuilder} 注册机器人消息回调，
+ * <p>使用 java-websocket-ns 建立 WebSocket 长连接，通过钉钉 Stream 协议接收消息，
  * 实现消息的实时接收与回复。</p>
  *
  * <p>绑定流程：
@@ -64,9 +59,9 @@ public class DingTalkLink implements IMLink, Runnable {
     private volatile String appSecret;
 
     /**
-     * 钉钉 Stream 客户端实例
+     * WebSocket 客户端实例
      */
-    private volatile OpenDingTalkClient streamClient;
+    private volatile SimpleWebSocketClient wsClient;
 
     /**
      * Stream 是否已启动（连接成功）
@@ -107,6 +102,11 @@ public class DingTalkLink implements IMLink, Runnable {
      */
     private volatile Thread streamThread;
 
+    /**
+     * 重连锁（防止并发重连）
+     */
+    private final Object reconnectLock = new Object();
+
     public DingTalkLink(HarnessEngine engine, WebGate webGate) {
         this.engine = engine;
         this.webGate = webGate;
@@ -146,15 +146,14 @@ public class DingTalkLink implements IMLink, Runnable {
             return;
         }
 
-        // 优先使用缓存的 sessionWebhook 回复（BotReplier）
+        // 优先使用缓存的 sessionWebhook 回复
         String webhook = webhookCache.get(binding.userId);
         if (webhook != null && !webhook.isEmpty()) {
             try {
-                BotReplier replier = BotReplier.fromWebhook(webhook);
                 // 钉钉单条消息长度限制
                 int maxLen = 5000;
                 if (reply.length() <= maxLen) {
-                    replier.replyText(reply);
+                    DingTalkClient.replyViaWebhook(webhook, reply);
                 } else {
                     int pos = 0;
                     int part = 1;
@@ -164,14 +163,14 @@ public class DingTalkLink implements IMLink, Runnable {
                         if (part > 1) {
                             chunk = "(" + part + ") " + chunk;
                         }
-                        replier.replyText(chunk);
+                        DingTalkClient.replyViaWebhook(webhook, chunk);
                         pos = end;
                         part++;
                     }
                 }
                 return;
             } catch (Exception e) {
-                LOG.warn("[DingTalk] BotReplier reply failed, falling back to API: {}", e.getMessage());
+                LOG.warn("[DingTalk] Webhook reply failed, falling back to API: {}", e.getMessage());
                 // webhook 可能已过期，清除缓存，降级到 API 发送
                 webhookCache.remove(binding.userId);
             }
@@ -228,7 +227,7 @@ public class DingTalkLink implements IMLink, Runnable {
         }
 
         // 如果已有连接但凭据不同，先关闭旧连接
-        if (streamClient != null) {
+        if (wsClient != null) {
             stopStream();
         }
 
@@ -245,32 +244,61 @@ public class DingTalkLink implements IMLink, Runnable {
     }
 
     /**
-     * 内部方法：建立 Stream 长连接并阻塞
+     * 内部方法：建立 Stream 长连接（两步协议）
+     *
+     * <p>第一步：HTTP POST 获取 WebSocket 端点 + ticket</p>
+     * <p>第二步：建立 WebSocket 连接，接收消息</p>
      */
     private void doStartStream() {
         LOG.info("[DingTalk] Starting stream connection, appKey={}",
                 appKey != null ? appKey.substring(0, Math.min(8, appKey.length())) + "..." : "null");
 
         try {
-            streamClient = OpenDingTalkStreamClientBuilder.custom()
-                    .credential(new AuthClientCredential(appKey, appSecret))
-                    .registerCallbackListener(
-                            "/v1.0/im/bot/messages/get",
-                            new OpenDingTalkCallbackListener<ChatbotMessage, Void>() {
-                                @Override
-                                public Void execute(ChatbotMessage message) {
-                                    onBotMessage(message);
-                                    return null;
-                                }
-                            }
-                    )
-                    .build();
+            // 第一步：HTTP POST 获取 endpoint + ticket
+            ONode reqBody = new ONode();
+            reqBody.set("clientId", appKey);
+            reqBody.set("clientSecret", appSecret);
 
-            // start() 会阻塞直到连接建立成功（内部自动重连）
-            streamClient.start();
+            ONode subs = reqBody.getOrNew("subscriptions").asArray();
+            ONode sub = new ONode();
+            sub.set("topic", "/v1.0/im/bot/messages/get");
+            sub.set("type", "CALLBACK");
+            subs.add(sub);
+            reqBody.set("ua", "soloncode/1.0");
+
+            String resp = DingTalkClient.httpPost(
+                    "https://api.dingtalk.com/v1.0/gateway/connections/open",
+                    reqBody.toJson(), null);
+
+            if (resp == null || resp.isEmpty()) {
+                throw new RuntimeException("Failed to get stream endpoint: empty response");
+            }
+
+            ONode respNode = ONode.ofJson(resp);
+            String endpoint = respNode.get("endpoint").getString();
+            String ticket = respNode.get("ticket").getString();
+
+            if (endpoint == null || ticket == null) {
+                throw new RuntimeException("Failed to get stream endpoint: " + resp);
+            }
+
+            LOG.info("[DingTalk] Got stream endpoint: {}", endpoint);
+
+            // 第二步：建立 WebSocket 连接
+            String wsUrl = endpoint + "?ticket=" + ticket;
+            wsClient = new SimpleWebSocketClient(wsUrl) {
+                @Override
+                public void onMessage(String message) {
+                    onWsMessage(message);
+                }
+            };
+
+            wsClient.connectBlocking(30, TimeUnit.SECONDS);
+            // 开启心跳（钉钉协议层需要 JSON ping/pong，不使用 autoReconnect，手动处理重连）
+            wsClient.heartbeat(25_000, false);
             streamStarted = true;
 
-            LOG.info("[DingTalk] Stream client started successfully");
+            LOG.info("[DingTalk] Stream WebSocket connected successfully");
 
             // 主线程保持存活
             while (!Thread.currentThread().isInterrupted()) {
@@ -282,8 +310,189 @@ public class DingTalkLink implements IMLink, Runnable {
                 }
             }
         } catch (Exception e) {
-            LOG.error("[DingTalk] Stream client error: {}", e.getMessage(), e);
+            LOG.error("[DingTalk] Stream connection error: {}", e.getMessage(), e);
             streamStarted = false;
+            // 自动重连
+            scheduleReconnect();
+        }
+    }
+
+    /**
+     * 处理 WebSocket 收到的消息
+     *
+     * <p>钉钉 Stream 协议消息格式：</p>
+     * <ul>
+     *   <li>SYSTEM + topic=ping → 回复 pong</li>
+     *   <li>SYSTEM + topic=disconnect → 触发重连</li>
+     *   <li>CALLBACK → 业务消息（机器人消息），需回复 ACK</li>
+     * </ul>
+     */
+    private void onWsMessage(String message) {
+        try {
+            ONode msg = ONode.ofJson(message);
+            String type = msg.get("type").getString();
+
+            if ("SYSTEM".equals(type)) {
+                ONode headers = msg.get("headers");
+                String topic = headers != null ? headers.get("topic").getString() : null;
+                String messageId = headers != null ? headers.get("messageId").getString() : null;
+
+                if ("ping".equals(topic)) {
+                    // 回复 pong
+                    ONode pong = new ONode();
+                    pong.set("code", 200);
+                    ONode pongHeaders = pong.getOrNew("headers");
+                    pongHeaders.set("messageId", messageId);
+                    pongHeaders.set("contentType", "application/json");
+                    pong.set("data", "{}");
+                    wsClient.send(pong.toJson());
+                    LOG.debug("[DingTalk] Replied pong");
+                } else if ("disconnect".equals(topic)) {
+                    LOG.info("[DingTalk] Received disconnect command, will reconnect...");
+                    streamStarted = false;
+                    scheduleReconnect();
+                }
+                return;
+            }
+
+            if ("CALLBACK".equals(type)) {
+                ONode headers = msg.get("headers");
+                String messageId = headers != null ? headers.get("messageId").getString() : null;
+
+                // 回复 ACK
+                ONode ack = new ONode();
+                ack.set("code", 200);
+                ONode ackHeaders = ack.getOrNew("headers");
+                ackHeaders.set("messageId", messageId);
+                ackHeaders.set("contentType", "application/json");
+                ack.set("data", "{}");
+                wsClient.send(ack.toJson());
+
+                // 解析业务数据（data 字段是 JSON 字符串）
+                String data = msg.get("data").getString();
+                if (data != null && !data.isEmpty()) {
+                    ONode botMsg = ONode.ofJson(data);
+                    onBotMessageParsed(botMsg);
+                }
+            }
+        } catch (Exception e) {
+            LOG.error("[DingTalk] onWsMessage error: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 解析并处理钉钉机器人消息（从 JSON 解析后的数据）
+     */
+    private void onBotMessageParsed(ONode botMsg) {
+        String userId = botMsg.get("senderStaffId").getString();
+        if (userId == null || userId.isEmpty()) {
+            userId = botMsg.get("senderId").getString();
+        }
+
+        String text = null;
+        ONode textNode = botMsg.get("text");
+        if (textNode != null && textNode.isNull() == false) {
+            text = textNode.get("content").getString();
+        }
+        // 兼容新版消息格式
+        if ((text == null || text.isEmpty())) {
+            ONode contentNode = botMsg.get("content");
+            if (contentNode != null && contentNode.isNull() == false) {
+                text = contentNode.get("content").getString();
+            }
+        }
+
+        String msgId = botMsg.get("msgId").getString();
+        String webhook = botMsg.get("sessionWebhook").getString();
+        String conversationType = botMsg.get("conversationType").getString();
+
+        LOG.info("[DingTalk] Received bot message: userId={}, convType={}, msgId={}, text={}",
+                userId, conversationType, msgId,
+                text != null ? text.substring(0, Math.min(text.length(), 50)) : "null");
+
+        // 缓存 sessionWebhook（用于后续回复）
+        if (webhook != null && !webhook.isEmpty()) {
+            webhookCache.put(userId, webhook);
+        }
+
+        // 查找绑定的 session
+        String sessionId = userIdToSession.get(userId);
+
+        if (sessionId == null) {
+            // 未绑定的用户 → 检查是否有 pending 会话在等待
+            if (pendingSessionId != null) {
+                LOG.info("[DingTalk] Auto-binding user {} to pending session {}", userId, pendingSessionId);
+                // OpenClaw 应用的 robotCode 通常就是 appKey
+                String robotCode = appKey;
+                doBindSession(pendingSessionId, userId, robotCode);
+                sessionId = pendingSessionId;
+                // 绑定成功后发一条欢迎提示
+                if (webhook != null && !webhook.isEmpty()) {
+                    try {
+                        DingTalkClient.replyViaWebhook(webhook, "绑定成功！已连接到 SolonCode Web 会话。");
+                    } catch (Exception e) {
+                        LOG.warn("[DingTalk] Welcome message send failed: {}", e.getMessage());
+                    }
+                }
+            } else {
+                LOG.warn("[DingTalk] Received message from unbound user (no pending session): userId={}", userId);
+                return;
+            }
+        }
+
+        DingTalkBinding binding = bindings.get(sessionId);
+        if (binding == null) return;
+
+        // 防重复处理
+        if (msgId != null && msgId.equals(binding.lastMessageId)) {
+            return;
+        }
+        binding.lastMessageId = msgId;
+
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+
+        // 用 final 变量捕获，供 lambda 使用
+        final String finalSessionId = sessionId;
+        final String finalText = text;
+
+        // 提交到消息处理线程
+        messageExecutor.execute(() -> {
+            try {
+                webGate.onDingTalkMessage(finalSessionId, finalText);
+            } catch (Exception e) {
+                LOG.error("[DingTalk] Message processing error: {}", e.getMessage(), e);
+            }
+        });
+    }
+
+    /**
+     * 延迟重连（避免频繁重连）
+     */
+    private void scheduleReconnect() {
+        synchronized (reconnectLock) {
+            if (!streamStarted && wsClient != null) {
+                try {
+                    wsClient.release();
+                } catch (Exception ignored) {
+                }
+                wsClient = null;
+            }
+
+            LOG.info("[DingTalk] Reconnecting in 5 seconds...");
+            Thread reconnectThread = new Thread(() -> {
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                if (!streamStarted && appKey != null && appSecret != null) {
+                    doStartStream();
+                }
+            }, "dingtalk-reconnect");
+            reconnectThread.setDaemon(true);
+            reconnectThread.start();
         }
     }
 
@@ -292,7 +501,13 @@ public class DingTalkLink implements IMLink, Runnable {
      */
     private void stopStream() {
         streamStarted = false;
-        streamClient = null;
+        if (wsClient != null) {
+            try {
+                wsClient.release();
+            } catch (Exception ignored) {
+            }
+            wsClient = null;
+        }
         if (streamThread != null) {
             streamThread.interrupt();
             streamThread = null;
@@ -410,96 +625,6 @@ public class DingTalkLink implements IMLink, Runnable {
      */
     public Set<String> getBoundSessionIds() {
         return Collections.unmodifiableSet(bindings.keySet());
-    }
-
-    // ==================== 消息处理 ====================
-
-    /**
-     * 处理从钉钉 Stream 收到的机器人消息
-     *
-     * <p>由 SDK 回调触发。从 ChatbotMessage 中提取发送者 userId、
-     * 消息文本、sessionWebhook 等信息，路由到已绑定的 Web 会话。</p>
-     *
-     * <p>如果存在 pending 会话（等待绑定的会话），会自动将该用户绑定到 pending 会话。</p>
-     */
-    private void onBotMessage(ChatbotMessage message) {
-        String userId = message.getSenderStaffId();
-        if (userId == null || userId.isEmpty()) {
-            userId = message.getSenderId();
-        }
-
-        String text = null;
-        if (message.getText() != null) {
-            text = message.getText().getContent();
-        }
-        // 兼容新版消息格式
-        if ((text == null || text.isEmpty()) && message.getContent() != null) {
-            text = message.getContent().getContent();
-        }
-
-        String msgId = message.getMsgId();
-        String webhook = message.getSessionWebhook();
-        String conversationType = message.getConversationType();
-
-        LOG.info("[DingTalk] Received bot message: userId={}, convType={}, msgId={}, text={}",
-                userId, conversationType, msgId,
-                text != null ? text.substring(0, Math.min(text.length(), 50)) : "null");
-
-        // 缓存 sessionWebhook（用于后续回复）
-        if (webhook != null && !webhook.isEmpty()) {
-            webhookCache.put(userId, webhook);
-        }
-
-        // 查找绑定的 session
-        String sessionId = userIdToSession.get(userId);
-
-        if (sessionId == null) {
-            // 未绑定的用户 → 检查是否有 pending 会话在等待
-            if (pendingSessionId != null) {
-                LOG.info("[DingTalk] Auto-binding user {} to pending session {}", userId, pendingSessionId);
-                // OpenClaw 应用的 robotCode 通常就是 appKey
-                String robotCode = appKey;
-                doBindSession(pendingSessionId, userId, robotCode);
-                sessionId = pendingSessionId;
-                // 绑定成功后发一条欢迎提示
-                if (webhook != null && !webhook.isEmpty()) {
-                    try {
-                        BotReplier.fromWebhook(webhook).replyText("绑定成功！已连接到 SolonCode Web 会话。");
-                    } catch (Exception e) {
-                        LOG.warn("[DingTalk] Welcome message send failed: {}", e.getMessage());
-                    }
-                }
-            } else {
-                LOG.warn("[DingTalk] Received message from unbound user (no pending session): userId={}", userId);
-                return;
-            }
-        }
-
-        DingTalkBinding binding = bindings.get(sessionId);
-        if (binding == null) return;
-
-        // 防重复处理
-        if (msgId != null && msgId.equals(binding.lastMessageId)) {
-            return;
-        }
-        binding.lastMessageId = msgId;
-
-        if (text == null || text.isEmpty()) {
-            return;
-        }
-
-        // 用 final 变量捕获，供 lambda 使用
-        final String finalSessionId = sessionId;
-        final String finalText = text;
-
-        // 提交到消息处理线程
-        messageExecutor.execute(() -> {
-            try {
-                webGate.onDingTalkMessage(finalSessionId, finalText);
-            } catch (Exception e) {
-                LOG.error("[DingTalk] Message processing error: {}", e.getMessage(), e);
-            }
-        });
     }
 
     /**

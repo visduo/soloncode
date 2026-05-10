@@ -207,7 +207,7 @@ public class WeChatLink implements IMLink, Runnable {
             return;
         }
 
-        Map<String, Object> result = ILinkClient.getUpdates(binding.botToken, binding.cursor);
+        Map<String, Object> result = WeChatClient.getUpdates(binding.botToken, binding.cursor);
         if (result == null) return;
 
         // token 过期，自动解绑
@@ -248,10 +248,10 @@ public class WeChatLink implements IMLink, Runnable {
 
             // 获取 typing_ticket 并发送"正在输入"状态
             if (binding.typingTicket == null && fromUserId != null && contextToken != null) {
-                binding.typingTicket = ILinkClient.getConfig(binding.botToken, fromUserId, contextToken);
+                binding.typingTicket = WeChatClient.getConfig(binding.botToken, fromUserId, contextToken);
             }
             if (binding.typingTicket != null) {
-                ILinkClient.sendTyping(binding.botToken, fromUserId, binding.typingTicket, 1);
+                WeChatClient.sendTyping(binding.botToken, fromUserId, binding.typingTicket, 1);
             }
 
             // 调用 AI 并回复
@@ -259,7 +259,7 @@ public class WeChatLink implements IMLink, Runnable {
 
             // 停止输入状态
             if (binding.typingTicket != null) {
-                ILinkClient.sendTyping(binding.botToken, fromUserId, binding.typingTicket, 2);
+                WeChatClient.sendTyping(binding.botToken, fromUserId, binding.typingTicket, 2);
             }
         }
     }
@@ -295,7 +295,7 @@ public class WeChatLink implements IMLink, Runnable {
         // 微信消息长度限制，分段发送（每段最多 2000 字符）
         int maxLen = 2000;
         if (cleanReply.length() <= maxLen) {
-            ILinkClient.sendMessage(binding.botToken, binding.lastFromUserId, binding.lastContextToken, cleanReply);
+            WeChatClient.sendMessage(binding.botToken, binding.lastFromUserId, binding.lastContextToken, cleanReply);
         } else {
             // 分段发送
             int pos = 0;
@@ -306,7 +306,7 @@ public class WeChatLink implements IMLink, Runnable {
                 if (part > 1) {
                     chunk = "(" + part + ") " + chunk;
                 }
-                ILinkClient.sendMessage(binding.botToken, binding.lastFromUserId, binding.lastContextToken, chunk);
+                WeChatClient.sendMessage(binding.botToken, binding.lastFromUserId, binding.lastContextToken, chunk);
                 pos = end;
                 part++;
             }

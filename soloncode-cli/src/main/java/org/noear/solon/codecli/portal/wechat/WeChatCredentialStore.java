@@ -46,7 +46,7 @@ public class WeChatCredentialStore {
 
     public WeChatCredentialStore(AgentProperties agentProps) {
         storePath = Paths.get(AgentProperties.getUserDir(),
-                agentProps.getHarnessHome(),
+                agentProps.getHarnessChannels(),
                 STORE_FILE).toAbsolutePath();
     }
 

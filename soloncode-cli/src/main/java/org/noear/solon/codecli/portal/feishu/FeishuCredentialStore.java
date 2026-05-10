@@ -49,7 +49,7 @@ public class FeishuCredentialStore {
 
     public FeishuCredentialStore(AgentProperties agentProps) {
         storePath = Paths.get(AgentProperties.getUserDir(),
-                agentProps.getHarnessHome(),
+                agentProps.getHarnessChannels(),
                 STORE_FILE).toAbsolutePath();
     }
 

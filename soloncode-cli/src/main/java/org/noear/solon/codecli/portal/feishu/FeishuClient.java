@@ -16,14 +16,10 @@
 package org.noear.solon.codecli.portal.feishu;
 
 import org.noear.snack4.ONode;
+import org.noear.solon.net.http.HttpResponse;
+import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 
 /**
  * 飞书 API 客户端
@@ -172,60 +168,73 @@ public class FeishuClient {
         }
     }
 
+    /**
+     * 获取飞书 WebSocket 长连接端点
+     *
+     * @param appId     飞书应用 App ID
+     * @param appSecret 飞书应用 App Secret
+     * @return 包含 url 和 pingInterval 的 ONode，或 null
+     */
+    public static ONode getWsEndpoint(String appId, String appSecret) {
+        try {
+            ONode body = new ONode();
+            body.set("AppID", appId);
+            body.set("AppSecret", appSecret);
+
+            String resp = httpPost("https://open.feishu.cn/callback/ws/endpoint", body.toJson(), null);
+            if (resp == null) return null;
+
+            ONode root = ONode.ofJson(resp);
+            int code = root.get("code").getInt();
+            if (code != 0) {
+                LOG.warn("[Feishu] getWsEndpoint failed: code={}, msg={}", code, root.get("msg").getString());
+                return null;
+            }
+
+            return root.get("data");
+        } catch (Exception e) {
+            LOG.error("[Feishu] getWsEndpoint error: {}", e.getMessage());
+            return null;
+        }
+    }
+
     // ==================== HTTP 工具方法 ====================
 
     private static String httpGet(String urlStr, String accessToken) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
-        conn.setRequestMethod("GET");
-        conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+        HttpUtils http = HttpUtils.http(urlStr).timeout(10, 10, 15);
+
         if (accessToken != null && !accessToken.isEmpty()) {
-            conn.setRequestProperty("Authorization", "Bearer " + accessToken);
-        }
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(15000);
-
-        int code = conn.getResponseCode();
-        if (code != 200) {
-            LOG.warn("[Feishu] HTTP GET {} returned {}", urlStr, code);
-            return null;
+            http.header("Authorization", "Bearer " + accessToken);
         }
 
-        return readResponse(conn);
+        try (HttpResponse resp = http.exec("GET")) {
+            int code = resp.code();
+            if (code != 200) {
+                LOG.warn("[Feishu] HTTP GET {} returned {}", urlStr, code);
+                return null;
+            }
+            return resp.bodyAsString();
+        }
     }
 
-    private static String httpPost(String urlStr, String jsonBody, String accessToken) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
-        conn.setRequestMethod("POST");
-        conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+    public static String httpPost(String urlStr, String jsonBody, String accessToken) throws Exception {
+        HttpUtils http = HttpUtils.http(urlStr).timeout(10, 10, 15);
+
         if (accessToken != null && !accessToken.isEmpty()) {
-            conn.setRequestProperty("Authorization", "Bearer " + accessToken);
+            http.header("Authorization", "Bearer " + accessToken);
         }
-        conn.setDoOutput(true);
-        conn.setConnectTimeout(10000);
-        conn.setReadTimeout(15000);
 
         if (jsonBody != null && !jsonBody.isEmpty()) {
-            conn.getOutputStream().write(jsonBody.getBytes(StandardCharsets.UTF_8));
+            http.bodyOfJson(jsonBody);
         }
 
-        int code = conn.getResponseCode();
-        if (code != 200) {
-            LOG.warn("[Feishu] HTTP POST {} returned {}", urlStr, code);
-            return null;
+        try (HttpResponse resp = http.exec("POST")) {
+            int code = resp.code();
+            if (code != 200) {
+                LOG.warn("[Feishu] HTTP POST {} returned {}", urlStr, code);
+                return null;
+            }
+            return resp.bodyAsString();
         }
-
-        return readResponse(conn);
-    }
-
-    private static String readResponse(HttpURLConnection conn) throws Exception {
-        BufferedReader reader = new BufferedReader(
-                new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            sb.append(line);
-        }
-        reader.close();
-        return sb.toString();
     }
 }
