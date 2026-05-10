@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.codecli.portal.wechat;
+package org.noear.solon.codecli.channel.wechat;
 
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.codecli.config.AgentProperties;
-import org.noear.solon.codecli.portal.IMLink;
+import org.noear.solon.codecli.channel.IMLink;
 import org.noear.solon.codecli.portal.WebChunk;
 import org.noear.solon.codecli.portal.WebGate;
 import org.noear.solon.core.util.Assert;

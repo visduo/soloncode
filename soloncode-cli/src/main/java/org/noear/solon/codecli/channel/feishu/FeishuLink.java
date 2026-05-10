@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.codecli.portal.feishu;
+package org.noear.solon.codecli.channel.feishu;
 
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -25,7 +25,7 @@ import org.noear.java_websocket.client.SimpleWebSocketClient;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.codecli.config.AgentProperties;
-import org.noear.solon.codecli.portal.IMLink;
+import org.noear.solon.codecli.channel.IMLink;
 import org.noear.solon.codecli.portal.WebGate;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;

@@ -13,15 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.noear.solon.codecli.portal.feishu;
+package org.noear.solon.codecli.channel.feishu;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 飞书 WebSocket Protobuf (Pbbp2) 轻量级编解码器
