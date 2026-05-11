@@ -112,6 +112,11 @@ public class FeishuLink implements Channel, Runnable {
     private final Object reconnectLock = new Object();
 
     /**
+     * 重连线程引用（便于 stopStream 时中断）
+     */
+    private volatile Thread reconnectThread;
+
+    /**
      * 飞书返回的心跳间隔（毫秒）
      */
     private volatile long pingIntervalMs = 20_000;
@@ -652,8 +657,14 @@ public class FeishuLink implements Channel, Runnable {
                 wsClient = null;
             }
 
+            // 中断旧的重连线程（防止并发重连）
+            if (reconnectThread != null) {
+                reconnectThread.interrupt();
+                reconnectThread = null;
+            }
+
             LOG.info("[Feishu] Reconnecting in 5 seconds...");
-            Thread reconnectThread = new Thread(() -> {
+            reconnectThread = new Thread(() -> {
                 try {
                     Thread.sleep(5000);
                 } catch (InterruptedException e) {
@@ -677,6 +688,10 @@ public class FeishuLink implements Channel, Runnable {
             } catch (Exception ignored) {
             }
             wsClient = null;
+        }
+        if (reconnectThread != null) {
+            reconnectThread.interrupt();
+            reconnectThread = null;
         }
         if (streamThread != null) {
             streamThread.interrupt();
@@ -752,6 +767,14 @@ public class FeishuLink implements Channel, Runnable {
             openIdToSession.remove(binding.openId);
         }
         credentialStore.save(bindings);
+
+        // 没有剩余绑定时，彻底清理连接层状态
+        if (bindings.isEmpty()) {
+            stopStream();
+            this.appId = null;
+            this.appSecret = null;
+        }
+
         LOG.info("[Feishu] Session {} unbound", sessionId);
     }
 
