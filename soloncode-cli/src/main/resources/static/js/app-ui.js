@@ -352,3 +352,49 @@ initVoice();
         btn.title = '展开侧边栏';
     }
 })();
+
+/* ===== Mobile Sidebar Drawer ===== */
+(function() {
+    var mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    var mobileOverlay = document.getElementById('mobileOverlay');
+    var sidebar = document.querySelector('.sidebar');
+    if (!mobileMenuBtn || !sidebar) return;
+
+    mobileMenuBtn.addEventListener('click', function() {
+        sidebar.classList.toggle('mobile-open');
+        if (mobileOverlay) mobileOverlay.classList.toggle('show');
+    });
+
+    if (mobileOverlay) {
+        mobileOverlay.addEventListener('click', function() {
+            sidebar.classList.remove('mobile-open');
+            mobileOverlay.classList.remove('show');
+        });
+    }
+
+    // Close sidebar when selecting a chat on mobile
+    var sidebarList = document.querySelector('.sidebar-list');
+    if (sidebarList) {
+        sidebarList.addEventListener('click', function(e) {
+            var item = e.target.closest('.sidebar-item');
+            if (item && window.innerWidth <= 768) {
+                sidebar.classList.remove('mobile-open');
+                if (mobileOverlay) mobileOverlay.classList.remove('show');
+            }
+        });
+    }
+})();
+
+/* ===== Keyboard Shortcuts ===== */
+document.addEventListener('keydown', function(e) {
+    // Ctrl/Cmd + N: New chat
+    if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        if (typeof newChatBtn !== 'undefined') newChatBtn.click();
+    }
+    // Escape: close modals, lightbox
+    if (e.key === 'Escape') {
+        var lightbox = document.querySelector('.lightbox-overlay');
+        if (lightbox) lightbox.remove();
+    }
+});

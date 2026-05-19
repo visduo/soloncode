@@ -159,10 +159,14 @@ function finishStream(sess) {
     if (sess.reasonBuffer) {
         var el = ensureAssistantBubble(sess);
         el.innerHTML = renderMd(sess.reasonBuffer);
+        if (typeof addCodeBlockButtons === 'function') addCodeBlockButtons(el);
     }
     // 如果有思考中的内容，也刷一下
     if (sess.thinkingBlockEl && sess.thinkingBuffer) {
-        if (sess.thinkingBodyMdEl) sess.thinkingBodyMdEl.innerHTML = renderMd(sess.thinkingBuffer);
+        if (sess.thinkingBodyMdEl) {
+            sess.thinkingBodyMdEl.innerHTML = renderMd(sess.thinkingBuffer);
+            if (typeof addCodeBlockButtons === 'function') addCodeBlockButtons(sess.thinkingBodyMdEl);
+        }
     }
     // ---------------------------------------------------
 
@@ -212,6 +216,7 @@ function connectWebGate() {
         console.log('[WebGate] connected');
         webGateReconnectAttempts = 0;
         startWebGateHeartbeat();
+        hideNetworkBar();
         // 重连后刷新文件树
         if (typeof loadTree === 'function') {
             loadTree();
@@ -267,6 +272,7 @@ function connectWebGate() {
     webGateSocket.onclose = function() {
         console.log('[WebGate] closed');
         stopWebGateHeartbeat();
+        showNetworkBar('disconnected', '连接已断开，正在尝试重连...');
         scheduleWebGateReconnect();
     };
 
@@ -299,6 +305,7 @@ function scheduleWebGateReconnect() {
     var delay = Math.min(1000 * Math.pow(2, webGateReconnectAttempts), 30000);
     webGateReconnectAttempts++;
     console.log('[WebGate] reconnecting in ' + delay + 'ms (attempt ' + webGateReconnectAttempts + ')');
+    showNetworkBar('reconnecting', '正在重连 (' + webGateReconnectAttempts + '/' + WEBGATE_MAX_RECONNECT + ')...');
     setTimeout(function() {
         connectWebGate();
     }, delay);

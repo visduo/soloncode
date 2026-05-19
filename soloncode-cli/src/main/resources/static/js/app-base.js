@@ -175,3 +175,41 @@ function clearInput() {
 
 // 初始化默认会话（延迟到最后一个文件加载完毕后由 app-streaming.js 调用）
 // setActiveSession(SESSION_ID);
+
+/* ===== Toast Notification ===== */
+var toastContainer = null;
+function showToast(message, type, duration) {
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.className = 'toast-container';
+        document.body.appendChild(toastContainer);
+    }
+    var item = document.createElement('div');
+    item.className = 'toast-item ' + (type || 'info');
+    var icons = { success: '\u2714', error: '\u2716', info: '\u2139' };
+    item.innerHTML = '<span>' + (icons[type] || icons.info) + '</span><span>' + escapeHtml(message) + '</span>';
+    toastContainer.appendChild(item);
+    setTimeout(function() {
+        item.classList.add('leaving');
+        setTimeout(function() {
+            if (item.parentNode) item.remove();
+        }, 250);
+    }, duration || 3000);
+}
+
+/* ===== Network Status Bar ===== */
+var networkBar = null;
+function showNetworkBar(type, message) {
+    if (!networkBar) {
+        networkBar = document.createElement('div');
+        networkBar.className = 'network-bar';
+        document.body.appendChild(networkBar);
+    }
+    networkBar.className = 'network-bar show ' + type;
+    networkBar.textContent = message;
+}
+function hideNetworkBar() {
+    if (networkBar) {
+        networkBar.className = 'network-bar';
+    }
+}
