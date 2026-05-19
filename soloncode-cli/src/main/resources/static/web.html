@@ -152,6 +152,21 @@
             </div>
         </div>
     </div>
+
+    <!-- Git Diff Viewer (内联在主内容区，替换聊天视图) -->
+    <div class="git-diff-viewer" id="gitDiffViewer" style="display:none">
+        <div class="git-viewer-header">
+            <div class="git-viewer-breadcrumb">
+                <span class="git-viewer-label">变更详情</span>
+                <span class="git-viewer-sep">/</span>
+                <span class="git-viewer-file" id="gitViewerFile"></span>
+            </div>
+            <button class="git-viewer-close" id="gitViewerClose" title="关闭 (Esc)">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <pre class="git-viewer-content" id="gitViewerContent"></pre>
+    </div>
 </div>
 
     <!-- File Tree Panel (Right Side) -->
@@ -222,18 +237,14 @@
                 </div>
                 <div class="git-diff-file-list" id="gitDiffFileList"></div>
                 <div class="git-commit-bar" id="gitCommitBar">
+                    <label class="git-select-all-label" title="全选/取消全选">
+                        <input type="checkbox" id="gitSelectAll" checked/>
+                    </label>
                     <input type="text" class="git-commit-input" id="gitCommitMsg" placeholder="提交信息..." />
                     <button class="git-commit-btn" id="gitCommitBtn">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                         提交
                     </button>
-                </div>
-                <div class="git-diff-viewer" id="gitDiffViewer" style="display:none">
-                    <div class="git-diff-viewer-header">
-                        <button class="git-diff-back" id="gitDiffBack">← 返回</button>
-                        <span class="git-diff-file-path" id="gitDiffFilePath"></span>
-                    </div>
-                    <pre class="git-diff-content" id="gitDiffContent"></pre>
                 </div>
                 <div class="git-diff-empty" id="gitDiffEmpty" style="display:none">
                     <div class="git-empty-icon">&#x2714;</div>
@@ -269,6 +280,8 @@
 <script src="js/app-history.js"></script>
 <script src="js/app-message.js"></script>
 <script src="js/app-streaming.js"></script>
+
+
     <script src="js/app-filer.js"></script>
     <script src="js/app-gitdiff.js"></script>
 </body>

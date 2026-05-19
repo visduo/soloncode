@@ -887,6 +887,98 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 .git-commit-btn:hover { opacity: 0.9; }
 .git-commit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* Git 文件勾选 checkbox */
+.git-file-checkbox {
+    width: 14px;
+    height: 14px;
+    margin-right: 4px;
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+.git-select-all-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+.git-select-all-label input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+/* Git Diff Viewer — 内联在 main-area 内 */
+.git-diff-viewer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-main);
+    min-height: 0;
+}
+.git-viewer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+    background: var(--bg-secondary);
+}
+.git-viewer-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.git-viewer-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+.git-viewer-sep {
+    color: var(--border-color);
+}
+.git-viewer-file {
+    font-size: 13px;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.git-viewer-close {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    flex-shrink: 0;
+}
+.git-viewer-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+.git-viewer-content {
+    flex: 1;
+    overflow: auto;
+    margin: 0;
+    padding: 12px 0;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    white-space: pre;
+    background: none;
+}
+
 /* 工作区干净 */
 .git-diff-empty {
     display: flex;

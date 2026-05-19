@@ -1,5 +1,5 @@
 /* ===== app-gitdiff.js ===== */
-/* Filer Panel Git Diff 面板：三态检测（可用/未初始化/不可用）、文件列表、Diff 渲染、WebSocket 联动 */
+/* Filer Panel Git Diff 面板：三态检测、文件列表（带勾选）、Diff Viewer 内联查看、精确提交 */
 
 (function() {
     // ---- DOM 元素 ----
@@ -11,17 +11,23 @@
     var gitBadge = document.getElementById('gitBadge');
     var gitBranch = document.getElementById('gitBranch');
     var gitDiffFileList = document.getElementById('gitDiffFileList');
-    var gitDiffViewer = document.getElementById('gitDiffViewer');
-    var gitDiffContent = document.getElementById('gitDiffContent');
-    var gitDiffFilePath = document.getElementById('gitDiffFilePath');
     var gitDiffEmpty = document.getElementById('gitDiffEmpty');
-    var gitDiffBack = document.getElementById('gitDiffBack');
     var gitRefreshBtn = document.getElementById('gitRefreshBtn');
     var gitInitBtn = document.getElementById('gitInitBtn');
     var gitInitCommit = document.getElementById('gitInitCommit');
     var gitCommitBtn = document.getElementById('gitCommitBtn');
     var gitCommitMsg = document.getElementById('gitCommitMsg');
     var gitCommitBar = document.getElementById('gitCommitBar');
+    var gitSelectAll = document.getElementById('gitSelectAll');
+
+    // Diff Viewer 元素（内联在 main-area 内）
+    var gitDiffViewer = document.getElementById('gitDiffViewer');
+    var gitViewerFile = document.getElementById('gitViewerFile');
+    var gitViewerContent = document.getElementById('gitViewerContent');
+    var gitViewerClose = document.getElementById('gitViewerClose');
+    // main-area 子视图引用
+    var welcomeView = document.getElementById('welcomeView');
+    var chatView = document.getElementById('chatView');
 
     // ---- 状态 ----
     var gitStatus = null;
@@ -106,11 +112,10 @@
         if (gitBranch) gitBranch.textContent = branch || '--';
     }
 
-    // ---- 渲染文件列表 ----
+    // ---- 渲染文件列表（带 checkbox）----
     function renderFileList(data) {
         if (!gitDiffFileList) return;
         gitDiffFileList.innerHTML = '';
-        if (gitDiffViewer) gitDiffViewer.style.display = 'none';
 
         var files = [];
 
@@ -137,37 +142,111 @@
         gitDiffFileList.style.display = '';
         if (gitCommitBar) gitCommitBar.style.display = '';
 
+        // 全选默认勾选
+        if (gitSelectAll) gitSelectAll.checked = true;
+
         files.forEach(function(file) {
             var item = document.createElement('div');
             item.className = 'git-file-item';
-            item.innerHTML =
-                '<span class="git-status-letter ' + file.status + '">' + file.status + '</span>' +
-                '<span class="git-file-path" title="' + escapeHtml(file.path) + '">' + escapeHtml(file.path) + '</span>';
-            item.addEventListener('click', function() {
-                loadFileDiff(file.path);
+
+            // checkbox
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'git-file-checkbox';
+            cb.checked = true;
+            cb.setAttribute('data-path', file.path);
+            cb.addEventListener('click', function(e) {
+                e.stopPropagation(); // 防止触发外层 click 打开 diff
+                syncSelectAll();
             });
+
+            // 状态字母
+            var statusSpan = document.createElement('span');
+            statusSpan.className = 'git-status-letter ' + file.status;
+            statusSpan.textContent = file.status;
+
+            // 文件路径
+            var pathSpan = document.createElement('span');
+            pathSpan.className = 'git-file-path';
+            pathSpan.title = file.path;
+            pathSpan.textContent = file.path;
+
+            item.appendChild(cb);
+            item.appendChild(statusSpan);
+            item.appendChild(pathSpan);
+
+            // 点击文件行打开 diff viewer
+            item.addEventListener('click', function(e) {
+                // 避免点 checkbox 时也触发
+                if (e.target === cb) return;
+                openDiffViewer(file.path);
+            });
+
             gitDiffFileList.appendChild(item);
         });
     }
 
-    // ---- 加载单文件 diff ----
-    function loadFileDiff(path) {
-        if (gitDiffFileList) gitDiffFileList.style.display = 'none';
-        if (gitDiffEmpty) gitDiffEmpty.style.display = 'none';
-        if (gitDiffViewer) gitDiffViewer.style.display = '';
-        if (gitDiffFilePath) gitDiffFilePath.textContent = path;
+    // ---- 同步全选 checkbox 状态 ----
+    function syncSelectAll() {
+        if (!gitSelectAll || !gitDiffFileList) return;
+        var all = gitDiffFileList.querySelectorAll('.git-file-checkbox');
+        var checked = gitDiffFileList.querySelectorAll('.git-file-checkbox:checked');
+        gitSelectAll.checked = (all.length > 0 && all.length === checked.length);
+    }
+
+    // ---- 全选/取消全选 ----
+    if (gitSelectAll) {
+        gitSelectAll.addEventListener('change', function() {
+            if (!gitDiffFileList) return;
+            var cbs = gitDiffFileList.querySelectorAll('.git-file-checkbox');
+            var val = this.checked;
+            cbs.forEach(function(cb) { cb.checked = val; });
+        });
+    }
+
+    // ---- 获取选中的文件路径列表 ----
+    function getSelectedFiles() {
+        if (!gitDiffFileList) return [];
+        var checked = gitDiffFileList.querySelectorAll('.git-file-checkbox:checked');
+        var paths = [];
+        checked.forEach(function(cb) {
+            var p = cb.getAttribute('data-path');
+            if (p) paths.push(p);
+        });
+        return paths;
+    }
+
+    // ---- Diff Viewer：打开内联 diff（在 main-area 内）----
+    var diffViewerActive = false;
+
+    function openDiffViewer(path) {
+        if (!gitDiffViewer) return;
+
+        // 隐藏欢迎页和聊天视图
+        if (welcomeView) welcomeView.style.display = 'none';
+        if (chatView) chatView.style.display = 'none';
+
+        // 显示 diff viewer
+        gitDiffViewer.style.display = 'flex';
+        diffViewerActive = true;
+
+        if (gitViewerFile) gitViewerFile.textContent = path;
+        if (gitViewerContent) gitViewerContent.innerHTML = '<div style="padding:20px;color:var(--text-secondary)">加载中...</div>';
 
         fetch('/chat/git/diff?path=' + encodeURIComponent(path))
             .then(function(r) { return r.json(); })
             .then(function(res) {
                 var d = (res && res.data) ? res.data : {};
-                renderDiffText(d.diff || '');
+                renderViewerDiff(d.diff || '');
+            })
+            .catch(function(e) {
+                if (gitViewerContent) gitViewerContent.innerHTML = '<div style="padding:20px;color:#cb2431">加载失败: ' + escapeHtml(e.message) + '</div>';
             });
     }
 
-    // ---- 渲染 diff 文本（纯 CSS 着色）----
-    function renderDiffText(raw) {
-        if (!gitDiffContent) return;
+    // ---- Diff Viewer：渲染 diff 文本 ----
+    function renderViewerDiff(raw) {
+        if (!gitViewerContent) return;
         var lines = (raw || '').split('\n');
         var html = '';
         for (var i = 0; i < lines.length; i++) {
@@ -184,20 +263,42 @@
                 html += '<div class="git-line-ctx">' + line + '</div>';
             }
         }
-        gitDiffContent.innerHTML = html;
-        gitDiffContent.scrollTop = 0;
+        gitViewerContent.innerHTML = html;
+        gitViewerContent.scrollTop = 0;
     }
 
-    // ---- 返回文件列表 ----
-    if (gitDiffBack) {
-        gitDiffBack.addEventListener('click', function() {
-            if (gitDiffViewer) gitDiffViewer.style.display = 'none';
-            if (gitDiffFileList) gitDiffFileList.style.display = '';
-            if (gitDiffEmpty) gitDiffEmpty.style.display = 'none';
-        });
+    // ---- Diff Viewer：关闭，恢复原始视图 ----
+    function closeDiffViewer() {
+        if (!gitDiffViewer) return;
+        gitDiffViewer.style.display = 'none';
+        diffViewerActive = false;
+
+        // 关键：必须先清除两个视图的内联 display 样式
+        // 因为 chatView 的可见性由 CSS .active 类控制（.chat-view.active { display: flex }）
+        // 如果残留 style="display:none"，会覆盖 CSS 类规则，导致视图空白
+        if (chatView) chatView.style.display = '';
+        if (welcomeView) welcomeView.style.display = '';
+
+        // 根据当前模式恢复正确的可见性
+        // chatView 可见性由 .active 类控制（CSS 规则），无需额外操作
+        // welcomeView 仅在非聊天模式下可见
+        if (chatView && chatView.classList.contains('active')) {
+            welcomeView.style.display = 'none';
+        }
     }
 
-    // ---- Git 提交 ----
+    if (gitViewerClose) {
+        gitViewerClose.addEventListener('click', closeDiffViewer);
+    }
+
+    // ESC 关闭 diff viewer
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && diffViewerActive) {
+            closeDiffViewer();
+        }
+    });
+
+    // ---- Git 提交（精确文件列表）----
     var isCommitting = false;
     if (gitCommitBtn) {
         gitCommitBtn.addEventListener('click', function() {
@@ -207,11 +308,21 @@
                 gitCommitMsg && gitCommitMsg.focus();
                 return;
             }
+            var files = getSelectedFiles();
+            if (files.length === 0) {
+                alert('请至少勾选一个文件');
+                return;
+            }
+
             isCommitting = true;
             gitCommitBtn.disabled = true;
             gitCommitBtn.innerHTML = '<span style="opacity:0.7">提交中...</span>';
 
-            fetch('/chat/git/commit?message=' + encodeURIComponent(msg), { method: 'POST' })
+            fetch('/chat/git/commit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: msg, files: files })
+            })
                 .then(function(r) { return r.json(); })
                 .then(function(res) {
                     if (res && res.code === 200) {

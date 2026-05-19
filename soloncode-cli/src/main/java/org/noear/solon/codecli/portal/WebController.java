@@ -583,11 +583,13 @@ public class WebController {
     }
 
     /**
-     * Git 提交：先 add -A，再 commit
+     * Git 提交：支持精确文件列表或全量 add -A
+     * 请求体 JSON: { "message": "...", "files": ["a.java", "b.css"] }
+     * files 为空或缺失时退化为 add -A（兼容旧调用）
      */
     @Post
     @Mapping("/chat/git/commit")
-    public Result<Map> gitCommit(@Param("message") String message) throws Exception {
+    public Result<Map> gitCommit(@Body String body) throws Exception {
         File workspaceDir = new File(engine.getProps().getWorkspace());
 
         // 安全校验：确认是 git 仓库
@@ -596,13 +598,47 @@ public class WebController {
             return Result.failure(400, "Not a git repository");
         }
 
+        // 解析 JSON body
+        String message = null;
+        List<String> files = null;
+        if (body != null && !body.trim().isEmpty()) {
+            try {
+                ONode json = ONode.ofJson(body);
+                if (json != null && json.isObject()) {
+                    ONode msgNode = json.get("message");
+                    if (msgNode != null && msgNode.isString()) {
+                        message = msgNode.getString();
+                    }
+                    ONode filesNode = json.get("files");
+                    if (filesNode != null && filesNode.isArray()) {
+                        files = new ArrayList<>();
+                        for (ONode f : filesNode.getArray()) {
+                            files.add(f.getString());
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+                // 非 JSON，忽略
+            }
+        }
+
         // 校验提交信息
         if (message == null || message.trim().isEmpty()) {
             return Result.failure(400, "Commit message is required");
         }
 
-        // git add -A
-        ProcessResult addResult = runGitCommand(workspaceDir, "git", "add", "-A");
+        // git add：有指定文件时精确暂存，否则 add -A
+        ProcessResult addResult;
+        if (files != null && !files.isEmpty()) {
+            List<String> addCmd = new ArrayList<>();
+            addCmd.add("git");
+            addCmd.add("add");
+            addCmd.add("--");
+            addCmd.addAll(files);
+            addResult = runGitCommand(workspaceDir, addCmd.toArray(new String[0]));
+        } else {
+            addResult = runGitCommand(workspaceDir, "git", "add", "-A");
+        }
         if (addResult.exitCode != 0) {
             return Result.failure(500, "git add failed: " + addResult.stderr);
         }
