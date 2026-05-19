@@ -69,22 +69,17 @@
             if (node.type === 'directory') {
                 var arrow = document.createElement('span');
                 arrow.className = 'filer-arrow' + (node.expanded ? ' open' : '');
-                arrow.innerHTML = '<svg width="10" height="10" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                arrow.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
                 row.appendChild(arrow);
-
-                var icon = document.createElement('span');
-                icon.className = 'filer-node-icon filer-icon-folder';
-                icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 2.5h3.5L7 4h6.5A1.5 1.5 0 0115 5.5v6a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 011 11.5V4A1.5 1.5 0 012 2.5z" fill="currentColor" fill-opacity="0.15" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/></svg>';
-                row.appendChild(icon);
             } else {
                 var spacer = document.createElement('span');
-                spacer.className = 'filer-arrow';
+                spacer.className = 'filer-arrow filer-arrow-spacer';
                 spacer.innerHTML = '&nbsp;';
                 row.appendChild(spacer);
 
                 var icon = document.createElement('span');
                 icon.className = 'filer-node-icon filer-icon-file';
-                icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 1.5h4.75L12.5 5.75V13.5a1 1 0 01-1 1H4a1 1 0 01-1-1V2.5a1 1 0 011-1z" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/><path d="M8.75 1.5v4.25H12.5" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/></svg>';
+                icon.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 1.5h4.75L12.5 5.75V13.5a1 1 0 01-1 1H4a1 1 0 01-1-1V2.5a1 1 0 011-1z" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/><path d="M8.75 1.5v4.25H12.5" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/></svg>';
                 row.appendChild(icon);
             }
 
