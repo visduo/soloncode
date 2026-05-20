@@ -1101,6 +1101,69 @@ public class WebController {
     }
 
     /**
+     * 读取工作区文件内容。
+     * <p>以工作区根目录为基准，读取指定路径的文件文本内容。
+     * 支持安全路径校验和文件大小限制。</p>
+     *
+     * @param path 相对路径，基于工作区根目录
+     * @return 文件信息，包含 content、path、name、size
+     * @throws Exception 文件系统访问异常
+     */
+    @Get
+    @Mapping("/chat/filer/read")
+    public Result<Map> fileRead(@Param("path") String path) throws Exception {
+        if (path == null || path.trim().isEmpty()) {
+            return Result.failure(400, "Path is required");
+        }
+        if (path.contains("..")) {
+            return Result.failure(400, "Invalid path");
+        }
+
+        java.nio.file.Path workspace = java.nio.file.Paths.get(engine.getProps().getWorkspace()).toAbsolutePath().normalize();
+        java.nio.file.Path target = workspace.resolve(path).toAbsolutePath().normalize();
+
+        if (!target.startsWith(workspace)) {
+            return Result.failure(403, "Access denied");
+        }
+        if (!target.toFile().exists() || target.toFile().isDirectory()) {
+            return Result.failure(404, "File not found");
+        }
+
+        File file = target.toFile();
+        // 限制文件大小：2MB
+        if (file.length() > 2 * 1024 * 1024) {
+            return Result.failure(413, "File too large (max 2MB)");
+        }
+
+        // 读取文件内容（尝试 UTF-8，失败回退系统默认编码）
+        String content;
+        try {
+            content = new String(java.nio.file.Files.readAllBytes(target), "UTF-8");
+        } catch (Exception e) {
+            BufferedReader reader = null;
+            try {
+                reader = new BufferedReader(new InputStreamReader(new FileInputStream(file)));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    sb.append(line).append("\n");
+                }
+                content = sb.toString();
+            } finally {
+                if (reader != null) reader.close();
+            }
+        }
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("content", content);
+        data.put("path", path);
+        data.put("name", file.getName());
+        data.put("size", file.length());
+
+        return Result.succeed(data);
+    }
+
+    /**
      * 递归构建文件树结构。
      * <p>对指定目录进行扫描，目录排在前面、文件排在后面，均按名称字典序排列。
      * 跳过以点号开头的隐藏文件和 {@link #EXCLUDED_DIRS} 中定义的目录。

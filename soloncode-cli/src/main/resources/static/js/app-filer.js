@@ -119,17 +119,11 @@
             nodeEl.appendChild(childrenEl);
         }
 
-        // 用定时器区分单击/双击，避免双击时触发展开/折叠
-        var clickTimer = null;
-
-        // 单击：目录展开/折叠（延迟执行，双击时取消）
-        (function(n, ne) {
-            row.addEventListener('click', function(e) {
-                if (n.type !== 'directory') return;
-                e.stopPropagation();
-                if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
-                clickTimer = setTimeout(function() {
-                    clickTimer = null;
+        // 单击：目录展开/折叠；文件打开查看器
+        if (node.type === 'directory') {
+            (function(n, ne) {
+                row.addEventListener('click', function(e) {
+                    e.stopPropagation();
                     var cEl = ne.querySelector(':scope > .filer-node-children');
                     var aEl = row.querySelector('.filer-arrow');
                     if (!cEl) return;
@@ -153,17 +147,25 @@
                                 });
                         }
                     }
-                }, 250);
-            });
-        })(node, nodeEl);
+                });
+            })(node, nodeEl);
+        } else {
+            // 文件：单击打开文件查看器
+            (function(n) {
+                row.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    if (typeof window.openFileViewer === 'function') {
+                        window.openFileViewer(n.path, n.name);
+                    }
+                });
+            })(node);
+        }
 
-        // 双击：插入 path 到输入框（取消单击回调）
+        // 双击：插入 path 到输入框
         (function(n) {
             row.addEventListener('dblclick', function(e) {
                 e.stopPropagation();
                 e.preventDefault();
-                // 取消挂起的单击事件
-                if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
 
                 var targetInput = (typeof inChatMode !== 'undefined' && inChatMode) ? chatInput : welcomeInput;
                 if (!targetInput) return;

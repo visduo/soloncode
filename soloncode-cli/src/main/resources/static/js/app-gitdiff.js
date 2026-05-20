@@ -19,8 +19,9 @@
     var gitCommitBar = document.getElementById('gitCommitBar');
     var gitSelectAll = document.getElementById('gitSelectAll');
 
-    // Diff Viewer 元素（内联在 main-area 内）
+    // Diff Viewer / File Viewer 元素（内联在 main-area 内）
     var gitDiffViewer = document.getElementById('gitDiffViewer');
+    var gitViewerLabel = document.getElementById('gitViewerLabel');
     var gitViewerFile = document.getElementById('gitViewerFile');
     var gitViewerContent = document.getElementById('gitViewerContent');
     var gitViewerClose = document.getElementById('gitViewerClose');
@@ -31,6 +32,7 @@
     // ---- 状态 ----
     var gitStatus = null;
     var isInitializing = false;
+    var viewerMode = null; // 'diff' | 'file' | null
 
     // ---- Tab 切换 ----
     tabs.forEach(function(tab) {
@@ -217,11 +219,156 @@
         return paths;
     }
 
-    // ---- Diff Viewer：打开内联 diff（在 main-area 内）----
+    // ---- 根据文件扩展名推测语言（用于 hljs）----
+    function guessLang(path) {
+        var ext = (path || '').replace(/.*\./, '').toLowerCase();
+        var map = {
+            js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript',
+            java: 'java', kt: 'kotlin', kts: 'kotlin',
+            py: 'python', rb: 'ruby', go: 'go', rs: 'rust',
+            c: 'c', h: 'c', cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp',
+            cs: 'csharp', fs: 'fsharp',
+            scala: 'scala', clj: 'clojure', ex: 'elixir', exs: 'elixir',
+            html: 'xml', htm: 'xml', xml: 'xml', svg: 'xml',
+            css: 'css', scss: 'scss', less: 'less', sass: 'scss',
+            json: 'json', yaml: 'yaml', yml: 'yaml', toml: 'ini',
+            md: 'markdown', markdown: 'markdown',
+            sql: 'sql', sh: 'bash', bash: 'bash', zsh: 'bash',
+            dockerfile: 'dockerfile', makefile: 'makefile',
+            gradle: 'groovy', groovy: 'groovy',
+            lua: 'lua', r: 'r', pl: 'perl', pm: 'perl',
+            swift: 'swift', dart: 'dart',
+            vue: 'xml', svelte: 'xml',
+            properties: 'properties', conf: 'nginx', nginx: 'nginx',
+            ini: 'ini', cfg: 'ini',
+            txt: 'plaintext'
+        };
+        // 特殊文件名
+        var name = (path || '').replace(/.*\//, '').toLowerCase();
+        if (name === 'makefile' || name === 'gnumakefile') return 'makefile';
+        if (name === 'dockerfile') return 'dockerfile';
+        if (name === '.gitignore' || name === '.gitattributes') return 'bash';
+        if (name === 'jenkinsfile') return 'groovy';
+        if (name === 'vagrantfile') return 'ruby';
+        return map[ext] || '';
+    }
+
+    // ---- 格式化文件大小 ----
+    function formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    // ---- File Viewer：打开文件内容（在 main-area 内）----
     var diffViewerActive = false;
+
+    function openFileViewer(path, name) {
+        if (!gitDiffViewer) return;
+
+        viewerMode = 'file';
+
+        // 隐藏欢迎页和聊天视图
+        if (welcomeView) welcomeView.style.display = 'none';
+        if (chatView) chatView.style.display = 'none';
+
+        // 显示 viewer
+        gitDiffViewer.style.display = 'flex';
+        diffViewerActive = true;
+
+        // 更新 header
+        if (gitViewerLabel) gitViewerLabel.textContent = '文件内容';
+        if (gitViewerFile) gitViewerFile.textContent = path;
+
+        // 清理操作栏
+        var oldActions = gitDiffViewer.querySelector('.git-viewer-actions');
+        if (oldActions) oldActions.remove();
+
+        if (gitViewerContent) gitViewerContent.innerHTML = '<div style="padding:20px;color:var(--text-secondary)">加载中...</div>';
+
+        fetch('/chat/filer/read?path=' + encodeURIComponent(path))
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                var d = (res && res.data) ? res.data : {};
+                if (res && res.code !== 200) {
+                    gitViewerContent.innerHTML = '<div style="padding:20px;color:var(--color-danger)">'
+                        + escapeHtml((res && res.data && res.data.message) || res.description || '无法读取文件')
+                        + '</div>';
+                    return;
+                }
+                renderFileContent(d.content, d.name || name, d.size, path);
+            })
+            .catch(function(e) {
+                if (gitViewerContent) gitViewerContent.innerHTML = '<div style="padding:20px;color:var(--color-danger)">加载失败: ' + escapeHtml(e.message) + '</div>';
+            });
+    }
+
+    // ---- File Viewer：渲染文件内容（语法高亮 + 行号）----
+    function renderFileContent(content, fileName, fileSize, filePath) {
+        if (!gitViewerContent) return;
+
+        var lang = guessLang(filePath || fileName);
+        var lines = (content || '').split('\n');
+        var totalLines = lines.length;
+
+        // 构建带行号的代码行
+        var codeHtml = '';
+        for (var i = 0; i < totalLines; i++) {
+            var escapedLine = escapeHtml(lines[i]);
+            // 空行保留高度
+            if (escapedLine === '') escapedLine = ' ';
+            codeHtml += '<div class="file-view-line">'
+                + '<span class="file-view-num">' + (i + 1) + '</span>'
+                + '<span class="file-view-text">' + escapedLine + '</span>'
+                + '</div>';
+        }
+
+        // 信息栏
+        var infoBar = '<div class="file-view-info">'
+            + '<span>' + escapeHtml(fileName || '') + '</span>'
+            + '<span class="file-view-info-sep">|</span>'
+            + '<span>' + totalLines + ' 行</span>'
+            + '<span class="file-view-info-sep">|</span>'
+            + '<span>' + formatSize(fileSize || 0) + '</span>'
+            + (lang ? '<span class="file-view-info-sep">|</span><span>' + escapeHtml(lang) + '</span>' : '')
+            + '</div>';
+
+        gitViewerContent.innerHTML = infoBar
+            + '<div class="file-view-code' + (lang ? ' hljs-language-' + lang : '') + '">' + codeHtml + '</div>';
+
+        // 如果有 hljs 且能识别语言，对代码区进行语法高亮
+        if (lang && typeof hljs !== 'undefined') {
+            var codeBlock = gitViewerContent.querySelector('.file-view-code');
+            if (codeBlock) {
+                try {
+                    // 将纯文本替换为高亮后的 HTML
+                    var rawText = content || '';
+                    var highlighted = hljs.highlight(rawText, { language: lang, ignoreIllegals: true });
+                    var hlLines = highlighted.value.split('\n');
+                    var hlHtml = '';
+                    for (var j = 0; j < hlLines.length; j++) {
+                        var hlLine = hlLines[j] || ' ';
+                        hlHtml += '<div class="file-view-line">'
+                            + '<span class="file-view-num">' + (j + 1) + '</span>'
+                            + '<span class="file-view-text">' + hlLine + '</span>'
+                            + '</div>';
+                    }
+                    codeBlock.innerHTML = hlHtml;
+                } catch (e) {
+                    // highlight 失败时保留纯文本
+                }
+            }
+        }
+
+        gitViewerContent.scrollTop = 0;
+    }
+
+    // ---- Diff Viewer：打开内联 diff（在 main-area 内）----
 
     function openDiffViewer(path, status) {
         if (!gitDiffViewer) return;
+
+        viewerMode = 'diff';
 
         // 隐藏欢迎页和聊天视图
         if (welcomeView) welcomeView.style.display = 'none';
@@ -231,6 +378,7 @@
         gitDiffViewer.style.display = 'flex';
         diffViewerActive = true;
 
+        if (gitViewerLabel) gitViewerLabel.textContent = '变更详情';
         if (gitViewerFile) gitViewerFile.textContent = path;
 
         // 判断是否是目录（以 / 结尾）
@@ -576,6 +724,7 @@
     // 每60秒兜底刷新
     setInterval(loadGitStatus, 60000);
 
-    // 暴露全局（调试用）
+    // 暴露全局（供 app-filer.js 调用）
     window.loadGitStatus = loadGitStatus;
+    window.openFileViewer = openFileViewer;
 })();
