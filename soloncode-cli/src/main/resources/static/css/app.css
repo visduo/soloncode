@@ -429,6 +429,20 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 @media (max-width: 768px) { .sidebar { display: none; } }
 
 /* ===== File Tree Panel (Right Side) ===== */
+.filer-resize-handle {
+    width: 5px;
+    cursor: col-resize;
+    background: transparent;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 99;
+    transition: background 0.15s;
+}
+.filer-resize-handle:hover,
+.filer-resize-handle.dragging {
+    background: var(--accent);
+    opacity: 0.5;
+}
 .filer-panel {
     width: var(--filer-panel-width);
     background: var(--bg-sidebar);
@@ -437,7 +451,7 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
     flex-direction: column;
     flex-shrink: 0;
     height: 100vh;
-    transition: background 0.3s, width 0.25s ease;
+    transition: background 0.3s;
 }
 .filer-panel.collapsed {
     width: 0 !important;
@@ -592,7 +606,7 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 .filer-panel-toggle-btn {
     position: fixed;
     top: 20px;
-    right: calc(var(--filer-panel-width) - 14px);
+    right: 266px;
     width: 28px;
     height: 28px;
     border-radius: 50%;
@@ -605,12 +619,12 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
     justify-content: center;
     font-size: 16px;
     z-index: 100;
-    transition: right 0.25s ease, background 0.2s;
+    transition: background 0.2s;
     box-shadow: 0 1px 4px rgba(0,0,0,0.12);
     line-height: 1;
 }
 .filer-panel-toggle-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-.filer-panel-toggle-btn.collapsed { right: 4px; }
+.filer-panel-toggle-btn.collapsed { right: 4px !important; }
 
 .filer-node { user-select: none; }
 .filer-node-row {

@@ -6,6 +6,72 @@
     var toggleBtn = document.getElementById('filerToggleBtn');
     var treeEl = document.getElementById('filerTree');
     var worknameEl = document.getElementById('filerWorkname');
+    var resizeHandle = document.getElementById('filerResizeHandle');
+
+    var FILER_MIN_WIDTH = 180;
+    var FILER_MAX_WIDTH = 600;
+    var FILER_DEFAULT_WIDTH = 280;
+
+    // ---- 同步 toggle 按钮位置 ----
+    function syncToggleBtnPosition() {
+        if (!toggleBtn || !panel) return;
+        var collapsed = panel.classList.contains('collapsed');
+        if (collapsed) {
+            toggleBtn.style.right = '4px';
+        } else {
+            var w = panel.offsetWidth;
+            toggleBtn.style.right = (w - 14) + 'px';
+        }
+    }
+
+    // ---- 拖拽调整大小 ----
+    function initResize() {
+        if (!resizeHandle || !panel) return;
+
+        var isDragging = false;
+        var startX = 0;
+        var startWidth = 0;
+
+        resizeHandle.addEventListener('mousedown', function(e) {
+            if (panel.classList.contains('collapsed')) return;
+            isDragging = true;
+            startX = e.clientX;
+            startWidth = panel.offsetWidth;
+            resizeHandle.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isDragging) return;
+            var dx = startX - e.clientX; // 拖向左边 dx > 0
+            var newWidth = Math.max(FILER_MIN_WIDTH, Math.min(FILER_MAX_WIDTH, startWidth + dx));
+            panel.style.width = newWidth + 'px';
+            localStorage.setItem('filer-width', newWidth);
+            syncToggleBtnPosition();
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (!isDragging) return;
+            isDragging = false;
+            resizeHandle.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        });
+    }
+
+    // ---- 恢复持久化宽度 ----
+    function restoreWidth() {
+        if (!panel) return;
+        var savedWidth = localStorage.getItem('filer-width');
+        if (savedWidth) {
+            var w = parseInt(savedWidth, 10);
+            if (w >= FILER_MIN_WIDTH && w <= FILER_MAX_WIDTH) {
+                panel.style.width = w + 'px';
+            }
+        }
+    }
 
     // ---- Toggle 折叠 ----
     var mainHeader = document.querySelector('.main-header');
@@ -28,10 +94,12 @@
             toggleBtn.title = collapsed ? '\u5C55\u5F00\u6587\u4EF6\u6811' : '\u6536\u7F29\u6587\u4EF6\u6811';
             localStorage.setItem('filer-collapsed', collapsed ? '1' : '0');
             syncHeaderPadding(collapsed);
+            syncToggleBtnPosition();
         });
     }
 
     // 恢复持久化状态
+    restoreWidth();
     if (localStorage.getItem('filer-collapsed') === '1') {
         if (panel) panel.classList.add('collapsed');
         if (toggleBtn) {
@@ -41,6 +109,8 @@
         }
         syncHeaderPadding(true);
     }
+    syncToggleBtnPosition();
+    initResize();
 
     // ---- 收集当前已展开的目录路径集合 ----
     function collectExpandedPaths() {
