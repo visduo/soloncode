@@ -753,31 +753,6 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
     content: '\21C2';
     font-size: 13px;
 }
-.git-refresh-btn {
-    width: 26px;
-    height: 26px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    background: none;
-    cursor: pointer;
-    font-size: 14px;
-    color: var(--text-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-}
-.git-refresh-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-}
-.git-refresh-btn.spinning {
-    animation: git-spin 0.6s linear;
-}
-@keyframes git-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
 
 /* 文件列表 */
 .git-diff-file-list {

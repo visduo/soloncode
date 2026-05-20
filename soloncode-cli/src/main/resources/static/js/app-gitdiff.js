@@ -12,7 +12,6 @@
     var gitBranch = document.getElementById('gitBranch');
     var gitDiffFileList = document.getElementById('gitDiffFileList');
     var gitDiffEmpty = document.getElementById('gitDiffEmpty');
-    var gitRefreshBtn = document.getElementById('gitRefreshBtn');
     var gitInitBtn = document.getElementById('gitInitBtn');
     var gitInitCommit = document.getElementById('gitInitCommit');
     var gitCommitBtn = document.getElementById('gitCommitBtn');
@@ -351,16 +350,6 @@
                 }
             });
         }
-    }
-
-    // ---- 刷新按钮 ----
-    if (gitRefreshBtn) {
-        gitRefreshBtn.addEventListener('click', function() {
-            this.classList.add('spinning');
-            loadGitStatus();
-            var self = this;
-            setTimeout(function() { self.classList.remove('spinning'); }, 600);
-        });
     }
 
     // ---- 初始化 Git 仓库 ----
