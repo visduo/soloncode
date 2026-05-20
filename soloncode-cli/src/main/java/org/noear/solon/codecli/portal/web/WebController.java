@@ -23,6 +23,7 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessFlags;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.command.Command;
+import org.noear.solon.ai.skills.cli.SkillDir;
 import org.noear.solon.annotation.*;
 import org.noear.solon.codecli.config.AgentFlags;
 import org.noear.solon.codecli.command.builtin.LoopScheduler;
@@ -474,10 +475,10 @@ public class WebController {
             data.add(item);
         }
 
-        for (AgentDefinition definition : engine.getAgentManager().getAgents()) {
+        for (SkillDir skill : engine.getPoolManager().getSkillMap().values()) {
             Map<String, String> item = new LinkedHashMap<>();
-            item.put("name", definition.getName());
-            item.put("description", definition.getDescription());
+            item.put("name", skill.getName());
+            item.put("description", skill.getDescription());
             item.put("type", "skill");
             data.add(item);
         }
