@@ -5,6 +5,7 @@
 * 添加 soloncode web 文件搜索功能
 * 添加 soloncode web 右侧面板的拖动功能
 * 添加 soloncode web 技能提示
+* 添加 soloncode cli 技能提示
 
 ### v2026.5.20
 
