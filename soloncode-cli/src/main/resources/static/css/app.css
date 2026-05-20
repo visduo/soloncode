@@ -637,10 +637,7 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
     transition: opacity 0.2s;
     white-space: nowrap;
 }
-.filer-node[data-type="file"] .filer-node-row::after {
-    content: '点击查看';
-}
-.filer-node-row:hover::after { opacity: 0.55; }
+
 
 .filer-node[data-indent="1"] .filer-node-row { padding-left: 28px; }
 .filer-node[data-indent="2"] .filer-node-row { padding-left: 44px; }
