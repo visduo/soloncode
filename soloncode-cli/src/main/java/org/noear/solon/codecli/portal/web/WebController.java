@@ -476,9 +476,21 @@ public class WebController {
         }
 
         for (SkillDir skill : engine.getPoolManager().getSkillMap().values()) {
+            String desc = skill.getDescription();
+            if (desc != null) {
+                // 取第一行，并限制最大长度
+                int newlineIdx = desc.indexOf('\n');
+                if (newlineIdx > 0) {
+                    desc = desc.substring(0, newlineIdx);
+                }
+                if (desc.length() > 30) {
+                    desc = desc.substring(0, 30) + "...";
+                }
+            }
+
             Map<String, String> item = new LinkedHashMap<>();
             item.put("name", skill.getName());
-            item.put("description", skill.getDescription());
+            item.put("description", desc);
             item.put("type", "skill");
             data.add(item);
         }
