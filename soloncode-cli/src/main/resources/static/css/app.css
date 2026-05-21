@@ -286,9 +286,6 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 .msg-row.assistant:hover .msg-actions { opacity: 1; }
 .msg-action-btn { background: none; border: 1px solid var(--border-color); border-radius: 8px; padding: 5px 10px; cursor: pointer; color: var(--text-secondary); font-size: 12px; transition: all 0.15s; display: flex; align-items: center; gap: 4px; }
 .msg-action-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--accent); }
-.regenerate-btn { color: var(--color-text-tertiary); }
-.regenerate-btn:hover { color: var(--accent); }
-.regenerate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* User Message Copy */
 .msg-row.user { gap: 8px; }
