@@ -17,7 +17,7 @@ import { TerminalPanel } from './components/terminal/TerminalPanel';
 import { fileService } from './services/fileService';
 import { gitService } from './services/gitService';
 import { settingsService } from './services/settingsService';
-import { setBackendPort as setChatBackendPort, setWorkspacePath as setChatWorkspacePath, sendModelConfig, generateCommitMessage } from './components/ChatView';
+import { setBackendPort as setChatBackendPort, setWorkspacePath as setChatWorkspacePath, sendModelConfig } from './components/ChatView';
 import { useFileWatcher } from './hooks/useFileWatcher';
 import { startWindowDrag, startWindowResize } from './hooks/useWindowDrag';
 import { useBackend } from './hooks/useBackend';
@@ -44,9 +44,13 @@ const defaultSettings: Settings = {
   tabSize: 2, autoSave: true, formatOnSave: true,
   shell: 'bash', terminalFontSize: 14,
   providers: [], activeProviderId: '', maxSteps: 30,
+  cliPort: 4808,
   mcpServers: [],
   skills: [],
   agents: [],
+  skillPrompt: '',
+  agentPrompt: '',
+  gitPrompt: '',
 };
 
 type PanelPosition = 'editor' | 'chat';
@@ -71,6 +75,7 @@ function App() {
     type: 'skill' | 'agent';
     name: string;
   } | null>(null);
+  const [newSessionFromProject, setNewSessionFromProject] = useState(false);
   const [currentTheme, setCurrentTheme] = useState<Theme>(() => {
     const saved = localStorage.getItem('soloncode-theme') as Theme | null;
     const theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -371,19 +376,20 @@ function App() {
     const title = `创建 ${type === 'skill' ? 'Skill' : 'Agent'}: ${name}`;
     handleNewSession(undefined, title);
 
-    const prompt = type === 'skill'
-      ? `请帮我创建一个名为「${name}」的 Skill。${description ? `\n描述：${description}` : ''}\n\n请直接输出完整的 SKILL.md 文件内容（纯 Markdown 格式，不要用代码块包裹）。\n\n格式参考：\n\n---\nname: ${name}\ndescription: ${description || name}\n---\n\n# ${name}\n\n## 功能描述\n[详细描述这个 Skill 的功能和用途]\n\n## 使用场景\n[列出适用的使用场景]\n\n## 规则与约束\n[列出规则和约束条件]\n\n## 示例\n[提供使用示例]`
-      : `请帮我创建一个名为「${name}」的 Agent。${description ? `\n描述：${description}` : ''}\n\n请直接输出完整的 AGENT.md 文件内容（纯 Markdown 格式，不要用代码块包裹）。\n\n格式参考：\n\n---\nname: ${name}\ndescription: ${description || name}\n---\n\n# ${name} Agent\n\n## 角色定义\n[描述这个 Agent 的角色和能力]\n\n## 工具权限\n[列出需要的工具和权限]\n\n## 行为准则\n[列出行为准则和约束]\n\n## 工作流程\n[描述典型工作流程]`;
+    const template = type === 'skill' ? settings.skillPrompt : settings.agentPrompt;
+    const prompt = (template || '')
+      .replace(/\{name\}/g, name)
+      .replace(/\{description\}/g, description || name);
 
     setAiCreatePrompt({ prompt, type, name });
-  }, [handleNewSession]);
+  }, [handleNewSession, settings.skillPrompt, settings.agentPrompt]);
 
   const handleAiCreateComplete = useCallback(async (info: { type: 'skill' | 'agent'; name: string }) => {
     try {
       if (info.type === 'skill') {
         const skills = await invoke<Array<{ name: string; description: string; path: string; enabled: boolean }>>('list_skills');
         setSettings(prev => ({ ...prev, skills: skills.map(s => ({ ...s, source: 'discovered' as const, group: 'global' as const })) }));
-      } else {
+      } else if (info.type === 'agent') {
         const agents = await invoke<Array<{ name: string; description: string; path: string; enabled: boolean }>>('list_agents');
         setSettings(prev => ({ ...prev, agents: agents.map(a => ({ ...a, source: 'discovered' as const })) }));
       }
@@ -414,7 +420,7 @@ function App() {
           <SessionsPanel
             projects={projects} sessions={sessions} currentSessionId={currentSessionId} currentProjectId={activeProjectPath}
             backendPort={backendPort}
-            onSelectSession={handleSelectSession} onNewSession={handleNewSession} onDeleteSession={handleDeleteSession}
+            onSelectSession={handleSelectSession} onNewSession={(projectId?: string) => { setNewSessionFromProject(true); return handleNewSession(projectId); }} onDeleteSession={handleDeleteSession}
             onAddProject={handleAddProject} onRemoveProject={handleRemoveProject}
             onSyncSession={handleSyncSession}
           />
@@ -449,11 +455,12 @@ function App() {
         <div key="chat" className="panel-wrapper chat-wrapper" style={{ ...(bothVisible ? { flex: '1 1 auto' } : {}), '--input-max-width': `${inputWidth}%` } as React.CSSProperties}>
           <ChatView
             currentConversation={currentConversation} plugins={plugins} workspacePath={activeProjectPath || undefined} projectName={workspaceName || undefined}
-            theme={currentTheme} backendPort={backendPort} onUpdateSessionTitle={handleUpdateSessionTitle} onNewSession={(title) => handleNewSession(undefined, title)}
+            theme={currentTheme} backendPort={backendPort} onUpdateSessionTitle={handleUpdateSessionTitle} onNewSession={(title) => { setNewSessionFromProject(false); return handleNewSession(undefined, title); }}
             providers={settings.providers} onActiveProviderChange={(providerId: string) => { setSettings(prev => { const updated = { ...prev, activeProviderId: providerId }; settingsService.save(updated); return updated; }); }}
             activeFileName={activeFile?.name} activeFilePath={activeFilePath || undefined}
             onNewProject={handleCreateProject} onOpenFolder={handleOpenFolder}
             initialPrompt={aiCreatePrompt} onAiCreateComplete={handleAiCreateComplete}
+            newSessionFromProject={newSessionFromProject}
           />
         </div>
       );
@@ -512,7 +519,44 @@ function App() {
                     if (!activeProjectPath) throw new Error('无活跃项目');
                     const diff = await gitService.diffStaged(activeProjectPath);
                     if (!diff) throw new Error('没有已暂存的更改');
-                    return await generateCommitMessage(diff);
+
+                    const truncatedDiff = diff.length > 8000 ? diff.substring(0, 8000) + '\n... (diff 已截断)' : diff;
+                    const template = settings.gitPrompt;
+                    const prompt = template.replace(/\{diff\}/g, truncatedDiff);
+
+                    return new Promise<string>((resolve, reject) => {
+                      const wsUrl = `ws://localhost:${backendPort}/ws?X-Session-Cwd=${encodeURIComponent(activeProjectPath)}`;
+                      const ws = new WebSocket(wsUrl);
+                      const timeout = setTimeout(() => { ws.close(); reject(new Error('生成超时')); }, 60000);
+                      let text = '';
+
+                      ws.onopen = () => {
+                        ws.send(JSON.stringify({ input: prompt, cwd: activeProjectPath }));
+                      };
+
+                      ws.onmessage = (event) => {
+                        try {
+                          const msg = JSON.parse(event.data);
+                          if (msg.type === 'reason') text += msg.text || '';
+                          if (msg.type === 'done') {
+                            clearTimeout(timeout);
+                            ws.close();
+                            resolve(text.trim());
+                          }
+                          if (msg.type === 'error') {
+                            clearTimeout(timeout);
+                            ws.close();
+                            reject(new Error(msg.text || '生成失败'));
+                          }
+                        } catch (e) {
+                          clearTimeout(timeout);
+                          ws.close();
+                          reject(e);
+                        }
+                      };
+
+                      ws.onerror = () => { clearTimeout(timeout); reject(new Error('连接失败')); };
+                    });
                   }}
                 />
               </div>
@@ -522,7 +566,7 @@ function App() {
         </div>
       </div>
       <StatusBar
-        backendStatus={backendStatus} model={settings.model} branch={gitStatus.branch}
+        backendStatus={backendStatus} model={settings.providers.find(p => p.id === settings.activeProviderId)?.model} branch={gitStatus.branch}
         ahead={gitStatus.ahead} behind={gitStatus.behind} warningCount={0} errorCount={0}
         cursorLine={activeFile ? activeFile.content.split('\n').length : undefined} cursorColumn={1}
         encoding="UTF-8" language={activeFile?.language} hasUnsavedChanges={openFiles.some(f => f.modified)}

@@ -3,6 +3,7 @@ import { Icon, type IconName } from '../common/Icon';
 import {
   type McpServerConfig,
   type SkillConfig,
+  type AgentConfig,
   type ModelProvider,
   type ProviderType,
   PROVIDER_PRESETS,
@@ -34,8 +35,14 @@ export interface Settings {
   // MCP 服务器
   mcpServers: McpServerConfig[];
 
-  // Skills
+  // Skills & Agents
   skills: SkillConfig[];
+  agents: AgentConfig[];
+
+  // AI 生成提示词
+  skillPrompt: string;
+  agentPrompt: string;
+  gitPrompt: string;
 }
 
 type SettingsMenuKey = 'general' | 'model' | 'channels' | 'mcp' | 'skills' | 'logs';
@@ -209,9 +216,13 @@ export function SettingsPanel({ visible, settings, onSettingsChange, onClose, ba
             {activeMenu === 'skills' && (
               <SkillsSettings
                 skills={localSettings.skills}
+                skillPrompt={localSettings.skillPrompt}
+                agentPrompt={localSettings.agentPrompt}
+                gitPrompt={localSettings.gitPrompt}
                 onAdd={handleAddSkill}
                 onRemove={handleRemoveSkill}
                 onUpdate={handleUpdateSkill}
+                onPromptChange={(key, value) => setLocalSettings(prev => ({ ...prev, [key]: value }))}
               />
             )}
             {activeMenu === 'logs' && (
@@ -562,11 +573,15 @@ function McpSettings({ servers, onAdd, onRemove, onUpdate }: {
 }
 
 /* ==================== Skills 设置 ==================== */
-function SkillsSettings({ skills, onAdd, onRemove, onUpdate }: {
+function SkillsSettings({ skills, skillPrompt, agentPrompt, gitPrompt, onAdd, onRemove, onUpdate, onPromptChange }: {
   skills: SkillConfig[];
+  skillPrompt: string;
+  agentPrompt: string;
+  gitPrompt: string;
   onAdd: () => void;
   onRemove: (index: number) => void;
   onUpdate: (index: number, updates: Partial<SkillConfig>) => void;
+  onPromptChange: (key: 'skillPrompt' | 'agentPrompt' | 'gitPrompt', value: string) => void;
 }) {
   return (
     <div className="settings-section-content">
@@ -615,6 +630,31 @@ function SkillsSettings({ skills, onAdd, onRemove, onUpdate }: {
           </div>
         </div>
       ))}
+
+      <div style={{ marginTop: 16, borderTop: '1px solid var(--cb-vscode-panel-border)', paddingTop: 12 }}>
+        <div className="settings-section-title" style={{ marginBottom: 8 }}>AI 生成提示词</div>
+        <div style={{ fontSize: 11, color: 'var(--cb-text-secondary)', marginBottom: 8 }}>
+          支持 {'{name}'}、{'{description}'}、{'{diff}'} 占位符，创建时自动替换
+        </div>
+        <div className="mcp-field">
+          <label>Skill 生成提示词</label>
+          <textarea className="setting-input" rows={6} value={skillPrompt}
+            onChange={e => onPromptChange('skillPrompt', e.target.value)}
+            placeholder="请帮我创建一个名为「{name}」的 Skill..." style={{ resize: 'vertical', fontFamily: 'inherit' }} />
+        </div>
+        <div className="mcp-field" style={{ marginTop: 8 }}>
+          <label>Agent 生成提示词</label>
+          <textarea className="setting-input" rows={6} value={agentPrompt}
+            onChange={e => onPromptChange('agentPrompt', e.target.value)}
+            placeholder="请帮我创建一个名为「{name}」的 Agent..." style={{ resize: 'vertical', fontFamily: 'inherit' }} />
+        </div>
+        <div className="mcp-field" style={{ marginTop: 8 }}>
+          <label>Git Commit 生成提示词</label>
+          <textarea className="setting-input" rows={6} value={gitPrompt}
+            onChange={e => onPromptChange('gitPrompt', e.target.value)}
+            placeholder="请根据以下 git diff 内容，生成一条简洁的 git commit message..." style={{ resize: 'vertical', fontFamily: 'inherit' }} />
+        </div>
+      </div>
     </div>
   );
 }

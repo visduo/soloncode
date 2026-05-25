@@ -66,8 +66,6 @@ export function useSessions(activeProjectPath: string | null) {
     }
 
     const tempId = `temp-${Date.now()}`;
-    // 立即加入 sessions 数组，确保 handleUpdateSessionTitle 能找到它
-    setSessions(prev => [{ id: tempId, title: '新会话', timestamp: '刚刚', messageCount: 0, workspacePath: projectId && projectId !== UNLINKED_PROJECT ? projectId : undefined }, ...prev]);
     setCurrentSessionId(tempId);
     return tempId;
   }, [currentSessionId, sessions]);
@@ -87,29 +85,34 @@ export function useSessions(activeProjectPath: string | null) {
     setSessions(prev => {
       const exists = prev.find(s => s.id === sessionId);
 
-      if (!exists) {
+      if (!sessionId.startsWith('temp-')) {
+        if (exists && exists.title === '新会话') {
+          updateConversation(sessionId, { title });
+          return prev.map(s =>
+            s.id === sessionId && s.title === '新会话' ? { ...s, title } : s
+          );
+        }
         return prev;
       }
 
-      if (!sessionId.startsWith('temp-')) {
-        if (exists.title === '新会话') {
-          updateConversation(sessionId, { title });
-        }
-        return prev.map(s =>
-          s.id === sessionId && s.title === '新会话' ? { ...s, title } : s
-        );
-      }
-
-      // temp 会话：先更新标题，异步持久化后替换为真实 ID
-      saveConversation({ title, timestamp: exists.timestamp, status: 'active', workspacePath: exists.workspacePath || wsPath }).then(async (dbId) => {
+      // temp 会话：异步持久化后加入列表并替换为真实 ID
+      const sessionWsPath = exists?.workspacePath || wsPath;
+      saveConversation({ title, timestamp: exists?.timestamp || new Date().toLocaleString(), status: 'active', workspacePath: sessionWsPath }).then(async (dbId) => {
         const realId = dbId.toString();
         await reassignMessages(sessionId, realId);
-        setSessions(p => p.map(s => s.id === sessionId ? { ...s, id: realId, title, workspacePath: wsPath } : s));
+        setSessions(p => {
+          if (p.find(s => s.id === sessionId)) {
+            return p.map(s => s.id === sessionId ? { ...s, id: realId, title, workspacePath: sessionWsPath } : s);
+          }
+          return [{ id: realId, title, timestamp: new Date().toLocaleString(), messageCount: 0, workspacePath: sessionWsPath }, ...p];
+        });
         setCurrentSessionId(realId);
       });
-      return prev.map(s =>
-        s.id === sessionId ? { ...s, title } : s
-      );
+
+      if (exists) {
+        return prev.map(s => s.id === sessionId ? { ...s, title } : s);
+      }
+      return prev;
     });
     setPendingSessionProject(null);
   }, [activeProjectPath, pendingSessionProject]);

@@ -106,6 +106,9 @@ export interface GeneralSettings {
   activeProviderId: string;
   maxSteps: number;
   cliPort: number;
+  skillPrompt: string;
+  agentPrompt: string;
+  gitPrompt: string;
 }
 
 /** 合并后的完整设置（UI 使用） */
@@ -145,6 +148,65 @@ const defaultGeneral: GeneralSettings = {
   activeProviderId: '',
   maxSteps: 30,
   cliPort: 4808,
+  skillPrompt: `请帮我创建一个名为「{name}」的 Skill。
+{description}
+
+请直接输出完整的 SKILL.md 文件内容（纯 Markdown 格式，不要用代码块包裹）。
+
+格式参考：
+
+---
+name: {name}
+description: {description}
+---
+
+# {name}
+
+## 功能描述
+[详细描述这个 Skill 的功能和用途]
+
+## 使用场景
+[列出适用的使用场景]
+
+## 规则与约束
+[列出规则和约束条件]
+
+## 示例
+[提供使用示例]`,
+  agentPrompt: `请帮我创建一个名为「{name}」的 Agent。
+{description}
+
+请直接输出完整的 AGENT.md 文件内容（纯 Markdown 格式，不要用代码块包裹）。
+
+格式参考：
+
+---
+name: {name}
+description: {description}
+---
+
+# {name} Agent
+
+## 角色定义
+[描述这个 Agent 的角色和能力]
+
+## 工具权限
+[列出需要的工具和权限]
+
+## 行为准则
+[列出行为准则和约束]
+
+## 工作流程
+[描述典型工作流程]`,
+  gitPrompt: `请根据以下 git diff 内容，生成一条简洁的 git commit message（提交注释）。
+要求：
+- 第一行为简短摘要（不超过50字）
+- 如有必要，空一行后补充说明
+- 使用中文
+- 只返回注释内容，不要其他解释
+
+diff 内容：
+{diff}`,
 };
 
 // ==================== 服务层 ====================

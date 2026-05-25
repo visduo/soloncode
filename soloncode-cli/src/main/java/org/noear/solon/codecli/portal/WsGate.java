@@ -101,11 +101,6 @@ public class WsGate extends SimpleWebSocketListener {
                 return;
             }
 
-            if ("generate_commit_message".equals(msgType)) {
-                handleGenerateCommitMessage(socket, root);
-                return;
-            }
-
             if ("hitl_action".equals(msgType)) {
                 handleHitlAction(socket, root);
                 return;
@@ -134,6 +129,11 @@ public class WsGate extends SimpleWebSocketListener {
                 session.addMessage(ChatMessage.ofAssistant("用户已取消任务."));
                 LOG.info("用户已取消任务.");
 
+                String interruptModelName = req.getModel();
+                if (interruptModelName == null || interruptModelName.isEmpty()) {
+                    interruptModelName = kernel.getMainModel().getConfig().getNameOrModel();
+                }
+
                 socket.send(new ONode().set("type", "reason")
                         .set("sessionId", session.getSessionId())
                         .set("text", "[Task interrupted]")
@@ -141,7 +141,7 @@ public class WsGate extends SimpleWebSocketListener {
 
                 socket.send(new ONode().set("type", "done")
                         .set("sessionId", session.getSessionId())
-                        .set("modelName", kernel.getMainModel().getConfig().getNameOrModel())
+                        .set("modelName", interruptModelName)
                         .set("totalTokens", 0)
                         .set("elapsedMs", 0).toJson());
                 return;
@@ -231,11 +231,12 @@ public class WsGate extends SimpleWebSocketListener {
             String finalCwd = cwd;
 
             // 使用 WebStreamBuilder 构建流（支持 HITL + IM 渠道回复）
+            final String finalModelName = chatModel.getConfig().getNameOrModel();
             Disposable disposable = streamBuilder.buildStreamFlux(session, agent, chatModel, finalCwd, prompt)
                     .doFinally(signal -> session.attrs().remove("disposable"))
                     .subscribe(
                             chunk -> {
-                                String msg = webChunkToJson(chunk, finalSessionId);
+                                String msg = webChunkToJson(chunk, finalSessionId, finalModelName);
                                 if (msg != null) {
                                     socket.send(msg);
                                 }
@@ -261,7 +262,7 @@ public class WsGate extends SimpleWebSocketListener {
     /**
      * 将 WebChunk 转换为桌面端 WebSocket JSON 格式
      */
-    private String webChunkToJson(WebChunk chunk, String sessionId) {
+    private String webChunkToJson(WebChunk chunk, String sessionId, String modelName) {
         if (chunk == null || chunk.getType() == null) return null;
 
         ONode node = new ONode().set("sessionId", sessionId);
@@ -289,7 +290,7 @@ public class WsGate extends SimpleWebSocketListener {
                 break;
             case "done":
                 node.set("type", "done");
-                node.set("modelName", kernel.getMainModel().getConfig().getNameOrModel());
+                node.set("modelName", modelName != null ? modelName : kernel.getMainModel().getConfig().getNameOrModel());
                 node.set("totalTokens", 0);
                 node.set("elapsedMs", 0);
                 break;
@@ -349,7 +350,7 @@ public class WsGate extends SimpleWebSocketListener {
                     .doFinally(signal -> session.attrs().remove("disposable"))
                     .subscribe(
                             chunk -> {
-                                String msg = webChunkToJson(chunk, sessionId);
+                                String msg = webChunkToJson(chunk, sessionId, modelName);
                                 if (msg != null) socket.send(msg);
                             },
                             err -> socket.send(new ONode().set("type", "error")
@@ -394,40 +395,6 @@ public class WsGate extends SimpleWebSocketListener {
         } catch (Exception e) {
             LOG.error("[WS] Config update failed", e);
             socket.send(new ONode().set("type", "config").set("status", "error").set("text", e.getMessage()).toJson());
-        }
-    }
-
-    /**
-     * 处理 AI 生成 commit message 请求
-     */
-    private void handleGenerateCommitMessage(WebSocket socket, ONode root) {
-        try {
-            String diff = root.get("diff") != null ? root.get("diff").getString() : "";
-            if (diff.isEmpty()) {
-                socket.send(new ONode().set("type", "commit_message").set("status", "error").set("text", "没有已暂存的更改").toJson());
-                return;
-            }
-
-            if (diff.length() > 8000) {
-                diff = diff.substring(0, 8000) + "\n... (diff 已截断)";
-            }
-
-            String prompt = "请根据以下 git diff 内容，生成一条简洁的 git commit message（提交注释）。\n" +
-                    "要求：\n" +
-                    "- 第一行为简短摘要（不超过50字）\n" +
-                    "- 如有必要，空一行后补充说明\n" +
-                    "- 使用中文\n" +
-                    "- 只返回注释内容，不要其他解释\n\n" +
-                    "diff 内容：\n" + diff;
-
-            ChatModel chatModel = kernel.getMainModel();
-            String result = chatModel.prompt(Prompt.of(prompt)).call().getMessage().getResultContent();
-
-            socket.send(new ONode().set("type", "commit_message").set("status", "ok")
-                    .set("text", result != null ? result.trim() : "").toJson());
-        } catch (Exception e) {
-            LOG.error("[WS] Generate commit message failed", e);
-            socket.send(new ONode().set("type", "commit_message").set("status", "error").set("text", e.getMessage()).toJson());
         }
     }
 

@@ -31,6 +31,7 @@ interface ChatViewProps {
     name: string;
   } | null;
   onAiCreateComplete?: (info: { type: 'skill' | 'agent'; name: string }) => void;
+  newSessionFromProject?: boolean;
 }
 
 // 全局 WebSocket 连接管理器（每次请求独立连接）
@@ -169,38 +170,6 @@ class WebSocketManager {
     ws.close();
   }
 
-  /** 请求 AI 生成 commit message（短连接，等待响应） */
-  async generateCommitMessage(diff: string): Promise<string> {
-    const ws = await this.createConnection();
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        ws.close();
-        reject(new Error('生成超时'));
-      }, 30000);
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'commit_message') {
-            clearTimeout(timeout);
-            ws.close();
-            if (msg.status === 'ok') {
-              resolve(msg.text || '');
-            } else {
-              reject(new Error(msg.text || '生成失败'));
-            }
-          }
-        } catch (e) {
-          clearTimeout(timeout);
-          ws.close();
-          reject(e);
-        }
-      };
-
-      ws.send(JSON.stringify({ type: 'generate_commit_message', diff }));
-    });
-  }
-
   private closeActive() {
     if (this.activeWs) {
       this.activeWs.close();
@@ -276,12 +245,7 @@ export async function sendModelConfig(provider: { apiUrl: string; apiKey: string
   await registerModelToBackend(provider, true);
 }
 
-/** AI 生成 commit message（供 App.tsx 调用） */
-export async function generateCommitMessage(diff: string): Promise<string> {
-  return WebSocketManager.getInstance().generateCommitMessage(diff);
-}
-
-export function ChatView({ currentConversation, plugins, workspacePath, projectName, theme = 'dark', backendPort, onUpdateSessionTitle, onNewSession, providers = [], activeProviderId, onActiveProviderChange, activeFileName, activeFilePath, onNewProject, onOpenFolder, initialPrompt, onAiCreateComplete }: ChatViewProps) {
+export function ChatView({ currentConversation, plugins, workspacePath, projectName, theme = 'dark', backendPort, onUpdateSessionTitle, onNewSession, providers = [], activeProviderId, onActiveProviderChange, activeFileName, activeFilePath, onNewProject, onOpenFolder, initialPrompt, onAiCreateComplete, newSessionFromProject }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>('default');
@@ -934,7 +898,7 @@ export function ChatView({ currentConversation, plugins, workspacePath, projectN
         <div className="empty-center-container">
           <div className="empty-state-hero">
             <div className="hero-logo">SolonCode</div>
-            <div className="hero-slogan">做你想做的事</div>
+            <div className="hero-slogan">{newSessionFromProject && projectName ? `在 ${projectName} ` : ''}做你想做的事</div>
           </div>
           <ChatInput onSend={sendMessage} isLoading={isLoading} onStop={handleStop} providers={providers} activeProviderId={activeProviderId} onModelChange={handleModelChange} activeFileName={activeFileName} backendPort={backendPort} showStartWork={!workspacePath} onNewProject={onNewProject} onOpenFolder={onOpenFolder} workspacePath={workspacePath} mode={chatMode} onModeChange={setChatMode} />
         </div>
