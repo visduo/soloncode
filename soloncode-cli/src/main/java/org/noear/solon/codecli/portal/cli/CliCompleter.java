@@ -25,7 +25,9 @@ import org.noear.solon.ai.harness.agent.AgentDefinition;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.skills.cli.SkillDir;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 命令名 Tab 补全（兼容 Claude Code 的 argument-hint 显示）
@@ -77,9 +79,16 @@ public class CliCompleter implements Completer {
         }
 
         if (line.word().startsWith("$")) {
+            Set<String> added = new HashSet<>();
             String prefix = line.word().substring(1).toLowerCase();
             for (SkillDir skill : engine.getPoolManager().getSkillMap().values()) {
                 if (skill.getName().startsWith(prefix)) {
+                    if (added.contains(skill.getName())) {
+                        continue;
+                    } else {
+                        added.add(skill.getName());
+                    }
+
                     // 构建补全提示：description + argument-hint
                     String desc = skill.getDescription();
                     if (desc != null) {

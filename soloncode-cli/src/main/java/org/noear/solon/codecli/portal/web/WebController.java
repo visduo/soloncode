@@ -475,7 +475,14 @@ public class WebController {
             data.add(item);
         }
 
+        Set<String> added = new HashSet<>();
         for (SkillDir skill : engine.getPoolManager().getSkillMap().values()) {
+            if (added.contains(skill.getName())) {
+                continue;
+            } else {
+                added.add(skill.getName());
+            }
+
             String desc = skill.getDescription();
             if (desc != null) {
                 // 取第一行，并限制最大长度
