@@ -1,7 +1,7 @@
 
 ### v2026.5.26
 
-* 优化 soloncode ActionTask 增加原子性
+* 优化 soloncode ActionTask 增加原子性（避免单工具失败时，影响整个工作记忆）
 * 优化 soloncode skill 提示加去重处理
 * 细节优化
 
