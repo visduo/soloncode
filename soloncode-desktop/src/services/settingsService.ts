@@ -106,6 +106,9 @@ export interface GeneralSettings {
   activeProviderId: string;
   maxSteps: number;
   cliPort: number;
+  skillPrompt: string;
+  agentPrompt: string;
+  gitPrompt: string;
 }
 
 /** 合并后的完整设置（UI 使用） */
@@ -133,6 +136,88 @@ export function createProvider(type: ProviderType): ModelProvider {
 
 // ==================== 默认值 ====================
 
+export const DEFAULT_PROMPTS: Record<'skillPrompt' | 'agentPrompt' | 'gitPrompt', string> = {
+  skillPrompt: `请帮我创建一个名为「{name}」的 Skill。
+{description}
+
+请直接输出完整的 SKILL.md 文件内容（纯 Markdown 格式，不要用代码块包裹）。
+
+格式参考：
+
+---
+name: {name}
+description: {description}
+---
+
+# {name}
+
+## 功能描述
+[详细描述这个 Skill 的功能和用途]
+
+## 使用场景
+[列出适用的使用场景]
+
+## 规则与约束
+[列出规则和约束条件]
+
+## 示例
+[提供使用示例]`,
+  agentPrompt: `请帮我创建一个名为「{name}」的 Agent。
+{description}
+
+请直接输出完整的 AGENT.md 文件内容（纯 Markdown 格式，不要用代码块包裹）。
+
+格式参考：
+
+---
+name: {name}
+description: {description}
+---
+
+# {name} Agent
+
+## 角色定义
+[描述这个 Agent 的角色和能力]
+
+## 工具权限
+[列出需要的工具和权限]
+
+## 行为准则
+[列出行为准则和约束]
+
+## 工作流程
+[描述典型工作流程]`,
+  gitPrompt: [
+    '你是一个 Git 提交信息生成助手。请根据以下 diff 内容生成一条高质量的 commit message。',
+    '',
+    '## Commit 格式规范',
+    '',
+    '<type>(<scope>): <subject>',
+    '',
+    '<body>',
+    '',
+    '<footer>',
+    '',
+    '### 各部分说明',
+    '- **type（必填）**：提交类型，必须是以下之一：',
+    '  - feat: 新功能 | fix: Bug修复 | docs: 文档变更 | style: 代码格式（不影响逻辑）',
+    '  - refactor: 重构 | perf: 性能优化 | test: 测试相关 | chore: 构建/工具 | ci: CI/CD',
+    '- **scope（可选）**：影响范围，如 api、ui、db、config、auth 等模块名',
+    '- **subject（必填）**：简短描述，不超过 50 字，不加句号',
+    '- **body（可选）**：详细说明做了什么、为什么做',
+    '- **footer（可选）**：关联 issue 或标注破坏性变更（BREAKING CHANGE）',
+    '',
+    '## 输出要求',
+    '1. 语言：与 diff 注释语言保持一致（中文注释用中文，英文注释用英文）',
+    '2. 语气：祈使语气、现在时（"add" 而非 "added"）',
+    '3. 不要添加签名、emoji、Co-Authored-By 等额外信息',
+    '4. 主题行不超过 72 字符',
+    '',
+    'diff 内容：',
+    '{diff}',
+  ].join('\n'),
+};
+
 const defaultGeneral: GeneralSettings = {
   theme: 'dark',
   fontSize: 14,
@@ -145,6 +230,9 @@ const defaultGeneral: GeneralSettings = {
   activeProviderId: '',
   maxSteps: 30,
   cliPort: 4808,
+  skillPrompt: DEFAULT_PROMPTS.skillPrompt,
+  agentPrompt: DEFAULT_PROMPTS.agentPrompt,
+  gitPrompt: DEFAULT_PROMPTS.gitPrompt,
 };
 
 // ==================== 服务层 ====================

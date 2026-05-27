@@ -4,7 +4,6 @@ import com.agentclientprotocol.sdk.agent.transport.StdioAcpAgentTransport;
 import com.agentclientprotocol.sdk.agent.transport.WebSocketSolonAcpAgentTransport;
 import com.agentclientprotocol.sdk.spec.AcpAgentTransport;
 import io.modelcontextprotocol.json.McpJsonDefaults;
-import io.modelcontextprotocol.json.McpJsonMapper;
 import org.noear.solon.Solon;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
@@ -19,6 +18,8 @@ import org.noear.solon.codecli.command.builtin.*;
 import org.noear.solon.codecli.config.AgentFlags;
 import org.noear.solon.codecli.config.AgentProperties;
 import org.noear.solon.codecli.command.builtin.LoopScheduler;
+import org.noear.solon.codecli.channel.Channel;
+import org.noear.solon.codecli.channel.wechat.WeChatLink;
 import org.noear.solon.codecli.memory.MemoryFactory;
 import org.noear.solon.codecli.portal.*;
 import org.noear.solon.codecli.portal.acp.AcpLink;
@@ -29,6 +30,7 @@ import org.noear.solon.codecli.portal.web.WebChannel;
 import org.noear.solon.codecli.portal.web.WebController;
 import org.noear.solon.codecli.portal.web.WebSettingsController;
 import org.noear.solon.codecli.portal.web.WebGate;
+import org.noear.solon.codecli.portal.web.WebStreamBuilder;
 import org.noear.solon.codecli.provider.ModelProviderFactory;
 import org.noear.solon.core.AppContext;
 import org.noear.solon.core.BeanWrap;
@@ -40,6 +42,7 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -181,9 +184,23 @@ public class Configurator {
         //serve ws gate
         WebSocketRouter.getInstance().of(agentProps.getWsEndpoint(), new WsGate(agentRuntime, agentProps));
 
-        //serve web
+        //serve web controller
         BeanWrap webBean = Solon.context().wrapAndPut(WsController.class, new WsController(agentRuntime, modelProviderFactory));
         Solon.app().router().add(webBean);
+
+        //注册第三方渠道（HTTP 端点 + 后台线程）
+        WebGate webGate = new WebGate(agentRuntime, agentProps);
+        WebStreamBuilder streamBuilder = new WebStreamBuilder(agentRuntime);
+        WebChannel webChannel = new WebChannel(agentRuntime, webGate);
+        // 将渠道绑定到 streamBuilder，使 IM 回复能同步
+        for (Channel ch : Collections.singletonList(webChannel.getWeChatLink())) {
+            streamBuilder.bind(ch);
+        }
+        streamBuilder.bind(webChannel.getFeishuLink());
+        streamBuilder.bind(webChannel.getDingTalkLink());
+        BeanWrap channelBean = Solon.context().wrapAndPut(WebChannel.class, webChannel);
+        Solon.app().router().add(channelBean);
+        RunUtil.async((Runnable) webChannel);
 
         cliShell.printWelcome("Server port: " + Solon.cfg().serverPort());
     }

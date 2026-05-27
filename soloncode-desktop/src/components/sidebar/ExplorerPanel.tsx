@@ -262,8 +262,8 @@ export function ExplorerPanel({
 
     if (node.type === 'folder') {
       return [
-        { id: 'new-file-in', label: '新建文件' },
-        { id: 'new-folder-in', label: '新建文件夹' },
+        { id: 'new-file', label: '新建文件' },
+        { id: 'new-folder', label: '新建文件夹' },
         { id: 'divider-0', label: '', divider: true },
         ...items,
       ];
@@ -346,11 +346,12 @@ export function ExplorerPanel({
 
       case 'new-file': {
         if (!projectPath) break;
+        const parentDir = node && node.type === 'folder' ? node.path : projectPath;
         const name = 'untitled';
-        let path = `${projectPath}/${name}`;
+        let path = `${parentDir}/${name}`;
         let counter = 1;
         while (await fileService.pathExists(path)) {
-          path = `${projectPath}/${name}-${counter}`;
+          path = `${parentDir}/${name}-${counter}`;
           counter++;
         }
         await fileService.createFile(path);
@@ -361,44 +362,23 @@ export function ExplorerPanel({
         break;
       }
 
-      case 'new-folder':
-        if (projectPath) await onNewFolder(projectPath);
-        break;
-
-      case 'new-file-in':
-        if (node && node.type === 'folder') {
-          const parentDir = node.path;
-          const name = 'untitled';
-          let path = `${parentDir}/${name}`;
-          let counter = 1;
-          while (await fileService.pathExists(path)) {
-            path = `${parentDir}/${name}-${counter}`;
-            counter++;
-          }
-          await fileService.createFile(path);
-          await loadProjectTree(projectPath || '');
-          setRenamingPath(path);
-          setRenameValue(name);
-          setIsNewFile(true);
+      case 'new-folder': {
+        if (!projectPath) break;
+        const parentDir = node && node.type === 'folder' ? node.path : projectPath;
+        const name = 'new-folder';
+        let path = `${parentDir}/${name}`;
+        let counter = 1;
+        while (await fileService.pathExists(path)) {
+          path = `${parentDir}/${name}-${counter}`;
+          counter++;
         }
+        await fileService.createDirectory(path);
+        await loadProjectTree(projectPath);
         break;
+      }
 
-      case 'new-folder-in':
-        if (node && node.type === 'folder') {
-          const parentDir = node.path;
-          const name = 'new-folder';
-          let path = `${parentDir}/${name}`;
-          let counter = 1;
-          while (await fileService.pathExists(path)) {
-            path = `${parentDir}/${name}-${counter}`;
-            counter++;
-          }
-          await fileService.createDirectory(path);
-          await loadProjectTree(projectPath || '');
-        }
-        break;
     }
-  }, [contextMenu, clipboard, performPaste, onNewFolder, onDelete, loadProjectTree]);
+  }, [contextMenu, clipboard, performPaste, onDelete, loadProjectTree]);
 
   const handleProjectContextAction = useCallback(async (itemId: string) => {
     const path = projectContextMenu?.projectPath;

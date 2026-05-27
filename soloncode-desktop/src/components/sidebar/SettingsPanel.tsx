@@ -1,43 +1,28 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Icon, type IconName } from '../common/Icon';
 import {
   type McpServerConfig,
   type SkillConfig,
+  type AgentConfig,
   type ModelProvider,
   type ProviderType,
+  type GeneralSettings,
   PROVIDER_PRESETS,
+  DEFAULT_PROMPTS,
   createProvider,
 } from '../../services/settingsService';
 import { fileService } from '../../services/fileService';
 import './SettingsPanel.css';
+import './ChannelPanel.css';
 
-export interface Settings {
-  // 常规
-  theme: 'dark' | 'light';
-  fontSize: number;
-  language: string;
-  tabSize: number;
-  autoSave: boolean;
-  formatOnSave: boolean;
-  shell: string;
-  terminalFontSize: number;
-
-  // 模型供应商
+export interface Settings extends GeneralSettings {
   providers: ModelProvider[];
-  activeProviderId: string;
-  maxSteps: number;
-
-  // CLI
-  cliPort: number;
-
-  // MCP 服务器
   mcpServers: McpServerConfig[];
-
-  // Skills
   skills: SkillConfig[];
+  agents: AgentConfig[];
 }
 
-type SettingsMenuKey = 'general' | 'model' | 'mcp' | 'skills' | 'logs';
+type SettingsMenuKey = 'general' | 'model' | 'channels' | 'mcp' | 'skills' | 'prompts' | 'logs';
 
 interface SettingsPanelProps {
   visible: boolean;
@@ -46,20 +31,22 @@ interface SettingsPanelProps {
   onClose: () => void;
   backendPort?: number | null;
   workspacePath?: string | null;
+  sessionId?: string;
 }
 
 const menuItems: { key: SettingsMenuKey; icon: IconName; label: string }[] = [
   { key: 'general', icon: 'settings', label: '常规' },
   { key: 'model', icon: 'bot', label: '模型' },
+  { key: 'channels', icon: 'channels', label: '渠道绑定' },
   { key: 'mcp', icon: 'extensions', label: 'MCP 服务器' },
   { key: 'skills', icon: 'skills', label: 'Skills' },
+  { key: 'prompts', icon: 'edit', label: 'AI 提示词' },
   ...(import.meta.env.DEV ? [{ key: 'logs' as SettingsMenuKey, icon: 'terminal' as IconName, label: '日志' }] : []),
 ];
 
-export function SettingsPanel({ visible, settings, onSettingsChange, onClose, backendPort, workspacePath }: SettingsPanelProps) {
+export function SettingsPanel({ visible, settings, onSettingsChange, onClose, backendPort, workspacePath, sessionId }: SettingsPanelProps) {
   const [activeMenu, setActiveMenu] = useState<SettingsMenuKey>('general');
   const [localSettings, setLocalSettings] = useState(settings);
-  const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (visible) {
@@ -153,10 +140,8 @@ export function SettingsPanel({ visible, settings, onSettingsChange, onClose, ba
   }
 
   return (
-    <div className="settings-modal-overlay" ref={overlayRef} onClick={(e) => {
-      if (e.target === overlayRef.current) onClose();
-    }}>
-      <div className="settings-modal">
+    <div className="settings-modal-overlay" onClick={onClose}>
+      <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-modal-header">
           <span className="settings-modal-title">设置</span>
           <button className="settings-modal-close" onClick={onClose}>
@@ -195,6 +180,9 @@ export function SettingsPanel({ visible, settings, onSettingsChange, onClose, ba
                 backendPort={backendPort}
               />
             )}
+            {activeMenu === 'channels' && (
+              <ChannelSettings backendPort={backendPort} sessionId={sessionId} />
+            )}
             {activeMenu === 'mcp' && (
               <McpSettings
                 servers={localSettings.mcpServers}
@@ -209,6 +197,14 @@ export function SettingsPanel({ visible, settings, onSettingsChange, onClose, ba
                 onAdd={handleAddSkill}
                 onRemove={handleRemoveSkill}
                 onUpdate={handleUpdateSkill}
+              />
+            )}
+            {activeMenu === 'prompts' && (
+              <PromptsSettings
+                skillPrompt={localSettings.skillPrompt}
+                agentPrompt={localSettings.agentPrompt}
+                gitPrompt={localSettings.gitPrompt}
+                onPromptChange={(key, value) => setLocalSettings(prev => ({ ...prev, [key]: value }))}
               />
             )}
             {activeMenu === 'logs' && (
@@ -616,6 +612,48 @@ function SkillsSettings({ skills, onAdd, onRemove, onUpdate }: {
   );
 }
 
+/* ==================== AI 提示词设置 ==================== */
+type PromptKey = 'skillPrompt' | 'agentPrompt' | 'gitPrompt';
+
+function PromptsSettings({ skillPrompt, agentPrompt, gitPrompt, onPromptChange }: {
+  skillPrompt: string;
+  agentPrompt: string;
+  gitPrompt: string;
+  onPromptChange: (key: PromptKey, value: string) => void;
+}) {
+  const values: Record<PromptKey, string> = { skillPrompt, agentPrompt, gitPrompt };
+  const items: { key: PromptKey; label: string; placeholder: string }[] = [
+    { key: 'skillPrompt', label: 'Skill 生成提示词', placeholder: '请帮我创建一个名为「{name}」的 Skill...' },
+    { key: 'agentPrompt', label: 'Agent 生成提示词', placeholder: '请帮我创建一个名为「{name}」的 Agent...' },
+    { key: 'gitPrompt', label: 'Git Commit 生成提示词', placeholder: '请根据以下 git diff 内容，生成一条简洁的 git commit message...' },
+  ];
+
+  return (
+    <div className="settings-section-content">
+      <div className="settings-section-title">AI 生成提示词</div>
+      <div className="prompt-hint">
+        支持 {'{name}'}、{'{description}'}、{'{diff}'} 占位符，创建时自动替换
+      </div>
+      {items.map(item => (
+        <div key={item.key} className="mcp-server-card">
+          <div className="mcp-server-header">
+            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--cb-text-primary)' }}>{item.label}</span>
+            <button className="mcp-remove-btn" title="重置为默认" onClick={() => onPromptChange(item.key, DEFAULT_PROMPTS[item.key])}
+              style={{ color: 'var(--cb-text-secondary)', fontSize: 11 }}>
+              重置
+            </button>
+          </div>
+          <div className="mcp-server-fields">
+            <textarea className="setting-input prompt-textarea" value={values[item.key]}
+              onChange={e => onPromptChange(item.key, e.target.value)}
+              placeholder={item.placeholder} rows={5} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ==================== 日志查看 ==================== */
 function LogsSettings({ workspacePath }: { workspacePath?: string | null }) {
   const [activeLog, setActiveLog] = useState<'desktop' | 'cli'>('desktop');
@@ -714,6 +752,251 @@ function ApiKeyInput({ value, onChange }: { value: string; onChange: (v: string)
           )}
         </svg>
       </button>
+    </div>
+  );
+}
+
+/* ==================== 渠道绑定设置 ==================== */
+function ChannelSettings({ backendPort, sessionId }: { backendPort?: number | null; sessionId?: string }) {
+  return (
+    <div className="settings-section-content">
+      <div className="settings-section-title">渠道绑定</div>
+      <div style={{ padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <WeChatCard backendPort={backendPort} sessionId={sessionId} />
+        <FeishuCard backendPort={backendPort} sessionId={sessionId} />
+        <DingTalkCard backendPort={backendPort} sessionId={sessionId} />
+      </div>
+    </div>
+  );
+}
+
+function WeChatCard({ backendPort, sessionId }: { backendPort?: number | null; sessionId?: string }) {
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [showQR, setShowQR] = useState(false);
+  const [status, setStatus] = useState('');
+  const [bound, setBound] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const fetchQR = useCallback(async () => {
+    if (!backendPort) return;
+    setLoading(true);
+    setStatus('scanning');
+    try {
+      const sid = sessionId || 'default';
+      const resp = await fetch(`http://localhost:${backendPort}/chat/wechat/qrcode?sessionId=${encodeURIComponent(sid)}`);
+      const data = await resp.json();
+      if (data.data?.qrcode_img_content) {
+        setQrCode(data.data.qrcode_img_content);
+        setShowQR(true);
+        const poll = setInterval(async () => {
+          try {
+            const r = await fetch(`http://localhost:${backendPort}/chat/wechat/qrcode/status?qrcode=${encodeURIComponent(data.data.qrcode_img_content)}&sessionId=${encodeURIComponent(sid)}`);
+            const d = await r.json();
+            if (d.data?.status === 'confirmed') {
+              clearInterval(poll);
+              setBound(true);
+              setStatus('bound');
+              setShowQR(false);
+            } else if (d.data?.status === 'error' || d.data?.status === 'expired') {
+              clearInterval(poll);
+              setStatus('expired');
+              setShowQR(false);
+            }
+          } catch {
+            clearInterval(poll);
+            setStatus('error');
+            setShowQR(false);
+          }
+        }, 2000);
+        setTimeout(() => { clearInterval(poll); setStatus('timeout'); setShowQR(false); }, 60000);
+      } else {
+        setStatus('error');
+      }
+    } catch {
+      setStatus('error');
+    } finally {
+      setLoading(false);
+    }
+  }, [backendPort, sessionId]);
+
+  const unbind = useCallback(async () => {
+    if (!backendPort) return;
+    try {
+      await fetch(`http://localhost:${backendPort}/chat/wechat/unbind?sessionId=${encodeURIComponent(sessionId || 'default')}`, { method: 'POST' });
+      setBound(false);
+      setStatus('');
+    } catch { /* ignore */ }
+  }, [backendPort, sessionId]);
+
+  return (
+    <div className="channel-card">
+      <div className="channel-card-header">
+        <div className="channel-card-icon wechat-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178A1.17 1.17 0 0 1 4.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178 1.17 1.17 0 0 1-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 0 1 .598.082l1.584.926a.272.272 0 0 0 .14.047c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 0 1-.023-.156.49.49 0 0 1 .201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-7.062-6.122zM14.033 13.4c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.97-.982z"/></svg>
+        </div>
+        <div className="channel-card-info">
+          <span className="channel-card-name">微信</span>
+          <span className="channel-card-desc">{bound ? '已绑定' : '扫码绑定，在微信中与 AI 对话'}</span>
+        </div>
+        <div className="channel-card-action">
+          {bound ? (
+            <button className="channel-btn unbind" onClick={unbind}>解绑</button>
+          ) : (
+            <button className="channel-btn bind" onClick={fetchQR} disabled={loading}>
+              {loading ? '获取中...' : '获取二维码'}
+            </button>
+          )}
+        </div>
+      </div>
+      {status === 'error' && <p className="channel-error">获取二维码失败</p>}
+      {status === 'timeout' && <p className="channel-error">二维码已过期，请重新获取</p>}
+      {showQR && qrCode && (
+        <div className="qrcode-overlay" onClick={() => setShowQR(false)}>
+          <div className="qrcode-modal" onClick={e => e.stopPropagation()}>
+            <img src={qrCode} alt="微信二维码" className="qrcode-modal-img" />
+            <p className="qrcode-modal-hint">请使用微信扫码关注</p>
+            <button className="qrcode-modal-close" onClick={() => setShowQR(false)}>
+              <Icon name="close" size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FeishuCard({ backendPort, sessionId }: { backendPort?: number | null; sessionId?: string }) {
+  const [appId, setAppId] = useState('');
+  const [appSecret, setAppSecret] = useState('');
+  const [bound, setBound] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [expanded, setExpanded] = useState(false);
+
+  const bind = useCallback(async () => {
+    if (!backendPort || !appId || !appSecret) return;
+    setLoading(true);
+    setError('');
+    try {
+      const resp = await fetch(`http://localhost:${backendPort}/chat/feishu/bind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `sessionId=${encodeURIComponent(sessionId || 'default')}&appId=${encodeURIComponent(appId)}&appSecret=${encodeURIComponent(appSecret)}`,
+      });
+      const data = await resp.json();
+      if (data.code === 200) setBound(true);
+      else setError(data.description || '绑定失败');
+    } catch { setError('连接失败'); } finally { setLoading(false); }
+  }, [backendPort, sessionId, appId, appSecret]);
+
+  const unbind = useCallback(async () => {
+    if (!backendPort || !sessionId) return;
+    try {
+      await fetch(`http://localhost:${backendPort}/chat/feishu/unbind?sessionId=${encodeURIComponent(sessionId || 'default')}`, { method: 'POST' });
+      setBound(false);
+      setAppId('');
+      setAppSecret('');
+    } catch { /* ignore */ }
+  }, [backendPort, sessionId]);
+
+  return (
+    <div className="channel-card">
+      <div className="channel-card-header">
+        <div className="channel-card-icon feishu-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3.5 7.5C5.5 4 9 2 12 2c2 0 4.5.5 6.5 3 1.5 2 2 4 2 6 0 2.5-1 5-3 6.5-2 1.5-4.5 2-7 2s-5-.5-7-2C1.5 16 .5 13.5.5 11c0-1.5.5-3 1.5-4L7 4l-2 5h7l-5 7 2-5H3.5z"/></svg>
+        </div>
+        <div className="channel-card-info">
+          <span className="channel-card-name">飞书</span>
+          <span className="channel-card-desc">{bound ? '已绑定' : '输入机器人凭据绑定'}</span>
+        </div>
+        <div className="channel-card-action">
+          {bound ? (
+            <button className="channel-btn unbind" onClick={unbind}>解绑</button>
+          ) : (
+            <button className="channel-btn bind" onClick={() => setExpanded(!expanded)}>
+              {expanded ? '收起' : '绑定'}
+            </button>
+          )}
+        </div>
+      </div>
+      {expanded && !bound && (
+        <div className="channel-card-form">
+          <input className="setting-input channel-form-input" placeholder="App ID" value={appId} onChange={e => setAppId(e.target.value)} />
+          <input className="setting-input channel-form-input" placeholder="App Secret" type="password" value={appSecret} onChange={e => setAppSecret(e.target.value)} />
+          <button className="channel-btn bind" onClick={bind} disabled={loading || !appId || !appSecret} style={{ alignSelf: 'flex-end' }}>
+            {loading ? '绑定中...' : '确认绑定'}
+          </button>
+          {error && <p className="channel-error">{error}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DingTalkCard({ backendPort, sessionId }: { backendPort?: number | null; sessionId?: string }) {
+  const [appKey, setAppKey] = useState('');
+  const [appSecret, setAppSecret] = useState('');
+  const [bound, setBound] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [expanded, setExpanded] = useState(false);
+
+  const bind = useCallback(async () => {
+    if (!backendPort || !appKey || !appSecret) return;
+    setLoading(true);
+    setError('');
+    try {
+      const resp = await fetch(`http://localhost:${backendPort}/chat/dingtalk/bind`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `sessionId=${encodeURIComponent(sessionId || 'default')}&appKey=${encodeURIComponent(appKey)}&appSecret=${encodeURIComponent(appSecret)}`,
+      });
+      const data = await resp.json();
+      if (data.code === 200) setBound(true);
+      else setError(data.description || '绑定失败');
+    } catch { setError('连接失败'); } finally { setLoading(false); }
+  }, [backendPort, sessionId, appKey, appSecret]);
+
+  const unbind = useCallback(async () => {
+    if (!backendPort || !sessionId) return;
+    try {
+      await fetch(`http://localhost:${backendPort}/chat/dingtalk/unbind?sessionId=${encodeURIComponent(sessionId || 'default')}`, { method: 'POST' });
+      setBound(false);
+      setAppKey('');
+      setAppSecret('');
+    } catch { /* ignore */ }
+  }, [backendPort, sessionId]);
+
+  return (
+    <div className="channel-card">
+      <div className="channel-card-header">
+        <div className="channel-card-icon dingtalk-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h-2v-2h2v2zm0-4h-2V7h2v6zm4 4h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        </div>
+        <div className="channel-card-info">
+          <span className="channel-card-name">钉钉</span>
+          <span className="channel-card-desc">{bound ? '已绑定' : '输入机器人凭据绑定'}</span>
+        </div>
+        <div className="channel-card-action">
+          {bound ? (
+            <button className="channel-btn unbind" onClick={unbind}>解绑</button>
+          ) : (
+            <button className="channel-btn bind" onClick={() => setExpanded(!expanded)}>
+              {expanded ? '收起' : '绑定'}
+            </button>
+          )}
+        </div>
+      </div>
+      {expanded && !bound && (
+        <div className="channel-card-form">
+          <input className="setting-input channel-form-input" placeholder="AppKey" value={appKey} onChange={e => setAppKey(e.target.value)} />
+          <input className="setting-input channel-form-input" placeholder="App Secret" type="password" value={appSecret} onChange={e => setAppSecret(e.target.value)} />
+          <button className="channel-btn bind" onClick={bind} disabled={loading || !appKey || !appSecret} style={{ alignSelf: 'flex-end' }}>
+            {loading ? '绑定中...' : '确认绑定'}
+          </button>
+          {error && <p className="channel-error">{error}</p>}
+        </div>
+      )}
     </div>
   );
 }
