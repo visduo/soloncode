@@ -262,6 +262,13 @@ function connectWebGate() {
         if (raw === 'pong') return; // 心跳回复
         try {
             var chunk = JSON.parse(raw);
+
+            // 摘要拦截器：如果注册了拦截器且返回 true，则跳过正常流程
+            if (typeof window._summaryChunkInterceptor === 'function') {
+                var intercepted = window._summaryChunkInterceptor(chunk);
+                if (intercepted) return;
+            }
+
             var sid = chunk.sessionId;
 
             // WebSocket 流结束信号

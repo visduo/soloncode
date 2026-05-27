@@ -630,6 +630,139 @@
         }
     });
 
+    // ---- AI 生成变更摘要 ----
+    var gitSummaryBtn = document.getElementById('gitSummaryBtn');
+    var isGeneratingSummary = false;
+    var summarySessionId = null;
+    var summaryBuffer = '';
+
+    if (gitSummaryBtn) {
+        gitSummaryBtn.addEventListener('click', function() {
+            if (isGeneratingSummary) return;
+
+            var files = getSelectedFiles();
+            if (files.length === 0) {
+                if (typeof showToast === 'function') showToast('请至少勾选一个文件', 'error');
+                else alert('请至少勾选一个文件');
+                return;
+            }
+
+            isGeneratingSummary = true;
+            gitSummaryBtn.disabled = true;
+            gitSummaryBtn.classList.add('loading');
+            gitSummaryBtn.innerHTML = '生成中...';
+            if (gitCommitMsg) gitCommitMsg.value = '';
+
+            summarySessionId = 'git-summary-' + Date.now().toString(36);
+            summaryBuffer = '';
+
+            // 注册该 session
+            if (typeof getOrCreateSession === 'function') {
+                getOrCreateSession(summarySessionId);
+            }
+
+            // 注册 WebSocket chunk 拦截器
+            window._summaryChunkInterceptor = function(chunk) {
+                if (!chunk.sessionId || chunk.sessionId !== summarySessionId) return false;
+                if (chunk.type === 'text') {
+                    summaryBuffer += (chunk.text || '');
+                    if (gitCommitMsg) {
+                        gitCommitMsg.value = summaryBuffer
+                            .replace(/\*\*/g, '')
+                            .replace(/\*/g, '')
+                            .replace(/^#+\s/gm, '')
+                            .replace(/`/g, '');
+                    }
+                }
+                if (chunk.type === 'done') {
+                    finishSummary();
+                }
+                if (chunk.type === 'error') {
+                    if (gitCommitMsg) gitCommitMsg.value = '';
+                    var errMsg = (chunk.text || '未知错误');
+                    if (typeof showToast === 'function') showToast('生成摘要失败: ' + errMsg, 'error');
+                    else alert('生成摘要失败: ' + errMsg);
+                    finishSummary();
+                }
+                return true; // 已拦截
+            };
+
+            // 收集已勾选文件的 diff
+            collectDiffs(files, function(combinedDiff, statInfo) {
+                var prompt = '请根据以下 Git diff 变更内容，生成一条简洁的提交信息摘要。'
+                    + '要求：用中文，不超过 100 字，直接输出摘要文本，不要包含代码、不要使用 Markdown 格式。'
+                    + '\n\n变更统计：' + statInfo
+                    + '\n\n--- Diff 内容 ---\n' + combinedDiff;
+
+                var formData = new FormData();
+                formData.append('input', prompt);
+                formData.append('sessionId', summarySessionId);
+
+                fetch('/chat/input', {
+                    method: 'POST',
+                    body: formData
+                }).catch(function(e) {
+                    if (typeof showToast === 'function') showToast('发送请求失败: ' + e.message, 'error');
+                    else alert('发送请求失败: ' + e.message);
+                    finishSummary();
+                });
+            });
+        });
+    }
+
+    function collectDiffs(files, callback) {
+        var combinedDiff = '';
+        var statInfo = files.length + ' 个文件';
+        var pending = files.length;
+        var MAX_DIFF_LINES = 500;
+        var MAX_TOTAL_CHARS = 20000;
+        var targetFiles = files.slice(0, 15);
+        var truncated = targetFiles.length < files.length;
+
+        if (files.length === 0) { callback('', '0 个文件'); return; }
+
+        targetFiles.forEach(function(filePath) {
+            fetch('/chat/git/diff?path=' + encodeURIComponent(filePath))
+                .then(function(r) { return r.json(); })
+                .then(function(res) {
+                    var d = (res && res.data) ? res.data : {};
+                    var diff = d.diff || '(无差异内容)';
+                    var lines = diff.split('\n');
+                    if (lines.length > MAX_DIFF_LINES) {
+                        diff = lines.slice(0, MAX_DIFF_LINES).join('\n') + '\n... (已截断)';
+                    }
+                    combinedDiff += '\n\n=== ' + filePath + ' ===\n' + diff;
+                })
+                .catch(function() {
+                    combinedDiff += '\n\n=== ' + filePath + ' ===\n(获取失败)';
+                })
+                .finally(function() {
+                    pending--;
+                    if (pending === 0) {
+                        if (combinedDiff.length > MAX_TOTAL_CHARS) {
+                            combinedDiff = combinedDiff.substring(0, MAX_TOTAL_CHARS) + '\n\n... (总差异过大，已截断)';
+                        }
+                        callback(combinedDiff, statInfo + (truncated ? '（仅前 15 个）' : ''));
+                    }
+                });
+        });
+    }
+
+    function finishSummary() {
+        isGeneratingSummary = false;
+        if (gitSummaryBtn) {
+            gitSummaryBtn.disabled = false;
+            gitSummaryBtn.classList.remove('loading');
+            gitSummaryBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 3v9l6 6"/></svg> 摘要';
+        }
+        // 清理临时 session
+        if (summarySessionId && typeof sessionMap !== 'undefined') {
+            delete sessionMap[summarySessionId];
+        }
+        window._summaryChunkInterceptor = null;
+        summarySessionId = null;
+    }
+
     // ---- Git 提交（精确文件列表）----
     var isCommitting = false;
     if (gitCommitBtn) {

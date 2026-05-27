@@ -94,7 +94,7 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 
 /* Header */
 .main-header { padding: 18px 28px 14px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0; transition: padding-right 0.25s ease; }
-.main-header.filer-collapsed { padding-right: 46px; }
+.main-header.filer-collapsed { padding-right: 52px; }
 .theme-toggle { background: none; border: 1px solid var(--border-color); border-radius: 10px; padding: 6px 10px; cursor: pointer; color: var(--text-secondary); font-size: 16px; transition: all 0.2s; display: flex; align-items: center; gap: 4px; }
 .theme-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
 .wechat-btn-header { background: none; border: 1px solid var(--border-color); border-radius: 10px; padding: 6px 10px; cursor: pointer; color: var(--text-secondary); font-size: 16px; transition: all 0.2s; display: flex; align-items: center; gap: 4px; }
@@ -989,16 +989,15 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 /* Git 提交按钮 */
 .git-commit-bar {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    gap: 6px;
     padding: 8px 12px;
     border-top: 1px solid var(--border-color);
     flex-shrink: 0;
     background: var(--bg-secondary);
 }
 .git-commit-input {
-    flex: 1;
-    min-width: 0;
+    width: 100%;
     height: 30px;
     padding: 0 8px;
     border: 1px solid var(--border-color);
@@ -1011,6 +1010,12 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 }
 .git-commit-input::placeholder { color: var(--text-secondary); opacity: 0.6; }
 .git-commit-input:focus { border-color: var(--accent); }
+.git-commit-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
 .git-commit-btn {
     display: flex;
     align-items: center;
@@ -1030,6 +1035,32 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 }
 .git-commit-btn:hover { opacity: 0.9; }
 .git-commit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.git-summary-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+.git-summary-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.git-summary-btn:disabled,
+.git-summary-btn.loading {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
 
 /* Git 文件勾选 checkbox */
 .git-file-checkbox {
