@@ -803,7 +803,7 @@
                             gitCommitMsg.style.height = 'auto';
                         }
                         loadGitStatus();
-                        if (typeof showToast === 'function') showToast('提交成功', 'success');
+                        // 提交成功，不显示提示
                     } else {
                         alert('提交失败：' + ((res && res.data && res.data.message) || '未知错误'));
                     }
