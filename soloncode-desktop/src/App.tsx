@@ -458,6 +458,7 @@ function App() {
             theme={currentTheme} backendPort={backendPort} onUpdateSessionTitle={handleUpdateSessionTitle} onNewSession={(title) => { setNewSessionFromProject(false); return handleNewSession(undefined, title); }}
             providers={settings.providers} onActiveProviderChange={(providerId: string) => { setSettings(prev => { const updated = { ...prev, activeProviderId: providerId }; settingsService.save(updated); return updated; }); }}
             activeFileName={activeFile?.name} activeFilePath={activeFilePath || undefined}
+            onFileSelect={handleFileSelect}
             onNewProject={handleCreateProject} onOpenFolder={handleOpenFolder}
             initialPrompt={aiCreatePrompt} onAiCreateComplete={handleAiCreateComplete}
             newSessionFromProject={newSessionFromProject}

@@ -11,60 +11,83 @@ interface ActionBlockProps {
   toolName?: string;
   args?: Record<string, unknown>;
   theme?: Theme;
+  onFileClick?: (filePath: string) => void;
 }
 
-function buildTitle(toolName: string, args?: Record<string, unknown>): string {
-  let title = toolName;
-  if (args && Object.keys(args).length > 0) {
-    const params = Object.entries(args)
-      .map(([k, v]) => `${k}: "${typeof v === 'string' ? v : JSON.stringify(v)}"`)
-      .join(', ');
-    title += `(${params})`;
-  }
-  return title.length > 20 ? title.slice(0, 100) + '...' : title;
+function capitalize(s: string): string {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function ActionBlock({ text, toolName, args, theme }: ActionBlockProps) {
+function extractFileArg(args?: Record<string, unknown>): string | null {
+  if (!args) return null;
+  return (args.file_path || args.path || args.filename || args.filePath || null) as string | null;
+}
+
+function extractLineInfo(args?: Record<string, unknown>): string | null {
+  if (!args) return null;
+  const start = args.start_line || args.startLine || args.offset;
+  const end = args.end_line || args.endLine || args.limit;
+  if (start && end) return `L${start}-${end}`;
+  if (start) return `L${start}`;
+  return null;
+}
+
+function extractCommand(args?: Record<string, unknown>): string | null {
+  if (!args) return null;
+  return (args.command || args.cmd || null) as string | null;
+}
+
+export function ActionBlock({ text, toolName, args, theme, onFileClick }: ActionBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const name = capitalize(toolName || 'Tool');
+  const filePath = extractFileArg(args);
+  const lineInfo = extractLineInfo(args);
+  const cmd = extractCommand(args);
 
   return (
     <div className="action-block">
-      <div
-        className="action-block-header"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <span className="action-block-icon">⚡</span>
-        <span className="action-block-title" title={toolName || ''}>{buildTitle(toolName || '工具执行', args)}</span>
-        <span className={`action-block-arrow ${isExpanded ? 'expanded' : ''}`}>▼</span>
+      <div className="action-block-header" onClick={() => setIsExpanded(!isExpanded)}>
+        <span className="action-block-tool">{name}</span>
+        {filePath && (
+          <span
+            className="action-block-file"
+            onClick={e => { e.stopPropagation(); onFileClick?.(filePath); }}
+          >
+            {filePath}
+          </span>
+        )}
+        {lineInfo && <span className="action-block-lines">{lineInfo}</span>}
+        {!filePath && cmd && <span className="action-block-cmd">{(cmd as string).length > 50 ? (cmd as string).slice(0, 50) + '...' : cmd}</span>}
+        <span className={`action-block-arrow ${isExpanded ? 'expanded' : ''}`}>▾</span>
       </div>
       {isExpanded && (
         <div className="action-block-content">
-          <div className="action-block-result">
-            <ReactMarkdown
-              remarkPlugins={[remarkBreaks]}
-              components={{
-                code({ node, inline, className, children, ...props }: any) {
-                  const match = /language-(\w+)/.exec(className || '');
-                  return !inline && match ? (
-                    <SyntaxHighlighter
-                      style={theme === 'dark' ? oneDark : oneLight}
-                      language={match[1]}
-                      PreTag="div"
-                      {...props}
-                    >
-                      {String(children).replace(/\n$/, '')}
-                    </SyntaxHighlighter>
-                  ) : (
-                    <code className={className} {...props}>
-                      {children}
-                    </code>
-                  );
-                }
-              }}
-            >
-              {text || '执行完成'}
-            </ReactMarkdown>
-          </div>
+          <ReactMarkdown
+            remarkPlugins={[remarkBreaks]}
+            components={{
+              code({ node, inline, className, children, ...props }: any) {
+                const match = /language-(\w+)/.exec(className || '');
+                return !inline && match ? (
+                  <SyntaxHighlighter
+                    style={theme === 'dark' ? oneDark : oneLight}
+                    language={match[1]}
+                    PreTag="div"
+                    {...props}
+                  >
+                    {String(children).replace(/\n$/, '')}
+                  </SyntaxHighlighter>
+                ) : (
+                  <code className={className} {...props}>
+                    {children}
+                  </code>
+                );
+              }
+            }}
+          >
+            {text || '执行完成'}
+          </ReactMarkdown>
         </div>
       )}
     </div>
