@@ -18,24 +18,19 @@ package org.noear.solon.codecli.portal.web;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.annotation.*;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Result;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.net.http.HttpException;
+import org.noear.solon.net.http.HttpResponseException;
+import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.noear.solon.codecli.config.AgentProperties;
-
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.net.URI;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Web 设置控制器 —— SolonCode Web UI 的设置管理 HTTP 入口。
@@ -503,78 +498,41 @@ public class WebSettingsController {
                     return Result.failure("命令不能为空");
                 }
 
-                // 解析命令和参数
-                List<String> cmdList = new ArrayList<>();
-                cmdList.add(command);
+                // 使用 McpClientProvider 进行真实的 MCP 初始化连接测试
+                McpClientProvider.Builder builder = McpClientProvider.builder()
+                        .channel(org.noear.solon.ai.mcp.McpChannel.STDIO)
+                        .command(command);
+
+                // 设置参数
                 ONode argsNode = root.get("args");
                 if (argsNode != null && argsNode.isArray()) {
+                    List<String> argsList = new ArrayList<>();
                     for (ONode a : argsNode.getArray()) {
                         String arg = a.getString();
-                        if (arg != null && !arg.isEmpty()) cmdList.add(arg);
+                        if (arg != null && !arg.isEmpty()) argsList.add(arg);
+                    }
+                    if (!argsList.isEmpty()) {
+                        builder.args(argsList);
                     }
                 }
 
-                // 构建环境变量
-                Map<String, String> envMap = null;
+                // 设置环境变量
                 ONode envNode = root.get("env");
                 if (envNode != null && envNode.isObject() && envNode.getObject().size() > 0) {
-                    envMap = new LinkedHashMap<>();
+                    Map<String, String> envMap = new LinkedHashMap<>();
                     for (Map.Entry<String, ONode> entry : envNode.getObject().entrySet()) {
                         envMap.put(entry.getKey(), entry.getValue().getString());
                     }
+                    builder.env(envMap);
                 }
 
-                // 尝试启动进程并发送 MCP initialize 请求
-                ProcessBuilder pb = new ProcessBuilder(cmdList);
-                pb.environment().put("PATH", System.getenv("PATH"));
-                if (envMap != null) {
-                    pb.environment().putAll(envMap);
-                }
-                pb.redirectErrorStream(true);
-                pb.directory(new File(engine.getProps().getWorkspace()));
-
-                Process process = pb.start();
-
-                // 发送 JSON-RPC initialize 请求
-                String initRequest = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"soloncode-check\",\"version\":\"1.0\"}}}\n";
-                process.getOutputStream().write(initRequest.getBytes("UTF-8"));
-                process.getOutputStream().flush();
-
-                // 读取响应（限时5秒）
-                StringBuilder output = new StringBuilder();
-                boolean foundResponse = false;
-                long deadline = System.currentTimeMillis() + 5000;
-
-                process.getInputStream();
-                BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), "UTF-8"));
-                reader.ready(); // trigger
-
-                while (System.currentTimeMillis() < deadline) {
-                    if (reader.ready()) {
-                        String line = reader.readLine();
-                        if (line != null && !line.isEmpty()) {
-                            output.append(line).append("\n");
-                            if (line.contains("\"jsonrpc\"") || line.contains("\"result\"")) {
-                                foundResponse = true;
-                                break;
-                            }
-                        }
-                    } else {
-                        Thread.sleep(100);
-                    }
-                }
-
-                process.destroyForcibly();
-                process.waitFor(2, TimeUnit.SECONDS);
-
-                if (foundResponse) {
-                    return Result.succeed("连接成功：收到 MCP 协议响应");
-                } else if (output.length() > 0) {
-                    String out = output.toString().trim();
-                    if (out.length() > 300) out = out.substring(0, 300) + "...";
-                    return Result.failure("未收到有效 MCP 响应，进程输出：" + out);
-                } else {
-                    return Result.failure("未收到任何响应（超时 5 秒），请检查命令是否正确");
+                McpClientProvider client = builder.build();
+                try {
+                    // 通过 getTools() 触发 MCP 初始化握手，验证连接有效性
+                    client.getTools();
+                    return Result.succeed("连接成功：MCP 初始化握手完成（stdio）");
+                } finally {
+                    client.close();
                 }
 
             } else if ("sse".equals(type) || "streamable-http".equals(type)) {
@@ -583,52 +541,33 @@ public class WebSettingsController {
                     return Result.failure("URL 不能为空");
                 }
 
-                // 构建自定义 headers
-                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(8000);
-                conn.setReadTimeout(8000);
+                // 使用 McpClientProvider 进行真实的 MCP 初始化连接测试
+                String channel = "sse".equals(type)
+                        ? org.noear.solon.ai.mcp.McpChannel.SSE
+                        : org.noear.solon.ai.mcp.McpChannel.STREAMABLE;
 
-                // 设置自定义请求头
+                McpClientProvider.Builder builder = McpClientProvider.builder()
+                        .channel(channel)
+                        .url(url);
+
+                // 设置自定义 headers
                 ONode headersNode = root.get("headers");
                 if (headersNode != null && headersNode.isObject()) {
+                    Map<String, String> headersMap = new LinkedHashMap<>();
                     for (Map.Entry<String, ONode> entry : headersNode.getObject().entrySet()) {
-                        conn.setRequestProperty(entry.getKey(), entry.getValue().getString());
+                        headersMap.put(entry.getKey(), entry.getValue().getString());
                     }
+                    builder.headers(headersMap);
                 }
 
-                int code = conn.getResponseCode();
-
-                // 检查是否为 SSE 端点（Content-Type 包含 text/event-stream）
-                String contentType = conn.getContentType();
-                if (contentType != null && contentType.contains("text/event-stream")) {
-                    conn.disconnect();
-                    return Result.succeed("连接成功：SSE 端点响应正常 (HTTP " + code + ")");
+                McpClientProvider client = builder.build();
+                try {
+                    // 通过 getTools() 触发 MCP 初始化握手，验证连接有效性
+                    client.getTools();
+                    return Result.succeed("连接成功：MCP 初始化握手完成（" + type + "）");
+                } finally {
+                    client.close();
                 }
-
-                // streamable-http 可能返回 JSON
-                if (contentType != null && contentType.contains("application/json")) {
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-                    StringBuilder body = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        body.append(line);
-                    }
-                    reader.close();
-                    conn.disconnect();
-                    String bodyStr = body.toString();
-                    if (bodyStr.contains("\"jsonrpc\"")) {
-                        return Result.succeed("连接成功：收到 MCP 协议响应 (HTTP " + code + ")");
-                    }
-                    if (bodyStr.length() > 300) bodyStr = bodyStr.substring(0, 300) + "...";
-                    return Result.failure("HTTP " + code + "，但响应非 MCP 协议格式：" + bodyStr);
-                }
-
-                conn.disconnect();
-                if (code >= 200 && code < 400) {
-                    return Result.succeed("连接成功 (HTTP " + code + ")，Content-Type: " + (contentType != null ? contentType : "unknown"));
-                }
-                return Result.failure("连接失败，HTTP 状态码：" + code);
             }
 
             return Result.failure("不支持检测的类型: " + type);
@@ -712,100 +651,5 @@ public class WebSettingsController {
     private void saveMcpConfig(java.nio.file.Path file, ONode config) throws Exception {
         java.nio.file.Files.createDirectories(file.getParent());
         java.nio.file.Files.write(file, config.toJson().getBytes("UTF-8"));
-    }
-
-    // ==================== 常规设置 ====================
-
-    private static final String[] GENERAL_KEYS = {
-            "maxSteps", "autoRethink", "sessionWindowSize", "summaryWindowSize", "summaryWindowToken",
-            "sandboxMode", "thinkPrinted", "hitlEnabled", "subagentEnabled", "bashAsyncEnabled",
-            "cliPrintSimplified", "memoryEnabled", "memoryIsolation", "modelRetries"
-    };
-
-    @Get
-    @Mapping("/web/settings/general")
-    public Result generalSettingsGet() throws Exception {
-        AgentProperties props = (AgentProperties) engine.getProps();
-        Map<String, Object> data = new LinkedHashMap<>();
-
-        data.put("maxSteps", props.getMaxSteps());
-        data.put("autoRethink", props.isAutoRethink());
-        data.put("sessionWindowSize", props.getSessionWindowSize());
-        data.put("summaryWindowSize", props.getSummaryWindowSize());
-        data.put("summaryWindowToken", props.getSummaryWindowToken());
-        data.put("sandboxMode", props.isSandboxMode());
-        data.put("thinkPrinted", props.isThinkPrinted());
-        data.put("hitlEnabled", props.isHitlEnabled());
-        data.put("subagentEnabled", props.isSubagentEnabled());
-        data.put("bashAsyncEnabled", props.isBashAsyncEnabled());
-        data.put("cliPrintSimplified", props.isCliPrintSimplified());
-        data.put("memoryEnabled", props.isMemoryEnabled());
-        data.put("memoryIsolation", props.isMemoryIsolation());
-        data.put("modelRetries", props.getModelRetries());
-
-        return Result.succeed(data);
-    }
-
-    @Put
-    @Mapping("/web/settings/general")
-    public Result generalSettingsPut(String body) throws Exception {
-        AgentProperties props = (AgentProperties) engine.getProps();
-        ONode node = ONode.ofJson(body);
-
-        if (node.hasKey("maxSteps")) props.setMaxSteps(node.get("maxSteps").getInt());
-        if (node.hasKey("autoRethink")) props.setAutoRethink(node.get("autoRethink").getBoolean());
-        if (node.hasKey("sessionWindowSize")) props.setSessionWindowSize(node.get("sessionWindowSize").getInt());
-        if (node.hasKey("summaryWindowSize")) props.setSummaryWindowSize(node.get("summaryWindowSize").getInt());
-        if (node.hasKey("summaryWindowToken")) props.setSummaryWindowToken(node.get("summaryWindowToken").getInt());
-        if (node.hasKey("sandboxMode")) props.setSandboxMode(node.get("sandboxMode").getBoolean());
-        if (node.hasKey("thinkPrinted")) props.setThinkPrinted(node.get("thinkPrinted").getBoolean());
-        if (node.hasKey("hitlEnabled")) props.setHitlEnabled(node.get("hitlEnabled").getBoolean());
-        if (node.hasKey("subagentEnabled")) props.setSubagentEnabled(node.get("subagentEnabled").getBoolean());
-        if (node.hasKey("bashAsyncEnabled")) props.setBashAsyncEnabled(node.get("bashAsyncEnabled").getBoolean());
-        if (node.hasKey("cliPrintSimplified")) props.setCliPrintSimplified(node.get("cliPrintSimplified").getBoolean());
-        if (node.hasKey("memoryEnabled")) props.setMemoryEnabled(node.get("memoryEnabled").getBoolean());
-        if (node.hasKey("memoryIsolation")) props.setMemoryIsolation(node.get("memoryIsolation").getBoolean());
-        if (node.hasKey("modelRetries")) props.setModelRetries(node.get("modelRetries").getInt());
-
-        // 持久化到 config.yml
-        persistGeneralSettings(props);
-
-        return Result.succeed("ok");
-    }
-
-    private void persistGeneralSettings(AgentProperties props) throws Exception {
-        Path configPath = Paths.get(props.getWorkspace(), ".soloncode", "config.yml");
-        ONode root;
-        if (Files.exists(configPath)) {
-            String content = new String(Files.readAllBytes(configPath), StandardCharsets.UTF_8);
-            root = ONode.ofJson(content);
-        } else {
-            root = new ONode();
-            Files.createDirectories(configPath.getParent());
-        }
-        ONode sc = root.getOrNew("soloncode");
-        for (String key : GENERAL_KEYS) {
-            Object val = null;
-            switch (key) {
-                case "maxSteps": val = props.getMaxSteps(); break;
-                case "autoRethink": val = props.isAutoRethink(); break;
-                case "sessionWindowSize": val = props.getSessionWindowSize(); break;
-                case "summaryWindowSize": val = props.getSummaryWindowSize(); break;
-                case "summaryWindowToken": val = props.getSummaryWindowToken(); break;
-                case "sandboxMode": val = props.isSandboxMode(); break;
-                case "thinkPrinted": val = props.isThinkPrinted(); break;
-                case "hitlEnabled": val = props.isHitlEnabled(); break;
-                case "subagentEnabled": val = props.isSubagentEnabled(); break;
-                case "bashAsyncEnabled": val = props.isBashAsyncEnabled(); break;
-                case "cliPrintSimplified": val = props.isCliPrintSimplified(); break;
-                case "memoryEnabled": val = props.isMemoryEnabled(); break;
-                case "memoryIsolation": val = props.isMemoryIsolation(); break;
-                case "modelRetries": val = props.getModelRetries(); break;
-            }
-            if (val != null) {
-                sc.set(key, val);
-            }
-        }
-        Files.write(configPath, root.toJson().getBytes(StandardCharsets.UTF_8));
     }
 }

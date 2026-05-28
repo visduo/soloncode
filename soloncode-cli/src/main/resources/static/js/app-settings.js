@@ -1,8 +1,8 @@
 /**
- * app-settings.js — 设置面板交互逻辑（LLM 模型 + MCP 服务器 + OpenApi + 技能市场）
+ * app-settings.js — 设置面板交互逻辑（LLM 模型 + MCP 服务器 + OpenApi）
  *
  * 依赖：layui.js（jQuery）、app-base.js
- * 协同：app-history.js（modelsLoaded / commandList / loadCommands）
+ * 协同：app-history.js（modelsLoaded / commandList / loadCommands）、app-settings-skill.js（技能市场）
  */
 
 (function () {
@@ -111,14 +111,6 @@
     var $webapiCheckResult = $('#webapiCheckResult');
     var $webapiImportDialog = $('#webapiImportDialog');
 
-    // Skills
-    var $skillsSearchInput = $('#skillsSearchInput');
-    var $skillsSearchClear = $('#skillsSearchClear');
-    var $skillsList = $('#skillsList');
-    var $skillsLoading = $('#skillsLoading');
-    var $skillsError = $('#skillsError');
-    var $skillsStatus = $('#skillsStatus');
-
     // ==================== 状态 ====================
 
     var llmEditModel = null;
@@ -127,16 +119,14 @@
     var mcpCachedList = [];
     var webapiEditName = null;
     var webapiCachedList = [];
-    var _installedSkillsCache = null;
-    var _skillsSearchTimer = null;
 
     // ==================== 视图切换 ====================
 
-    function showLlmListView() { $llmListView.show(); $llmFormView.hide(); }
+    function showLlmListView() { $llmFormView.hide(); $llmListView.addClass('slide-back').show(); setTimeout(function(){ $llmListView.removeClass('slide-back'); }, 260); }
     function showLlmFormView(title) { $llmFormTitle.text(title || '添加模型'); $llmListView.hide(); $llmFormView.show(); }
-    function showMcpListView() { $mcpListView.show(); $mcpFormView.hide(); }
+    function showMcpListView() { $mcpFormView.hide(); $mcpListView.addClass('slide-back').show(); setTimeout(function(){ $mcpListView.removeClass('slide-back'); }, 260); }
     function showMcpFormView(title) { $mcpFormTitle.text(title || '添加服务器'); $mcpListView.hide(); $mcpFormView.show(); }
-    function showWebapiListView() { $webapiListView.show(); $webapiFormView.hide(); }
+    function showWebapiListView() { $webapiFormView.hide(); $webapiListView.addClass('slide-back').show(); setTimeout(function(){ $webapiListView.removeClass('slide-back'); }, 260); }
     function showWebapiFormView(title) { $webapiFormTitle.text(title || '添加服务器'); $webapiListView.hide(); $webapiFormView.show(); }
 
     function setMcpType(type) {
@@ -159,8 +149,10 @@
         showMcpListView();
         showWebapiListView();
         $llmCheckResult.hide();
-        $skillsSearchInput.val('');
-        $skillsSearchClear.hide();
+        if ($('#skillsSearchInput').length) {
+            $('#skillsSearchInput').val('');
+            $('#skillsSearchClear').hide();
+        }
     }
 
     $settingsBtn.on('click', openSettings);
@@ -181,8 +173,7 @@
             loadLlmList();
         } else if (targetTab === 'skills') {
             $('#settingsTabSkills').addClass('active');
-            _installedSkillsCache = null;
-            loadSkillsList(null);
+            if (window._skillModule) window._skillModule.resetAndLoad();
         } else if (targetTab === 'mcp') {
             $('#settingsTabMcp').addClass('active');
             loadMcpList();
@@ -197,7 +188,7 @@
         if (!$active.length) return;
         var targetTab = $active.attr('data-tab');
         if (targetTab === 'llm') loadLlmList();
-        else if (targetTab === 'skills') { _installedSkillsCache = null; loadSkillsList(null); }
+        else if (targetTab === 'skills') { if (window._skillModule) window._skillModule.resetAndLoad(); }
         else if (targetTab === 'mcp') loadMcpList();
         else if (targetTab === 'webapi') loadWebapiList();
     }
@@ -349,6 +340,7 @@
     // LLM 按钮事件
     $('#llmAddBtn').on('click', function () { llmEditModel = null; resetLlmForm(); showLlmFormView('添加模型'); });
     $('#llmCancelBtn').on('click', function () { showLlmListView(); resetLlmForm(); });
+    $('#llmBackBtn').on('click', function () { showLlmListView(); resetLlmForm(); });
 
     $llmSaveBtn.on('click', function () {
         var bodyObj = buildLlmBodyObj();
@@ -613,6 +605,7 @@
     // MCP 按钮事件
     $('#mcpAddBtn').on('click', function () { resetMcpForm(); showMcpFormView('添加服务器'); });
     $('#mcpCancelBtn').on('click', function () { showMcpListView(); resetMcpForm(); });
+    $('#mcpBackBtn').on('click', function () { showMcpListView(); resetMcpForm(); });
 
     $mcpTypeBtns.on('click', function () { setMcpType($(this).attr('data-type')); });
 
@@ -811,6 +804,7 @@
     // OpenApi 按钮事件
     $('#webapiAddBtn').on('click', function () { resetWebapiForm(); showWebapiFormView('添加服务器'); });
     $('#webapiCancelBtn').on('click', function () { showWebapiListView(); resetWebapiForm(); });
+    $('#webapiBackBtn').on('click', function () { showWebapiListView(); resetWebapiForm(); });
 
     // OpenApi 测试连接
     $('#webapiTestBtn').on('click', function () {
@@ -884,109 +878,6 @@
             })
             .fail(function () { alert('网络错误'); })
             .always(function () { $btn.prop('disabled', false); });
-    });
-
-    // ==================== Skills 管理 ====================
-
-    function getInstalledSkills(callback) {
-        if (typeof commandList !== 'undefined' && commandList.length > 0) {
-            if (!_installedSkillsCache) {
-                _installedSkillsCache = {};
-                commandList.forEach(function (item) { if (item.type === 'skill') _installedSkillsCache[item.name] = true; });
-            }
-            callback(_installedSkillsCache);
-            return;
-        }
-        $.get('/web/chat/hints', function (resp) {
-            _installedSkillsCache = {};
-            (resp.data || []).forEach(function (item) { if (item.type === 'skill') _installedSkillsCache[item.name] = true; });
-            callback(_installedSkillsCache);
-        }).fail(function () { _installedSkillsCache = {}; callback(_installedSkillsCache); });
-    }
-
-    function loadSkillsList(query) {
-        $skillsStatus.show();
-        $skillsLoading.css('display', 'flex');
-        $skillsError.hide();
-        $skillsList.html('');
-
-        var url = query ? 'https://www.skills.sh/api/search?q=' + encodeURIComponent(query) : 'https://www.skills.sh/api/search';
-
-        $.ajax({ url: url, method: 'GET', timeout: 15000, dataType: 'json' })
-            .done(function (resp) {
-                var skills = Array.isArray(resp) ? resp : (resp.data || []);
-                getInstalledSkills(function (installedMap) {
-                    renderSkillsList(skills, installedMap);
-                    $skillsStatus.hide();
-                });
-            })
-            .fail(function (jqXHR, textStatus) {
-                $skillsLoading.hide();
-                var msg = textStatus === 'timeout' ? '请求超时，请检查网络连接' : '网络错误，无法连接 skills.sh';
-                $skillsError.text(msg).show();
-            });
-    }
-
-    function renderSkillsList(skills, installedMap) {
-        if (!skills || skills.length === 0) {
-            $skillsList.html('<div class="skill-empty-state"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><div style="font-size:13px;margin-top:12px;">暂无结果</div></div>');
-            return;
-        }
-
-        var html = '';
-        skills.forEach(function (skill) {
-            var name = skill.name || '';
-            var desc = skill.description || '';
-            var installUrl = skill.installUrl || skill.url || '';
-            var installs = skill.installs || 0;
-            var source = skill.source || '';
-            var isInstalled = !!installedMap[name];
-            var iconText = name ? name.substring(0, 2).toUpperCase() : 'SK';
-            var shortDesc = desc && desc.length > 60 ? desc.substring(0, 60) + '...' : desc;
-
-            html += '<div class="skill-item"><div class="skill-item-icon">' + escapeHtml(iconText) + '</div>'
-                + '<div class="skill-item-info"><div class="skill-item-name" title="' + escapeAttr(name) + '">' + escapeHtml(name) + '</div>'
-                + (shortDesc ? '<div class="skill-item-desc" title="' + escapeAttr(desc) + '">' + escapeHtml(shortDesc) + '</div>' : '')
-                + '<div class="skill-item-meta">'
-                + (installs > 0 ? '<span>' + (installs >= 1000 ? (installs / 1000).toFixed(1) + 'k' : installs) + ' 安装</span>' : '')
-                + (source ? '<span>' + escapeHtml(source.split('/').pop()) + '</span>' : '')
-                + '</div></div><div class="skill-item-actions">'
-                + (isInstalled ? '<button class="skill-install-btn installed" disabled>已安装</button>' : '<button class="skill-install-btn" data-install-url="' + escapeAttr(installUrl) + '">安装</button>')
-                + '</div></div>';
-        });
-        $skillsList.html(html);
-    }
-
-    // Skills 事件委托（安装按钮）
-    $skillsList.on('click', '.skill-install-btn:not(.installed)', function () {
-        var $btn = $(this);
-        var installUrl = $btn.attr('data-install-url');
-        $btn.addClass('installing').text('安装中...').prop('disabled', true);
-
-        $.post('/web/chat/input', { text: '/skills add ' + installUrl })
-            .done(function () {
-                $btn.removeClass('installing').addClass('installed').text('已安装').prop('disabled', true);
-                _installedSkillsCache = null;
-                if (typeof loadCommands === 'function') loadCommands();
-            })
-            .fail(function () {
-                $btn.removeClass('installing').text('安装').prop('disabled', false);
-                alert('安装失败');
-            });
-    });
-
-    // Skills 搜索（防抖 400ms）
-    $skillsSearchInput.on('input', function () {
-        var val = $(this).val().trim();
-        $skillsSearchClear.toggle(val.length > 0);
-        clearTimeout(_skillsSearchTimer);
-        _skillsSearchTimer = setTimeout(function () { loadSkillsList(val || null); }, 400);
-    });
-
-    $skillsSearchClear.on('click', function () {
-        $skillsSearchInput.val('').focus();
-        $(this).hide();
-        loadSkillsList(null);
     });
 
 })();

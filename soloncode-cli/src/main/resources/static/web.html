@@ -329,7 +329,12 @@
                     <div class="settings-view settings-view-form" id="llmFormView" style="display:none">
                         <div class="settings-section">
                             <div class="settings-section-header">
-                                <span class="settings-section-title" id="llmFormTitle">添加模型</span>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <button class="settings-back-btn" id="llmBackBtn" title="返回">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                    </button>
+                                    <span class="settings-section-title" id="llmFormTitle">添加模型</span>
+                                </div>
                             </div>
                             <div class="llm-add-form" id="llmAddForm">
                                 <div class="form-group">
@@ -447,7 +452,12 @@
                     <div class="settings-view settings-view-form" id="mcpFormView" style="display:none">
                         <div class="settings-section">
                             <div class="settings-section-header">
-                                <span class="settings-section-title" id="mcpFormTitle">添加服务器</span>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <button class="settings-back-btn" id="mcpBackBtn" title="返回">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                    </button>
+                                    <span class="settings-section-title" id="mcpFormTitle">添加服务器</span>
+                                </div>
                             </div>
                             <div class="mcp-add-form" id="mcpAddForm">
                                 <div class="form-group">
@@ -539,7 +549,12 @@
                     <div class="settings-view settings-view-form" id="webapiFormView" style="display:none">
                         <div class="settings-section">
                             <div class="settings-section-header">
-                                <span class="settings-section-title" id="webapiFormTitle">添加服务器</span>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <button class="settings-back-btn" id="webapiBackBtn" title="返回">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                    </button>
+                                    <span class="settings-section-title" id="webapiFormTitle">添加服务器</span>
+                                </div>
                             </div>
                             <div class="webapi-add-form" id="webapiAddForm">
                                 <div class="form-group">
@@ -624,5 +639,6 @@
     <script src="js/app-filer.js"></script>
     <script src="js/app-gitdiff.js"></script>
     <script src="js/app-settings.js"></script>
+    <script src="js/app-settings-skill.js"></script>
 </body>
 </html>

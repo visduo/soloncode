@@ -16,7 +16,7 @@
 .settings-tabs-footer { margin-top: auto; padding: 12px 20px 4px; }
 .settings-version { font-size: 11px; color: var(--text-secondary); opacity: 0.7; }
 
-.settings-body { flex: 1; overflow-y: auto; padding: 28px 28px; }
+.settings-body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 28px 28px; }
 .settings-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .settings-section-title { font-size: 20px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; }
 .settings-add-btn { background: none; border: 1px dashed var(--border-color); border-radius: 6px; padding: 4px 12px; font-size: 12px; color: var(--accent); cursor: pointer; transition: all 0.15s; }
@@ -161,3 +161,19 @@
 .skill-install-btn.installed:hover { background: transparent; color: #22c55e; }
 .skill-install-btn.installing { opacity: 0.6; cursor: wait; }
 .skill-empty-state { text-align: center; padding: 40px 20px; color: var(--text-secondary); }
+
+/* ===== 二级面板过渡动画 ===== */
+@keyframes settings-slide-in-right {
+    from { opacity: 0; transform: translateX(40px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes settings-slide-in-left {
+    from { opacity: 0; transform: translateX(-20px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+.settings-view-form { animation: settings-slide-in-right 0.25s ease-out; }
+.settings-view-list.slide-back { animation: settings-slide-in-left 0.25s ease-out; }
+
+/* 返回按钮 */
+.settings-back-btn { background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px 6px; border-radius: 6px; display: inline-flex; align-items: center; transition: all 0.15s; }
+.settings-back-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
