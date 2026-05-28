@@ -19,9 +19,6 @@ import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.annotation.*;
-import org.noear.solon.codecli.provider.ModelProvider;
-import org.noear.solon.codecli.provider.ModelProviderFactory;
-import org.noear.solon.codecli.provider.ModelInfo;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Result;
 import org.noear.solon.core.util.Assert;
@@ -62,49 +59,16 @@ public class WebSettingsController {
     /** AI Agent 执行引擎，提供模型配置管理能力 */
     private final HarnessEngine engine;
 
-    /** 模型 Provider 工厂，用于从远程 API 拉取可用模型列表 */
-    private final ModelProviderFactory modelProviderFactory;
-
     /**
      * 构造函数：初始化核心依赖。
      *
-     * @param engine              AI Agent 执行引擎
-     * @param modelProviderFactory 模型 Provider 工厂
+     * @param engine AI Agent 执行引擎
      */
-    public WebSettingsController(HarnessEngine engine, ModelProviderFactory modelProviderFactory) {
+    public WebSettingsController(HarnessEngine engine) {
         this.engine = engine;
-        this.modelProviderFactory = modelProviderFactory;
     }
 
     // ==================== 设置：LLM 模型管理 ====================
-
-    /**
-     * 从远程 API 拉取可用模型列表
-     */
-    @Get
-    @Mapping("/web/settings/llm/models/fetch")
-    public Result<List<Map>> llmModelsFetch(
-            @Param("apiUrl") String apiUrl,
-            @Param("apiKey") String apiKey,
-            @Param("provider") String provider) throws Exception {
-        if (Assert.isEmpty(apiUrl)) {
-            return Result.failure("apiUrl is required");
-        }
-
-        ModelProvider modelProvider = modelProviderFactory.getProvider(provider);
-        String baseUrl = modelProvider.deriveBaseUrl(apiUrl);
-        List<ModelInfo> models = modelProvider.fetchModels(baseUrl, null, apiKey);
-
-        List<Map> list = new ArrayList<>();
-        for (ModelInfo mi : models) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("id", mi.getId());
-            item.put("object", mi.getObject());
-            item.put("ownedBy", mi.getOwnedBy());
-            list.add(item);
-        }
-        return Result.succeed(list);
-    }
 
     /**
      * 动态添加模型配置

@@ -21,9 +21,7 @@
     var llmAddForm = document.getElementById('llmAddForm');
     var llmCancelBtn = document.getElementById('llmCancelBtn');
     var llmSaveBtn = document.getElementById('llmSaveBtn');
-    var llmFetchBtn = document.getElementById('llmFetchBtn');
     var llmModelList = document.getElementById('llmModelList');
-    var llmFetchDropdown = document.getElementById('llmFetchDropdown');
     var llmTestBtn = document.getElementById('llmTestBtn');
     var llmCheckResult = document.getElementById('llmCheckResult');
     var llmExportBtn = document.getElementById('llmExportBtn');
@@ -32,6 +30,15 @@
     var llmImportCancelBtn = document.getElementById('llmImportCancelBtn');
     var llmImportConfirmBtn = document.getElementById('llmImportConfirmBtn');
     var llmApiKeyToggle = document.getElementById('llmApiKeyToggle');
+    var llmListView = document.getElementById('llmListView');
+    var llmFormView = document.getElementById('llmFormView');
+    var llmFormTitle = document.getElementById('llmFormTitle');
+    var mcpListView = document.getElementById('mcpListView');
+    var mcpFormView = document.getElementById('mcpFormView');
+    var mcpFormTitle = document.getElementById('mcpFormTitle');
+    var webapiListView = document.getElementById('webapiListView');
+    var webapiFormView = document.getElementById('webapiFormView');
+    var webapiFormTitle = document.getElementById('webapiFormTitle');
 
     // LLM 编辑模式状态
     var llmEditModel = null;
@@ -46,6 +53,35 @@
     var mcpServerList = document.getElementById('mcpServerList');
     var mcpTypeBtns = document.querySelectorAll('.mcp-type-btn');
 
+    // ==================== 视图切换 ====================
+    function showLlmListView() {
+        llmListView.style.display = '';
+        llmFormView.style.display = 'none';
+    }
+    function showLlmFormView(title) {
+        llmFormTitle.textContent = title || '添加模型';
+        llmListView.style.display = 'none';
+        llmFormView.style.display = '';
+    }
+    function showMcpListView() {
+        mcpListView.style.display = '';
+        mcpFormView.style.display = 'none';
+    }
+    function showMcpFormView(title) {
+        mcpFormTitle.textContent = title || '添加服务器';
+        mcpListView.style.display = 'none';
+        mcpFormView.style.display = '';
+    }
+    function showWebapiListView() {
+        webapiListView.style.display = '';
+        webapiFormView.style.display = 'none';
+    }
+    function showWebapiFormView(title) {
+        webapiFormTitle.textContent = title || '添加服务器';
+        webapiListView.style.display = 'none';
+        webapiFormView.style.display = '';
+    }
+
     // ==================== 面板开关 ====================
 
     function openSettings() {
@@ -56,11 +92,14 @@
 
     function closeSettings() {
         overlay.style.display = 'none';
-        // 重置表单状态
-        llmAddForm.style.display = 'none';
-        mcpAddForm.style.display = 'none';
-        llmFetchDropdown.style.display = 'none';
+        // 重置到列表视图
+        showLlmListView();
+        showMcpListView();
+        showWebapiListView();
         if (llmCheckResult) llmCheckResult.style.display = 'none';
+        // 重置技能搜索状态
+        if (skillsSearchInput) skillsSearchInput.value = '';
+        if (skillsSearchClear) skillsSearchClear.style.display = 'none';
     }
 
     settingsBtn.addEventListener('click', openSettings);
@@ -214,7 +253,7 @@
         templateBtns.forEach(function (btn) {
             btn.addEventListener('click', function () {
                 resetLlmForm();
-                llmAddForm.style.display = 'block';
+                showLlmFormView('添加模型');
                 document.getElementById('llmApiUrl').value = btn.getAttribute('data-api-url');
                 document.getElementById('llmProvider').value = btn.getAttribute('data-provider');
                 document.getElementById('llmModelName').focus();
@@ -273,7 +312,6 @@
         document.getElementById('llmModelName').value = '';
         document.getElementById('llmAlias').value = '';
         document.getElementById('llmTimeout').value = '';
-        llmFetchDropdown.style.display = 'none';
         if (llmCheckResult) llmCheckResult.style.display = 'none';
     }
 
@@ -321,7 +359,7 @@
         if (!item) return;
 
         llmEditModel = modelName;
-        llmAddForm.style.display = 'block';
+        showLlmFormView('编辑模型');
         llmSaveBtn.textContent = '更新';
 
         fillLlmForm(item);
@@ -333,7 +371,7 @@
         if (!item) return;
 
         llmEditModel = null;
-        llmAddForm.style.display = 'block';
+        showLlmFormView('添加模型');
         llmSaveBtn.textContent = '保存';
 
         fillLlmForm(item);
@@ -368,86 +406,15 @@
 
     // 添加模型按钮
     llmAddBtn.addEventListener('click', function () {
-        llmAddForm.style.display = llmAddForm.style.display === 'none' ? 'block' : 'none';
-        if (llmAddForm.style.display === 'block') {
-            resetLlmForm();
-        }
+        llmEditModel = null;
+        resetLlmForm();
+        showLlmFormView('添加模型');
     });
 
     llmCancelBtn.addEventListener('click', function () {
-        llmAddForm.style.display = 'none';
-        llmFetchDropdown.style.display = 'none';
-        if (llmCheckResult) llmCheckResult.style.display = 'none';
+        showLlmListView();
         resetLlmForm();
     });
-
-    // 拉取远程模型
-    llmFetchBtn.addEventListener('click', function () {
-        var apiUrl = document.getElementById('llmApiUrl').value.trim();
-        var apiKey = document.getElementById('llmApiKey').value.trim();
-        var provider = document.getElementById('llmProvider').value;
-
-        if (!apiUrl) {
-            alert('请先填写 API 地址');
-            return;
-        }
-
-        llmFetchBtn.disabled = true;
-        llmFetchBtn.textContent = '拉取中...';
-
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/web/settings/llm/models/fetch?apiUrl=' + encodeURIComponent(apiUrl)
-            + '&apiKey=' + encodeURIComponent(apiKey)
-            + '&provider=' + encodeURIComponent(provider), true);
-        xhr.onload = function () {
-            llmFetchBtn.disabled = false;
-            llmFetchBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> 拉取';
-
-            if (xhr.status === 200) {
-                try {
-                    var resp = JSON.parse(xhr.responseText);
-                    if (resp.code === 200 && resp.data && resp.data.length > 0) {
-                        renderFetchDropdown(resp.data);
-                    } else {
-                        alert('未找到可用模型');
-                    }
-                } catch (e) {
-                    alert('解析响应失败');
-                }
-            } else {
-                alert('拉取失败: ' + xhr.status);
-            }
-        };
-        xhr.onerror = function () {
-            llmFetchBtn.disabled = false;
-            llmFetchBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> 拉取';
-            alert('网络错误');
-        };
-        xhr.send();
-    });
-
-    function renderFetchDropdown(models) {
-        var html = '';
-        models.forEach(function (m) {
-            var id = m.id || '';
-            var owner = m.ownedBy || '';
-            html += '<div class="llm-fetch-item" data-id="' + escapeAttr(id) + '">';
-            html += escapeHtml(id);
-            if (owner) html += ' <span style="color:var(--text-secondary);font-size:11px;">(' + escapeHtml(owner) + ')</span>';
-            html += '</div>';
-        });
-        llmFetchDropdown.innerHTML = html;
-        llmFetchDropdown.style.display = 'block';
-
-        // 点击选择
-        var items = llmFetchDropdown.querySelectorAll('.llm-fetch-item');
-        items.forEach(function (item) {
-            item.addEventListener('click', function () {
-                document.getElementById('llmModelName').value = item.getAttribute('data-id');
-                llmFetchDropdown.style.display = 'none';
-            });
-        });
-    }
 
     // 保存模型（支持添加和更新）
     llmSaveBtn.addEventListener('click', function () {
@@ -477,7 +444,7 @@
                             modelsLoaded = false;
                         }
                         loadLlmList();
-                        llmAddForm.style.display = 'none';
+                        showLlmListView();
                         resetLlmForm();
                     } else {
                         alert(actionText + '失败: ' + (resp.message || '未知错误'));
@@ -782,7 +749,7 @@
         templateBtns.forEach(function (btn) {
             btn.addEventListener('click', function () {
                 resetMcpForm();
-                mcpAddForm.style.display = 'block';
+                showMcpFormView('添加服务器');
                 mcpTypeBtns.forEach(function (b) { b.classList.remove('active'); });
                 document.querySelector('.mcp-type-btn[data-type="stdio"]').classList.add('active');
                 document.getElementById('mcpConfigStdio').style.display = 'block';
@@ -967,16 +934,13 @@
 
     // 添加 MCP 服务器按钮
     mcpAddBtn.addEventListener('click', function () {
-        mcpAddForm.style.display = mcpAddForm.style.display === 'none' ? 'block' : 'none';
-        if (mcpAddForm.style.display === 'block') {
-            resetMcpForm();
-        }
+        resetMcpForm();
+        showMcpFormView('添加服务器');
     });
 
     mcpCancelBtn.addEventListener('click', function () {
-        mcpAddForm.style.display = 'none';
+        showMcpListView();
         resetMcpForm();
-        mcpCheckResult.style.display = 'none';
     });
 
     // 类型切换
@@ -1011,7 +975,7 @@
                     var resp = JSON.parse(xhr.responseText);
                     if (resp.code === 200) {
                         loadMcpList();
-                        mcpAddForm.style.display = 'none';
+                        showMcpListView();
                         resetMcpForm();
                     } else {
                         alert(actionText + '失败: ' + (resp.message || '未知错误'));
@@ -1037,7 +1001,7 @@
         if (!server) return;
 
         mcpEditName = name;
-        mcpAddForm.style.display = 'block';
+        showMcpFormView('编辑服务器');
         mcpSaveBtn.textContent = '更新';
 
         document.getElementById('mcpName').value = server.name;
@@ -1051,7 +1015,7 @@
         if (!server) return;
 
         mcpEditName = null; // 走添加路径
-        mcpAddForm.style.display = 'block';
+        showMcpFormView('添加服务器');
         mcpSaveBtn.textContent = '保存';
 
         document.getElementById('mcpName').value = server.name + '-copy';
@@ -1430,7 +1394,7 @@
         if (!server) return;
 
         webapiEditName = name;
-        webapiAddForm.style.display = 'block';
+        showWebapiFormView('编辑服务器');
         webapiSaveBtn.textContent = '更新';
 
         document.getElementById('webapiName').value = server.name;
@@ -1442,14 +1406,12 @@
     // ==================== OpenApi 按钮事件 ====================
 
     webapiAddBtn.addEventListener('click', function () {
-        webapiAddForm.style.display = webapiAddForm.style.display === 'none' ? 'block' : 'none';
-        if (webapiAddForm.style.display === 'block') {
-            resetWebapiForm();
-        }
+        resetWebapiForm();
+        showWebapiFormView('添加服务器');
     });
 
     webapiCancelBtn.addEventListener('click', function () {
-        webapiAddForm.style.display = 'none';
+        showWebapiListView();
         resetWebapiForm();
     });
 
@@ -1540,7 +1502,7 @@
                     var resp = JSON.parse(xhr.responseText);
                     if (resp.code === 200) {
                         loadWebapiList();
-                        webapiAddForm.style.display = 'none';
+                        showWebapiListView();
                         resetWebapiForm();
                     } else {
                         alert(actionText + '失败: ' + (resp.message || '未知错误'));
@@ -1671,7 +1633,230 @@
         xhr.send(text);
     });
 
-    // ==================== Tab 切换（补充 openapi） ====================
+    // ==================== Skills 管理 ====================
+
+    var skillsSearchInput = document.getElementById('skillsSearchInput');
+    var skillsSearchClear = document.getElementById('skillsSearchClear');
+    var skillsList = document.getElementById('skillsList');
+    var skillsLoading = document.getElementById('skillsLoading');
+    var skillsError = document.getElementById('skillsError');
+    var skillsStatus = document.getElementById('skillsStatus');
+
+    // 已安装技能名称集合（从 /web/chat/hints 全局缓存中提取）
+    var _installedSkillsCache = null;
+
+    function getInstalledSkills(callback) {
+        // 优先从 app-history.js 的全局 commandList 缓存中读取
+        if (typeof commandList !== 'undefined' && commandList.length > 0) {
+            if (!_installedSkillsCache) {
+                _installedSkillsCache = {};
+                commandList.forEach(function (item) {
+                    if (item.type === 'skill') {
+                        _installedSkillsCache[item.name] = true;
+                    }
+                });
+            }
+            callback(_installedSkillsCache);
+            return;
+        }
+        // 兜底：直接请求
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/web/chat/hints', true);
+        xhr.onload = function () {
+            _installedSkillsCache = {};
+            if (xhr.status === 200) {
+                try {
+                    var resp = JSON.parse(xhr.responseText);
+                    var data = resp.data || [];
+                    data.forEach(function (item) {
+                        if (item.type === 'skill') {
+                            _installedSkillsCache[item.name] = true;
+                        }
+                    });
+                } catch (e) {}
+            }
+            callback(_installedSkillsCache);
+        };
+        xhr.onerror = function () {
+            _installedSkillsCache = {};
+            callback(_installedSkillsCache);
+        };
+        xhr.send();
+    }
+
+    var _skillsSearchTimer = null;
+
+    function loadSkillsList(query) {
+        // 显示加载状态
+        skillsStatus.style.display = 'block';
+        skillsLoading.style.display = 'flex';
+        skillsError.style.display = 'none';
+        skillsList.innerHTML = '';
+
+        var url = query
+            ? 'https://www.skills.sh/api/search?q=' + encodeURIComponent(query)
+            : 'https://www.skills.sh/api/search';
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url, true);
+        xhr.timeout = 15000;
+        xhr.onload = function () {
+            skillsLoading.style.display = 'none';
+            if (xhr.status === 200) {
+                try {
+                    var resp = JSON.parse(xhr.responseText);
+                    var skills = Array.isArray(resp) ? resp : (resp.data || []);
+                    getInstalledSkills(function (installedMap) {
+                        renderSkillsList(skills, installedMap);
+                        skillsStatus.style.display = 'none';
+                    });
+                } catch (e) {
+                    skillsError.textContent = '解析响应失败';
+                    skillsError.style.display = 'block';
+                }
+            } else {
+                skillsError.textContent = '请求失败: HTTP ' + xhr.status;
+                skillsError.style.display = 'block';
+            }
+        };
+        xhr.ontimeout = function () {
+            skillsLoading.style.display = 'none';
+            skillsError.textContent = '请求超时，请检查网络连接';
+            skillsError.style.display = 'block';
+        };
+        xhr.onerror = function () {
+            skillsLoading.style.display = 'none';
+            skillsError.textContent = '网络错误，无法连接 skills.sh';
+            skillsError.style.display = 'block';
+        };
+        xhr.send();
+    }
+
+    function renderSkillsList(skills, installedMap) {
+        var html = '';
+        if (!skills || skills.length === 0) {
+            html = '<div class="skill-empty-state">';
+            html += '  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+            html += '  <div style="font-size:13px;margin-top:12px;">暂无结果</div>';
+            html += '</div>';
+            skillsList.innerHTML = html;
+            return;
+        }
+
+        skills.forEach(function (skill) {
+            var name = skill.name || '';
+            var desc = skill.description || '';
+            var installUrl = skill.installUrl || skill.url || '';
+            var installs = skill.installs || 0;
+            var source = skill.source || '';
+
+            // 检测是否已安装（按 name 匹配）
+            var isInstalled = !!installedMap[name];
+
+            // 取名字首字母做图标
+            var iconText = name ? name.substring(0, 2).toUpperCase() : 'SK';
+
+            // 截断描述
+            var shortDesc = desc;
+            if (shortDesc && shortDesc.length > 60) {
+                shortDesc = shortDesc.substring(0, 60) + '...';
+            }
+
+            html += '<div class="skill-item">';
+            html += '  <div class="skill-item-icon">' + escapeHtml(iconText) + '</div>';
+            html += '  <div class="skill-item-info">';
+            html += '    <div class="skill-item-name" title="' + escapeAttr(name) + '">' + escapeHtml(name) + '</div>';
+            if (shortDesc) {
+                html += '    <div class="skill-item-desc" title="' + escapeAttr(desc) + '">' + escapeHtml(shortDesc) + '</div>';
+            }
+            html += '    <div class="skill-item-meta">';
+            if (installs > 0) {
+                html += '      <span>' + (installs >= 1000 ? (installs / 1000).toFixed(1) + 'k' : installs) + ' 安装</span>';
+            }
+            if (source) {
+                html += '      <span>' + escapeHtml(source.split('/').pop()) + '</span>';
+            }
+            html += '    </div>';
+            html += '  </div>';
+            html += '  <div class="skill-item-actions">';
+            if (isInstalled) {
+                html += '    <button class="skill-install-btn installed" disabled>已安装</button>';
+            } else {
+                html += '    <button class="skill-install-btn" data-install-url="' + escapeAttr(installUrl) + '" data-skill-name="' + escapeAttr(name) + '">安装</button>';
+            }
+            html += '  </div>';
+            html += '</div>';
+        });
+
+        skillsList.innerHTML = html;
+
+        // 绑定安装按钮事件
+        var installBtns = skillsList.querySelectorAll('.skill-install-btn:not(.installed)');
+        installBtns.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var installUrl = btn.getAttribute('data-install-url');
+                var skillName = btn.getAttribute('data-skill-name');
+                installSkill(btn, installUrl, skillName);
+            });
+        });
+    }
+
+    function installSkill(btn, installUrl, skillName) {
+        btn.classList.add('installing');
+        btn.textContent = '安装中...';
+        btn.disabled = true;
+
+        // 通过 /web/chat/input 接口发送安装命令
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/web/chat/input', true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.onload = function () {
+            if (xhr.status === 200) {
+                btn.classList.remove('installing');
+                btn.classList.add('installed');
+                btn.textContent = '已安装';
+                btn.disabled = true;
+                // 清除已安装缓存，下次刷新重新检测
+                _installedSkillsCache = null;
+                if (typeof loadCommands === 'function') loadCommands();
+            } else {
+                btn.classList.remove('installing');
+                btn.textContent = '安装';
+                btn.disabled = false;
+                alert('安装失败: HTTP ' + xhr.status);
+            }
+        };
+        xhr.onerror = function () {
+            btn.classList.remove('installing');
+            btn.textContent = '安装';
+            btn.disabled = false;
+            alert('网络错误');
+        };
+        xhr.send('text=' + encodeURIComponent('/skills add ' + installUrl));
+    }
+
+    // 搜索输入事件（防抖 400ms）
+    if (skillsSearchInput) {
+        skillsSearchInput.addEventListener('input', function () {
+            var val = skillsSearchInput.value.trim();
+            skillsSearchClear.style.display = val ? 'block' : 'none';
+            clearTimeout(_skillsSearchTimer);
+            _skillsSearchTimer = setTimeout(function () {
+                loadSkillsList(val || null);
+            }, 400);
+        });
+    }
+
+    if (skillsSearchClear) {
+        skillsSearchClear.addEventListener('click', function () {
+            skillsSearchInput.value = '';
+            skillsSearchClear.style.display = 'none';
+            loadSkillsList(null);
+            skillsSearchInput.focus();
+        });
+    }
+
+    // ==================== Tab 切换（补充 skills + openapi） ====================
 
     // 重新绑定 tab 切换以支持 openapi
     tabs.forEach(function (tab) {
@@ -1692,6 +1877,10 @@
         if (targetTab === 'llm') {
             document.getElementById('settingsTabLlm').classList.add('active');
             loadLlmList();
+        } else if (targetTab === 'skills') {
+            document.getElementById('settingsTabSkills').classList.add('active');
+            _installedSkillsCache = null;
+            loadSkillsList(null);
         } else if (targetTab === 'mcp') {
             document.getElementById('settingsTabMcp').classList.add('active');
             loadMcpList();
@@ -1709,6 +1898,9 @@
             var targetTab = activeTab.getAttribute('data-tab');
             if (targetTab === 'llm') {
                 loadLlmList();
+            } else if (targetTab === 'skills') {
+                _installedSkillsCache = null;
+                loadSkillsList(null);
             } else if (targetTab === 'mcp') {
                 loadMcpList();
             } else if (targetTab === 'webapi') {
