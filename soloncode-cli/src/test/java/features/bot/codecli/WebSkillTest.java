@@ -3,13 +3,11 @@ package features.bot.codecli;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.noear.solon.codecli.market.ClawhubMarket;
+import org.noear.solon.codecli.portal.web.market.ClawhubMarket;
 import org.noear.solon.codecli.portal.web.WebSettingsController;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.ContextEmpty;
 import org.noear.solon.core.handle.Result;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * WebSettingsController 单元测试

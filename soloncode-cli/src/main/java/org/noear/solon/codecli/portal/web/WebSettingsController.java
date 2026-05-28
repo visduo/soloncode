@@ -20,8 +20,9 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.annotation.*;
-import org.noear.solon.codecli.market.ClawhubMarket;
-import org.noear.solon.codecli.market.Market;
+import org.noear.solon.codecli.portal.web.market.ClawhubMarket;
+import org.noear.solon.codecli.portal.web.market.Market;
+import org.noear.solon.codecli.portal.desktop.provider.ModelProviderFactory;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Result;
 import org.noear.solon.core.util.Assert;
@@ -64,22 +65,30 @@ public class WebSettingsController {
     private final Market market;
 
     /**
+     * 模型供应商工厂（用于从远程 API 获取可用模型列表）
+     */
+    private final ModelProviderFactory modelProviderFactory;
+
+    /**
      * 构造函数：初始化核心依赖。
      *
-     * @param engine AI Agent 执行引擎
+     * @param engine              AI Agent 执行引擎
+     * @param modelProviderFactory 模型供应商工厂
      */
-    public WebSettingsController(HarnessEngine engine) {
-        this(engine, new ClawhubMarket());
+    public WebSettingsController(HarnessEngine engine, ModelProviderFactory modelProviderFactory) {
+        this(engine, modelProviderFactory, new ClawhubMarket());
     }
 
     /**
      * 构造函数：支持自定义 Market 适配器（用于测试或切换市场）。
      *
-     * @param engine AI Agent 执行引擎
-     * @param market 技能市场适配器
+     * @param engine               AI Agent 执行引擎
+     * @param modelProviderFactory  模型供应商工厂
+     * @param market               技能市场适配器
      */
-    public WebSettingsController(HarnessEngine engine, Market market) {
+    public WebSettingsController(HarnessEngine engine, ModelProviderFactory modelProviderFactory, Market market) {
         this.engine = engine;
+        this.modelProviderFactory = modelProviderFactory;
         this.market = market;
     }
 

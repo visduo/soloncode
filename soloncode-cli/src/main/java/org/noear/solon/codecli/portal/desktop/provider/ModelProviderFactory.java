@@ -1,8 +1,7 @@
-package org.noear.solon.codecli.provider;
+package org.noear.solon.codecli.portal.desktop.provider;
 
 import org.noear.solon.annotation.Component;
 import org.noear.solon.annotation.Init;
-import org.noear.solon.annotation.Inject;
 
 import java.util.HashMap;
 import java.util.Map;
