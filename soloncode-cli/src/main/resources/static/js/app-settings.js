@@ -251,7 +251,7 @@
             showLlmFormView('添加模型');
             $('#llmApiUrl').val($(this).attr('data-api-url'));
             $('#llmProvider').val($(this).attr('data-provider'));
-            $('#llmModelName').focus();
+            $('#llmModel').focus();
         })
         .on('click', '.llm-action-btn.set-default', function () {
             llmSetDefaultModel($(this).attr('data-model'));
@@ -272,7 +272,7 @@
     function resetLlmForm() {
         llmEditModel = null;
         $llmSaveBtn.text('保存');
-        $('#llmProvider, #llmApiUrl, #llmApiKey, #llmModelName, #llmAlias, #llmTimeout, #llmDefaultOptions').val('');
+        $('#llmProvider, #llmApiUrl, #llmApiKey, #llmModel, #llmName, #llmTimeout, #llmDefaultOptions').val('');
         $('#llmApiKey').attr('placeholder', 'sk-...');
         $llmCheckResult.hide();
     }
@@ -281,16 +281,16 @@
         if (item.provider) $('#llmProvider').val(item.provider);
         if (item.apiUrl) $('#llmApiUrl').val(item.apiUrl);
         $('#llmApiKey').val('').attr('placeholder', item.apiKey ? '已配置（留空保持不变）' : 'sk-...');
-        if (item.model) $('#llmModelName').val(item.model);
-        if (item.name && item.name !== item.model) $('#llmAlias').val(item.name);
+        if (item.model) $('#llmModel').val(item.model);
+        if (item.name && item.name !== item.model) $('#llmName').val(item.name);
         if (item.defaultOptions) $('#llmDefaultOptions').val(JSON.stringify(item.defaultOptions, null, 2));
     }
 
     function buildLlmBodyObj() {
         var apiUrl = $('#llmApiUrl').val().trim();
         var apiKey = $('#llmApiKey').val().trim();
-        var model = $('#llmModelName').val().trim();
-        var alias = $('#llmAlias').val().trim();
+        var model = $('#llmModel').val().trim();
+        var alias = $('#llmName').val().trim();
         var provider = $('#llmProvider').val();
         var timeout = $('#llmTimeout').val().trim();
         if (!apiUrl || !model) { alert('API 地址和模型名称为必填项'); return null; }
@@ -320,7 +320,7 @@
         showLlmFormView('添加模型');
         $llmSaveBtn.text('保存');
         fillLlmForm(item);
-        $('#llmAlias').val((item.name || item.model) + '-copy');
+        $('#llmName').val((item.name || item.model) + '-copy');
     }
 
     function llmSetDefaultModel(modelName) {
@@ -367,31 +367,8 @@
             .always(function () { $llmSaveBtn.prop('disabled', false); });
     });
 
-    // LLM 测试连接
+    // LLM 测试连接（通过 ChatModel hello 检测）
     $('#llmTestBtn').on('click', function () {
-        var apiUrl = $('#llmApiUrl').val().trim();
-        if (!apiUrl) { alert('请先填写 API 地址'); return; }
-        checkWithLoading({
-            $btn: $(this),
-            $result: $llmCheckResult,
-            cls: 'llm-check-result',
-            loadingText: '测试中...',
-            isList: true,
-            successMsg: '连接成功，发现 ' + '模型',
-            failMsg: '未找到可用模型',
-            ajax: {
-                url: '/web/settings/llm/models/fetch',
-                data: { apiUrl: apiUrl, apiKey: $('#llmApiKey').val().trim(), provider: $('#llmProvider').val() }
-            }
-        });
-    });
-    // 修正测试连接成功消息（需要动态显示模型数量）
-    // 重写上面的测试逻辑以正确处理列表
-    $llmModelList.off('click.llmtest'); // 不冲突，上面的 llm test 是绑在 #llmTestBtn 上
-    // 实际上需要覆盖上面的简单实现，改用完整回调：
-    // 先取消上面的绑定，下面重新绑定
-    // 由于已绑定了，这里用 .off 再 .on 覆盖
-    $('#llmTestBtn').off('click').on('click', function () {
         var apiUrl = $('#llmApiUrl').val().trim();
         if (!apiUrl) { alert('请先填写 API 地址'); return; }
         var $btn = $(this);
@@ -399,17 +376,17 @@
         $btn.prop('disabled', true).html('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> 测试中...');
         $llmCheckResult.hide();
 
-        $.ajax({ url: '/web/settings/llm/models/fetch', data: { apiUrl: apiUrl, apiKey: $('#llmApiKey').val().trim(), provider: $('#llmProvider').val() }, timeout: 15000, dataType: 'json' })
+        $.ajax({ url: '/web/settings/llm/models/fetch', type: 'POST', contentType: 'application/json', data: JSON.stringify({ apiUrl: apiUrl, apiKey: $('#llmApiKey').val().trim(), provider: $('#llmProvider').val(), model: ($('#llmModel').val() || '').trim() }), timeout: 30000, dataType: 'json' })
             .done(function (resp) {
-                var ok = resp.code === 200 && resp.data && resp.data.length > 0;
-                var msg = ok ? '连接成功，发现 ' + resp.data.length + ' 个可用模型' : '未找到可用模型';
+                var ok = resp.code === 200;
+                var msg = ok ? resp.data : ('连接失败: ' + (resp.description || '未知错误'));
                 var svg = ok
                     ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> '
                     : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> ';
                 $llmCheckResult.attr('class', 'llm-check-result ' + (ok ? 'success' : 'error')).html(svg + msg).css('display', 'flex');
             })
             .fail(function (jqXHR, textStatus) {
-                var msg = textStatus === 'timeout' ? '连接超时（15秒），请检查 API 地址是否正确' : '网络错误，请重试';
+                var msg = textStatus === 'timeout' ? '连接超时，请检查 API 地址是否正确' : '网络错误，请重试';
                 $llmCheckResult.attr('class', 'llm-check-result error').html(msg).css('display', 'flex');
             })
             .always(function () { $btn.prop('disabled', false).html(btnOriginal); });

@@ -17,12 +17,12 @@ package org.noear.solon.codecli.portal.web;
 
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.annotation.*;
 import org.noear.solon.codecli.portal.web.market.ClawhubMarket;
 import org.noear.solon.codecli.portal.web.market.Market;
-import org.noear.solon.codecli.portal.desktop.provider.ModelProviderFactory;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Result;
 import org.noear.solon.core.util.Assert;
@@ -85,6 +85,32 @@ public class WebSettingsController {
     }
 
     // ==================== 设置：LLM 模型管理 ====================
+
+    /**
+     * 测试模型连接 — 通过 ChatModel 发送 hello 提示语，验证连接可用性
+     */
+    @Post
+    @Mapping("/web/settings/llm/models/fetch")
+    public Result llmModelsFetch(String apiUrl, String apiKey, String provider, String model) {
+        if (Assert.isEmpty(apiUrl)) {
+            return Result.failure("apiUrl is required");
+        }
+
+        try {
+            ChatModel chatModel = ChatModel.of(apiUrl)
+                    .apiKey(apiKey)
+                    .provider(provider)
+                    .model(model)
+                    .build();
+
+            chatModel.prompt("hi").call();
+
+            return Result.succeed("连接成功：模型服务可用");
+        } catch (Exception e) {
+            LOG.warn("[Settings] LLM test connection failed: {}", e.getMessage());
+            return Result.failure("连接失败: " + e.getMessage());
+        }
+    }
 
     /**
      * 动态添加模型配置
