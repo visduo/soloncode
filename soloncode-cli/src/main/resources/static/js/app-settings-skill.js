@@ -96,16 +96,21 @@
             dataType: 'json'
         })
             .done(function (resp) {
-                // ClawHub API 返回格式：
-                // 热门列表: { items: [...], nextCursor: null }
-                // 搜索:     { results: [...] }
+                // 后端代理用 Result.succeed() 包装，实际格式: {code:1, data:{items:[...]}}
+                // 需要先解包 Result，再从内部取 items / results
+                var payload = resp;
+                if (resp && resp.code !== undefined && resp.data !== undefined) {
+                    // Solon Result 包装体，取 data 字段
+                    payload = resp.data;
+                }
+
                 var skills = [];
-                if (resp && resp.items && Array.isArray(resp.items)) {
-                    skills = resp.items;
-                } else if (resp && resp.results && Array.isArray(resp.results)) {
-                    skills = resp.results;
-                } else if (Array.isArray(resp)) {
-                    skills = resp;
+                if (payload && payload.items && Array.isArray(payload.items)) {
+                    skills = payload.items;
+                } else if (payload && payload.results && Array.isArray(payload.results)) {
+                    skills = payload.results;
+                } else if (Array.isArray(payload)) {
+                    skills = payload;
                 }
 
                 getInstalledSkills(function (installedMap) {
