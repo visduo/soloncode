@@ -219,22 +219,30 @@
                 var provider = item.provider || '';
                 var name = item.name || '';
                 var apiUrl = item.apiUrl || '';
-                var isActive = (modelName === selected);
+                var isActive = (name === selected);
                 var icon = providerIcons[provider] || modelName.substring(0, 2).toUpperCase();
                 var apiUrlShort = apiUrl ? apiUrl.replace(/^https?:\/\//, '').split('/')[0] : '';
 
-                html += '<div class="llm-model-item' + (isActive ? ' active' : '') + '" data-model="' + escapeAttr(modelName) + '">'
+                var displayName = name || modelName;
+                var metaLine = '';
+                if (apiUrlShort && modelName) {
+                    metaLine = escapeHtml(apiUrlShort) + ' / ' + escapeHtml(modelName);
+                } else if (apiUrlShort) {
+                    metaLine = escapeHtml(apiUrlShort);
+                } else if (modelName) {
+                    metaLine = escapeHtml(modelName);
+                }
+
+                html += '<div class="llm-model-item' + (isActive ? ' active' : '') + '" data-model="' + escapeAttr(name) + '">'
                     + '<div class="llm-model-icon">' + escapeHtml(icon) + '</div>'
-                    + '<div class="llm-model-info"><div class="llm-model-name">' + escapeHtml(modelName) + '</div><div class="llm-model-meta">'
-                    + (provider ? '<span class="llm-provider-tag">' + escapeHtml(provider) + '</span>' : '')
-                    + (name && name !== modelName ? '<span class="llm-alias-hint">' + escapeHtml(name) + '</span>' : '')
-                    + (apiUrlShort ? '<span class="llm-api-hint">' + escapeHtml(apiUrlShort) + '</span>' : '')
+                    + '<div class="llm-model-info"><div class="llm-model-name">' + escapeHtml(displayName) + '</div><div class="llm-model-meta">'
+                    + '<span class="llm-api-hint">' + metaLine + '</span>'
                     + '</div></div><div class="llm-model-actions">'
                     + (isActive ? '<span class="llm-active-badge">活跃</span>' : '')
-                    + (!isActive ? '<button class="llm-action-btn set-default" data-model="' + escapeAttr(modelName) + '" title="设为默认"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>' : '')
-                    + '<button class="llm-action-btn copy" data-model="' + escapeAttr(modelName) + '" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>'
-                    + '<button class="llm-action-btn edit" data-model="' + escapeAttr(modelName) + '" title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
-                    + (!isActive ? '<button class="llm-action-btn delete" data-model="' + escapeAttr(modelName) + '" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' : '')
+                    + (!isActive ? '<button class="llm-action-btn set-default" data-model="' + escapeAttr(name) + '" title="设为默认"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>' : '')
+                    + '<button class="llm-action-btn copy" data-model="' + escapeAttr(name) + '" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>'
+                    + '<button class="llm-action-btn edit" data-model="' + escapeAttr(name) + '" title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
+                    + (!isActive ? '<button class="llm-action-btn delete" data-model="' + escapeAttr(name) + '" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' : '')
                     + '</div></div>';
             });
         }
@@ -305,7 +313,7 @@
     }
 
     function llmEditModelFunc(modelName) {
-        var item = llmCachedList.find(function (m) { return m.model === modelName; });
+        var item = llmCachedList.find(function (m) { return m.name === modelName || m.model === modelName; });
         if (!item) return;
         llmEditModel = modelName;
         showLlmFormView('编辑模型');
@@ -314,7 +322,7 @@
     }
 
     function llmCopyModel(modelName) {
-        var item = llmCachedList.find(function (m) { return m.model === modelName; });
+        var item = llmCachedList.find(function (m) { return m.name === modelName || m.model === modelName; });
         if (!item) return;
         llmEditModel = null;
         showLlmFormView('添加模型');

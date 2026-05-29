@@ -569,7 +569,7 @@ function loadModels(sessionId, callback) {
                 modelList = [];
                 var list = data.list || [];
                 for (var i = 0; i < list.length; i++) {
-                    modelList.push({ name: list[i].model, desc: list[i].description });
+                    modelList.push({ name: list[i].name || list[i].model, desc: list[i].description });
                 }
                 modelsLoaded = true;
             }
