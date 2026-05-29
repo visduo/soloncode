@@ -68,6 +68,9 @@ public class Configurator {
     AgentProperties agentProps;
 
     @Inject
+    AgentSettings agentSettings;
+
+    @Inject
     ModelProviderFactory modelProviderFactory;
 
     private LoopScheduler loopScheduler;
@@ -90,32 +93,6 @@ public class Configurator {
 
         props.getAgentPools().add(Paths.get(props.getUserHome(), props.getHarnessAgents()).toString()); //global
         props.getAgentPools().add(Paths.get(props.getWorkspace(), props.getHarnessAgents()).toString()); //local
-
-
-        URL settingsUrl = props.getSettingsUrl();
-        if(settingsUrl != null) {
-            String settingsJson = ResourceUtil.getResourceAsString(settingsUrl);
-
-            if (Utils.isNotEmpty(settingsJson)) {
-                //同步 settings.json 的配置
-                AgentSettings agentSettings = AgentSettings.fromJson(settingsJson);
-
-                if (agentSettings.getModels().size() > 0) {
-                    props.getModels().addAll(agentSettings.getModels());
-                    props.getModels().clear();
-                }
-
-                if (agentSettings.getMcpServers().size() > 0) {
-                    props.getMcpServers().putAll(agentSettings.getMcpServers());
-                    props.getMcpServers().clear();
-                }
-
-                if (agentSettings.getApiServers().size() > 0) {
-                    props.getApiServers().putAll(agentSettings.getApiServers());
-                    props.getApiServers().clear();
-                }
-            }
-        }
 
 
         //-----------------
@@ -246,12 +223,11 @@ public class Configurator {
         //web
         BeanWrap webController = Solon.context().wrapAndPut(WebController.class, new WebController(agentRuntime, webGate, loopScheduler));
         Solon.app().router().add(webController);
-        WebSettingsController settingsController = new WebSettingsController(agentRuntime);
-        settingsController.loadPersistedModels();
-        settingsController.loadPersistedMcpServers();
-        settingsController.loadPersistedWebapiServers();
+
+        WebSettingsController settingsController = new WebSettingsController(agentRuntime, agentSettings);
         BeanWrap webSettingsController = Solon.context().wrapAndPut(WebSettingsController.class, settingsController);
         Solon.app().router().add(webSettingsController);
+
         BeanWrap webChannel = Solon.context().wrapAndPut(WebChannel.class, new WebChannel(agentRuntime, webGate));
         Solon.app().router().add(webChannel);
 

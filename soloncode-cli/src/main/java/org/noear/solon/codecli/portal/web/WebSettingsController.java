@@ -20,9 +20,13 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
+import org.noear.solon.ai.mcp.client.McpServerParameters;
+import org.noear.solon.ai.skills.openapi.ApiSource;
 import org.noear.solon.ai.skills.openapi.OpenApiSkill;
 import org.noear.solon.ai.skills.toolgateway.McpGatewaySkill;
 import org.noear.solon.annotation.*;
+import org.noear.solon.codecli.config.AgentProperties;
+import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.codecli.portal.web.market.Market;
 import org.noear.solon.codecli.portal.web.market.MarketManager;
 import org.noear.solon.core.handle.Context;
@@ -31,27 +35,31 @@ import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.*;
 
 /**
  * Web 设置控制器 —— SolonCode Web UI 的设置管理 HTTP 入口。
  *
- * <p>职责：管理 LLM 模型配置（增删改查、导入导出）和 MCP 服务器配置（增删改查、连接检测）。</p>
+ * <p>职责：管理 LLM 模型配置（增删改查、导入导出）、MCP 服务器配置（增删改查、连接检测）和 OpenApi 服务器配置。</p>
  *
  * <h3>主要功能分组</h3>
  * <ul>
  *   <li><b>LLM 模型管理</b>：从远程拉取模型列表、动态添加/移除/更新模型、设置默认模型、导入导出</li>
  *   <li><b>MCP 服务器管理</b>：服务器列表查询、添加/移除/更新、启用停用、连接检测、批量导入</li>
+ *   <li><b>OpenApi 服务器管理</b>：服务器列表查询、添加/移除/更新、启用停用、连接检测、批量导入</li>
  *   <li><b>技能市场</b>：通过 {@link Market} 接口代理技能浏览、搜索和安装（委派给具体适配器）</li>
  * </ul>
+ *
+ * <p>所有配置统一通过 {@link AgentSettings} 持久化到单一文件 {@code settings.json}。</p>
  *
  * @author oisin 2026-3-13
  * @author noear 2026-4-18
  * @see WebController Web 主控制器
  * @see Market 技能市场接口
+ * @see AgentSettings 统一配置管理
  */
 public class WebSettingsController {
     /**
@@ -70,23 +78,46 @@ public class WebSettingsController {
     private final MarketManager marketManager;
 
     /**
-     * 构造函数：初始化核心依赖。
+     * 统一配置管理器，管理 LLM 模型、MCP 服务器、OpenApi 服务器的持久化数据
+     */
+    private final AgentSettings settings;
+
+    /**
+     * 统一配置文件路径
+     */
+    private final Path settingsFile;
+
+    /**
+     * 构造函数：使用容器注入的 AgentSettings。
      *
      * @param engine AI Agent 执行引擎
+     * @param settings 统一配置管理器（由 App.initAgentSettings 创建并注册到容器）
      */
-    public WebSettingsController(HarnessEngine engine) {
-        this(engine, new MarketManager());
+    public WebSettingsController(HarnessEngine engine, AgentSettings settings) {
+        this(engine, settings, new MarketManager());
     }
 
     /**
      * 构造函数：支持自定义 MarketManager（用于测试）。
      *
      * @param engine AI Agent 执行引擎
+     * @param settings 统一配置管理器
      * @param marketManager 技能市场管理器
      */
-    public WebSettingsController(HarnessEngine engine, MarketManager marketManager) {
+    public WebSettingsController(HarnessEngine engine, AgentSettings settings, MarketManager marketManager) {
         this.engine = engine;
+        this.settings = settings;
         this.marketManager = marketManager;
+        this.settingsFile = Paths.get(AgentProperties.getUserDir(), ".soloncode", "settings.json");
+    }
+
+    // ==================== 配置持久化 ====================
+
+    /**
+     * 将当前配置保存到 settings.json
+     */
+    private void saveSettings() {
+        settings.saveToFile(settingsFile);
     }
 
     // ==================== 设置：LLM 模型管理 ====================
@@ -158,12 +189,18 @@ public class WebSettingsController {
             config.setContextLength(contextLength);
         }
 
-        engine.getProps().removeModel(model);
+        final String fName = name;
+        final String fModel = model;
+
+        engine.getProps().removeModel(fModel);
         engine.getProps().addModel(config);
 
-        saveLlmModelsToFile();
-        LOG.info("[Settings] Model added: {}", name);
-        return Result.succeed(name);
+        settings.getModels().removeIf(c -> fName.equals(c.getName()) || fModel.equals(c.getModel()));
+        settings.getModels().add(config);
+        saveSettings();
+
+        LOG.info("[Settings] Model added: {}", fName);
+        return Result.succeed(fName);
     }
 
     /**
@@ -181,7 +218,9 @@ public class WebSettingsController {
 
         engine.getProps().removeModel(modelName);
 
-        saveLlmModelsToFile();
+        settings.getModels().removeIf(c -> modelName.equals(c.getName()) || modelName.equals(c.getModel()));
+        saveSettings();
+
         LOG.info("[Settings] Model removed: {}", modelName);
         return Result.succeed();
     }
@@ -243,7 +282,10 @@ public class WebSettingsController {
 
         engine.getProps().addModel(config);
 
-        saveLlmModelsToFile();
+        settings.getModels().removeIf(c -> originalModel.equals(c.getName()) || originalModel.equals(c.getModel()));
+        settings.getModels().add(config);
+        saveSettings();
+
         LOG.info("[Settings] Model updated: {} -> {}", originalModel, name);
         return Result.succeed(name);
     }
@@ -258,7 +300,7 @@ public class WebSettingsController {
             return Result.failure("modelName is required");
         }
         engine.switchMainModel(modelName);
-        saveLlmModelsToFile();
+        saveSettings();
         LOG.info("[Settings] Default model set to: {}", modelName);
         return Result.succeed();
     }
@@ -270,7 +312,7 @@ public class WebSettingsController {
     @Mapping("/web/settings/llm/models/export")
     public Result<List<Map>> llmModelsExport() throws Exception {
         List<Map> list = new ArrayList<>();
-        for (ChatConfig config : engine.getProps().getModels()) {
+        for (ChatConfig config : settings.getModels()) {
             Map<String, String> item = new LinkedHashMap<>();
             item.put("apiUrl", config.getApiUrl());
             item.put("model", config.getModel());
@@ -326,12 +368,18 @@ public class WebSettingsController {
                 config.setContextLength(contextLength);
             }
 
-            engine.getProps().removeModel(model);
+            final String fName = name;
+            final String fModel = model;
+
+            engine.getProps().removeModel(fModel);
             engine.getProps().addModel(config);
+
+            settings.getModels().removeIf(c -> fName.equals(c.getName()) || fModel.equals(c.getModel()));
+            settings.getModels().add(config);
             count++;
         }
 
-        saveLlmModelsToFile();
+        saveSettings();
         LOG.info("[Settings] Models imported: {}", count);
         return Result.succeed(count);
     }
@@ -344,53 +392,32 @@ public class WebSettingsController {
     @Get
     @Mapping("/web/settings/mcp/servers")
     public Result<List<Map>> mcpServers() throws Exception {
-        java.nio.file.Path mcpFile = getMcpServersFile();
         List<Map> list = new ArrayList<>();
-        if (!java.nio.file.Files.exists(mcpFile)) {
-            return Result.succeed(list);
-        }
-
-        String content = new String(java.nio.file.Files.readAllBytes(mcpFile), "UTF-8");
-        ONode root = ONode.ofJson(content);
-        ONode servers = root.get("mcpServers");
-        if (servers != null && servers.isArray()) {
-            for (ONode node : servers.getArray()) {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("name", node.get("name").getString());
-                item.put("type", node.get("type").getString());
-                item.put("enabled", node.get("enabled").getBoolean(true));
-                if ("stdio".equals(node.get("type").getString())) {
-                    item.put("command", node.get("command").getString());
-                    ONode argsNode = node.get("args");
-                    if (argsNode != null && argsNode.isArray()) {
-                        List<String> argsList = new ArrayList<>();
-                        for (ONode a : argsNode.getArray()) {
-                            argsList.add(a.getString());
-                        }
-                        item.put("args", argsList);
-                    }
-                    ONode envNode = node.get("env");
-                    if (envNode != null && envNode.isObject()) {
-                        Map<String, String> envMap = new LinkedHashMap<>();
-                        for (Map.Entry<String, ONode> entry : envNode.getObject().entrySet()) {
-                            envMap.put(entry.getKey(), entry.getValue().getString());
-                        }
-                        item.put("env", envMap);
-                    }
-                } else {
-                    item.put("url", node.get("url").getString());
-                    ONode headersNode = node.get("headers");
-                    if (headersNode != null && headersNode.isObject()) {
-                        Map<String, String> headersMap = new LinkedHashMap<>();
-                        for (Map.Entry<String, ONode> entry : headersNode.getObject().entrySet()) {
-                            headersMap.put(entry.getKey(), entry.getValue().getString());
-                        }
-                        item.put("headers", headersMap);
-                    }
-                    item.put("timeout", node.get("timeout").getString());
+        for (Map.Entry<String, McpServerParameters> entry : settings.getMcpServers().entrySet()) {
+            String name = entry.getKey();
+            McpServerParameters params = entry.getValue();
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", name);
+            item.put("type", params.getType() != null ? params.getType() : "stdio");
+            item.put("enabled", true);
+            if ("stdio".equals(params.getType())) {
+                item.put("command", params.getCommand());
+                if (params.getArgs() != null) {
+                    item.put("args", params.getArgs());
                 }
-                list.add(item);
+                if (params.getEnv() != null) {
+                    item.put("env", params.getEnv());
+                }
+            } else {
+                item.put("url", params.getUrl());
+                if (params.getHeaders() != null) {
+                    item.put("headers", params.getHeaders());
+                }
+                if (params.getTimeout() != null) {
+                    item.put("timeout", params.getTimeout().toString());
+                }
             }
+            list.add(item);
         }
         return Result.succeed(list);
     }
@@ -409,37 +436,58 @@ public class WebSettingsController {
             return Result.failure("name and type are required");
         }
 
-        java.nio.file.Path mcpFile = getMcpServersFile();
-        ONode config = loadMcpConfig(mcpFile);
-        ONode servers = config.getOrNew("mcpServers").asArray();
-
         // 检查重名
-        for (ONode s : servers.getArray()) {
-            if (name.equals(s.get("name").getString())) {
-                return Result.failure("Server name already exists: " + name);
-            }
+        if (settings.getMcpServers().containsKey(name)) {
+            return Result.failure("Server name already exists: " + name);
         }
 
-        ONode newServer = new ONode();
-        newServer.set("name", name);
-        newServer.set("type", type);
-        newServer.set("enabled", root.get("enabled").getBoolean(true));
+        boolean enabled = root.get("enabled").getBoolean(true);
+        McpServerParameters params = new McpServerParameters();
+        params.setType(type);
 
         if ("stdio".equals(type)) {
-            newServer.set("command", root.get("command").getString());
-            if (root.hasKey("args")) newServer.set("args", root.get("args"));
-            if (root.hasKey("env")) newServer.set("env", root.get("env"));
+            params.setCommand(root.get("command").getString());
+            if (root.hasKey("args")) {
+                List<String> argsList = new ArrayList<>();
+                for (ONode a : root.get("args").getArray()) {
+                    argsList.add(a.getString());
+                }
+                params.setArgs(argsList);
+            }
+            if (root.hasKey("env")) {
+                Map<String, String> envMap = new LinkedHashMap<>();
+                for (Map.Entry<String, ONode> entry : root.get("env").getObject().entrySet()) {
+                    envMap.put(entry.getKey(), entry.getValue().getString());
+                }
+                params.setEnv(envMap);
+            }
         } else if ("sse".equals(type) || "streamable-http".equals(type)) {
-            newServer.set("url", root.get("url").getString());
-            if (root.hasKey("headers")) newServer.set("headers", root.get("headers"));
-            if (root.hasKey("timeout")) newServer.set("timeout", root.get("timeout").getString());
+            params.setUrl(root.get("url").getString());
+            if (root.hasKey("headers")) {
+                Map<String, String> headersMap = new LinkedHashMap<>();
+                for (Map.Entry<String, ONode> entry : root.get("headers").getObject().entrySet()) {
+                    headersMap.put(entry.getKey(), entry.getValue().getString());
+                }
+                params.setHeaders(headersMap);
+            }
+            if (root.hasKey("timeout")) {
+                params.setTimeout(Duration.parse(root.get("timeout").getString()));
+            }
         } else {
             return Result.failure("Unsupported type: " + type);
         }
 
-        servers.add(newServer);
-        saveMcpConfig(mcpFile, config);
+        settings.getMcpServers().put(name, params);
 
+        // 如果启用，同步到引擎
+        if (enabled) {
+            McpGatewaySkill mcpGateway = engine.getMcpGatewaySkill();
+            if (mcpGateway != null) {
+                mcpGateway.addMcpServer(name, params);
+            }
+        }
+
+        saveSettings();
         LOG.info("[Settings] MCP server added: {}", name);
         return Result.succeed();
     }
@@ -457,16 +505,112 @@ public class WebSettingsController {
             return Result.failure("name is required");
         }
 
-        java.nio.file.Path mcpFile = getMcpServersFile();
-        ONode config = loadMcpConfig(mcpFile);
-        ONode servers = config.get("mcpServers");
-
-        if (servers != null && servers.isArray()) {
-            servers.getArray().removeIf(s -> name.equals(s.get("name").getString()));
+        // 从引擎移除
+        McpGatewaySkill mcpGateway = engine.getMcpGatewaySkill();
+        if (mcpGateway != null) {
+            mcpGateway.removeMcpServer(name);
         }
 
-        saveMcpConfig(mcpFile, config);
+        settings.getMcpServers().remove(name);
+        saveSettings();
         LOG.info("[Settings] MCP server removed: {}", name);
+        return Result.succeed();
+    }
+
+    /**
+     * 更新 MCP 服务器配置
+     */
+    @Post
+    @Mapping("/web/settings/mcp/servers/update")
+    public Result mcpServersUpdate(Context ctx) throws Exception {
+        ONode root = ONode.ofJson(ctx.body());
+        String name = root.get("name").getString();
+        String originalName = root.get("originalName").getString();
+
+        if (Assert.isEmpty(name)) {
+            return Result.failure("name is required");
+        }
+
+        // 如果 name 变了，使用 originalName 查找旧记录
+        String lookupName = (originalName != null && !originalName.isEmpty()) ? originalName : name;
+
+        McpServerParameters existing = settings.getMcpServers().get(lookupName);
+        if (existing == null) {
+            return Result.failure("Server not found: " + lookupName);
+        }
+
+        // 如果名称变更，先从引擎移除旧名称
+        if (!lookupName.equals(name)) {
+            McpGatewaySkill mcpGateway = engine.getMcpGatewaySkill();
+            if (mcpGateway != null) {
+                mcpGateway.removeMcpServer(lookupName);
+            }
+            settings.getMcpServers().remove(lookupName);
+        } else {
+            // 名称没变，仍然先从引擎移除（稍后重新添加）
+            McpGatewaySkill mcpGateway = engine.getMcpGatewaySkill();
+            if (mcpGateway != null) {
+                mcpGateway.removeMcpServer(name);
+            }
+        }
+
+        // 构建新参数
+        String type = root.hasKey("type") ? root.get("type").getString() : existing.getType();
+        boolean enabled = root.hasKey("enabled") ? root.get("enabled").getBoolean(true) : true;
+
+        McpServerParameters params = new McpServerParameters();
+        params.setType(type);
+
+        if ("stdio".equals(type)) {
+            params.setCommand(root.hasKey("command") ? root.get("command").getString() : existing.getCommand());
+            if (root.hasKey("args")) {
+                List<String> argsList = new ArrayList<>();
+                for (ONode a : root.get("args").getArray()) {
+                    argsList.add(a.getString());
+                }
+                params.setArgs(argsList);
+            } else {
+                params.setArgs(existing.getArgs());
+            }
+            if (root.hasKey("env")) {
+                Map<String, String> envMap = new LinkedHashMap<>();
+                for (Map.Entry<String, ONode> entry : root.get("env").getObject().entrySet()) {
+                    envMap.put(entry.getKey(), entry.getValue().getString());
+                }
+                params.setEnv(envMap);
+            } else {
+                params.setEnv(existing.getEnv());
+            }
+        } else {
+            params.setUrl(root.hasKey("url") ? root.get("url").getString() : existing.getUrl());
+            if (root.hasKey("headers")) {
+                Map<String, String> headersMap = new LinkedHashMap<>();
+                for (Map.Entry<String, ONode> entry : root.get("headers").getObject().entrySet()) {
+                    headersMap.put(entry.getKey(), entry.getValue().getString());
+                }
+                params.setHeaders(headersMap);
+            } else {
+                params.setHeaders(existing.getHeaders());
+            }
+            if (root.hasKey("timeout")) {
+                params.setTimeout(Duration.parse(root.get("timeout").getString()));
+            } else {
+                params.setTimeout(existing.getTimeout());
+            }
+        }
+
+        settings.getMcpServers().put(name, params);
+
+        // 如果启用，同步到引擎
+        if (enabled) {
+            McpGatewaySkill mcpGateway = engine.getMcpGatewaySkill();
+            if (mcpGateway != null) {
+                mcpGateway.addMcpServer(name, params);
+            }
+        }
+
+        saveSettings();
+        LOG.info("[Settings] MCP server updated: {}", name);
         return Result.succeed();
     }
 
@@ -484,195 +628,31 @@ public class WebSettingsController {
             return Result.failure("name is required");
         }
 
-        java.nio.file.Path mcpFile = getMcpServersFile();
-        ONode config = loadMcpConfig(mcpFile);
-        ONode servers = config.get("mcpServers");
+        McpServerParameters params = settings.getMcpServers().get(name);
+        if (params == null) {
+            return Result.failure("Server not found: " + name);
+        }
 
-        if (servers != null && servers.isArray()) {
-            for (ONode s : servers.getArray()) {
-                if (name.equals(s.get("name").getString())) {
-                    s.set("enabled", enabled);
-                    break;
-                }
+        McpGatewaySkill mcpGateway = engine.getMcpGatewaySkill();
+        if (enabled) {
+            // 启用：添加到引擎
+            if (mcpGateway != null) {
+                mcpGateway.addMcpServer(name, params);
+            }
+        } else {
+            // 停用：从引擎移除
+            if (mcpGateway != null) {
+                mcpGateway.removeMcpServer(name);
             }
         }
 
-        saveMcpConfig(mcpFile, config);
+        // 更新 enabled 状态到 settings
+        // 注意：McpServerParameters 没有 enabled 字段，暂时只操作引擎
+        // TODO: 后续在 McpServerParameters 添加 enabled 字段后可持久化
+
+        saveSettings();
         LOG.info("[Settings] MCP server toggled: {} -> {}", name, enabled);
         return Result.succeed();
-    }
-
-    private java.nio.file.Path getMcpServersFile() {
-        return java.nio.file.Paths.get(engine.getProps().getWorkspace(), ".soloncode", "mcp-servers.json");
-    }
-
-    // ==================== LLM 模型持久化 ====================
-
-    /**
-     * 获取 LLM 模型持久化文件路径
-     */
-    private Path getLlmModelsFile() {
-        return Paths.get(engine.getProps().getWorkspace(), ".soloncode", "llm-models.json");
-    }
-
-    /**
-     * 从持久化文件加载模型列表
-     */
-    private ONode loadLlmModelsConfig(Path file) throws Exception {
-        if (!Files.exists(file)) {
-            ONode root = new ONode();
-            root.getOrNew("models").asArray();
-            return root;
-        }
-        String content = new String(Files.readAllBytes(file), "UTF-8");
-        return ONode.ofJson(content);
-    }
-
-    /**
-     * 将内存中的模型列表持久化到文件
-     */
-    private void saveLlmModelsToFile() {
-        try {
-            Path file = getLlmModelsFile();
-            ONode root = new ONode();
-            ONode modelsArray = root.getOrNew("models").asArray();
-
-            for (ChatConfig config : engine.getProps().getModels()) {
-                ONode node = new ONode();
-                node.set("name", config.getName());
-                node.set("apiUrl", config.getApiUrl());
-                node.set("apiKey", config.getApiKey());
-                node.set("model", config.getModel());
-                node.set("provider", config.getProvider());
-                if (config.getTimeout() != null) {
-                    node.set("timeout", config.getTimeout().toString());
-                }
-                if (config.getUserAgent() != null) {
-                    node.set("userAgent", config.getUserAgent());
-                }
-                if (config.getContextLength() > 0) {
-                    node.set("contextLength", config.getContextLength());
-                }
-                modelsArray.add(node);
-            }
-
-            Files.createDirectories(file.getParent());
-            Files.write(file, root.toJson().getBytes("UTF-8"));
-        } catch (Exception e) {
-            LOG.warn("[Settings] Failed to persist LLM models: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * 从持久化文件加载模型到引擎（启动时调用）
-     */
-    public void loadPersistedModels() {
-        try {
-            Path file = getLlmModelsFile();
-            if (!Files.exists(file)) {
-                return;
-            }
-
-            ONode root = loadLlmModelsConfig(file);
-            ONode models = root.get("models");
-            if (models == null || !models.isArray()) {
-                return;
-            }
-
-            for (ONode node : models.getArray()) {
-                String model = node.get("model").getString();
-                String apiUrl = node.get("apiUrl").getString();
-                if (model == null || model.isEmpty() || apiUrl == null || apiUrl.isEmpty()) {
-                    continue;
-                }
-
-                String name = node.get("name").getString();
-                if (name == null || name.isEmpty()) {
-                    name = model;
-                }
-
-                ChatConfig config = new ChatConfig();
-                config.setName(name);
-                config.setApiUrl(apiUrl);
-                config.setApiKey(node.get("apiKey").getString());
-                config.setModel(model);
-
-                String provider = node.get("provider").getString();
-                if (provider != null && !provider.isEmpty()) {
-                    config.setProvider(provider);
-                }
-
-                String timeout = node.get("timeout").getString();
-                if (timeout != null && !timeout.isEmpty()) {
-                    config.setTimeout(java.time.Duration.parse(timeout));
-                }
-
-                String userAgent = node.get("userAgent").getString();
-                if (userAgent != null && !userAgent.isEmpty()) {
-                    config.setUserAgent(userAgent);
-                }
-
-                Integer contextLength = node.get("contextLength").getInt();
-                if (contextLength != null && contextLength > 0) {
-                    config.setContextLength(contextLength);
-                }
-
-                engine.getProps().removeModel(model);
-                engine.getProps().addModel(config);
-            }
-
-            LOG.info("[Settings] Loaded persisted LLM models from: {}", file);
-        } catch (Exception e) {
-            LOG.warn("[Settings] Failed to load persisted LLM models: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * 更新 MCP 服务器配置
-     */
-    @Post
-    @Mapping("/web/settings/mcp/servers/update")
-    public Result mcpServersUpdate(Context ctx) throws Exception {
-        ONode root = ONode.ofJson(ctx.body());
-        String name = root.get("name").getString();
-
-        if (Assert.isEmpty(name)) {
-            return Result.failure("name is required");
-        }
-
-        java.nio.file.Path mcpFile = getMcpServersFile();
-        ONode config = loadMcpConfig(mcpFile);
-        ONode servers = config.get("mcpServers");
-
-        if (servers != null && servers.isArray()) {
-            for (ONode s : servers.getArray()) {
-                if (name.equals(s.get("name").getString())) {
-                    if (root.hasKey("type")) s.set("type", root.get("type").getString());
-                    if (root.hasKey("enabled")) s.set("enabled", root.get("enabled").getBoolean());
-                    String type = root.hasKey("type") ? root.get("type").getString() : s.get("type").getString();
-                    if ("stdio".equals(type)) {
-                        if (root.hasKey("command")) s.set("command", root.get("command").getString());
-                        if (root.hasKey("args")) s.set("args", root.get("args"));
-                        if (root.hasKey("env")) s.set("env", root.get("env"));
-                        s.remove("url");
-                        s.remove("headers");
-                        s.remove("timeout");
-                    } else {
-                        if (root.hasKey("url")) s.set("url", root.get("url").getString());
-                        if (root.hasKey("headers")) s.set("headers", root.get("headers"));
-                        if (root.hasKey("timeout")) s.set("timeout", root.get("timeout").getString());
-                        s.remove("command");
-                        s.remove("args");
-                        s.remove("env");
-                    }
-                    saveMcpConfig(mcpFile, config);
-                    LOG.info("[Settings] MCP server updated: {}", name);
-                    return Result.succeed();
-                }
-            }
-        }
-
-        return Result.failure("Server not found: " + name);
     }
 
     /**
@@ -790,61 +770,84 @@ public class WebSettingsController {
             return Result.failure("Invalid format: mcpServers not found");
         }
 
-        java.nio.file.Path mcpFile = getMcpServersFile();
-        ONode config = loadMcpConfig(mcpFile);
-        ONode servers = config.getOrNew("mcpServers").asArray();
-        java.util.Set<String> existingNames = new java.util.HashSet<>();
-        for (ONode s : servers.getArray()) {
-            existingNames.add(s.get("name").getString());
-        }
-
         int imported = 0;
         if (serversNode.isObject()) {
             // Map 格式: name -> config
             for (Map.Entry<String, ONode> entry : serversNode.getObject().entrySet()) {
                 String name = entry.getKey();
-                if (existingNames.contains(name)) continue;
+                if (settings.getMcpServers().containsKey(name)) continue;
                 ONode src = entry.getValue();
-                ONode newServer = new ONode();
-                newServer.set("name", name);
-                newServer.set("type", src.hasKey("type") ? src.get("type").getString() : "stdio");
-                newServer.set("enabled", true);
-                if (src.hasKey("command")) newServer.set("command", src.get("command").getString());
-                if (src.hasKey("args")) newServer.set("args", src.get("args"));
-                if (src.hasKey("env")) newServer.set("env", src.get("env"));
-                if (src.hasKey("url")) newServer.set("url", src.get("url").getString());
-                if (src.hasKey("headers")) newServer.set("headers", src.get("headers"));
-                if (src.hasKey("timeout")) newServer.set("timeout", src.get("timeout").getString());
-                servers.add(newServer);
+                McpServerParameters params = new McpServerParameters();
+                params.setType(src.hasKey("type") ? src.get("type").getString() : "stdio");
+                if (src.hasKey("command")) params.setCommand(src.get("command").getString());
+                if (src.hasKey("args")) {
+                    List<String> argsList = new ArrayList<>();
+                    for (ONode a : src.get("args").getArray()) {
+                        argsList.add(a.getString());
+                    }
+                    params.setArgs(argsList);
+                }
+                if (src.hasKey("env")) {
+                    Map<String, String> envMap = new LinkedHashMap<>();
+                    for (Map.Entry<String, ONode> e : src.get("env").getObject().entrySet()) {
+                        envMap.put(e.getKey(), e.getValue().getString());
+                    }
+                    params.setEnv(envMap);
+                }
+                if (src.hasKey("url")) params.setUrl(src.get("url").getString());
+                if (src.hasKey("headers")) {
+                    Map<String, String> headersMap = new LinkedHashMap<>();
+                    for (Map.Entry<String, ONode> e : src.get("headers").getObject().entrySet()) {
+                        headersMap.put(e.getKey(), e.getValue().getString());
+                    }
+                    params.setHeaders(headersMap);
+                }
+                if (src.hasKey("timeout")) {
+                    params.setTimeout(Duration.parse(src.get("timeout").getString()));
+                }
+                settings.getMcpServers().put(name, params);
                 imported++;
             }
         } else if (serversNode.isArray()) {
             for (ONode src : serversNode.getArray()) {
                 String name = src.get("name").getString();
-                if (existingNames.contains(name)) continue;
-                servers.add(src);
+                if (settings.getMcpServers().containsKey(name) || Assert.isEmpty(name)) continue;
+                McpServerParameters params = new McpServerParameters();
+                params.setType(src.hasKey("type") ? src.get("type").getString() : "stdio");
+                if (src.hasKey("command")) params.setCommand(src.get("command").getString());
+                if (src.hasKey("args")) {
+                    List<String> argsList = new ArrayList<>();
+                    for (ONode a : src.get("args").getArray()) {
+                        argsList.add(a.getString());
+                    }
+                    params.setArgs(argsList);
+                }
+                if (src.hasKey("env")) {
+                    Map<String, String> envMap = new LinkedHashMap<>();
+                    for (Map.Entry<String, ONode> e : src.get("env").getObject().entrySet()) {
+                        envMap.put(e.getKey(), e.getValue().getString());
+                    }
+                    params.setEnv(envMap);
+                }
+                if (src.hasKey("url")) params.setUrl(src.get("url").getString());
+                if (src.hasKey("headers")) {
+                    Map<String, String> headersMap = new LinkedHashMap<>();
+                    for (Map.Entry<String, ONode> e : src.get("headers").getObject().entrySet()) {
+                        headersMap.put(e.getKey(), e.getValue().getString());
+                    }
+                    params.setHeaders(headersMap);
+                }
+                if (src.hasKey("timeout")) {
+                    params.setTimeout(Duration.parse(src.get("timeout").getString()));
+                }
+                settings.getMcpServers().put(name, params);
                 imported++;
             }
         }
 
-        saveMcpConfig(mcpFile, config);
+        saveSettings();
         LOG.info("[Settings] MCP servers imported: {} items", imported);
         return Result.succeed("Imported " + imported + " server(s)");
-    }
-
-    private ONode loadMcpConfig(java.nio.file.Path file) throws Exception {
-        if (!java.nio.file.Files.exists(file)) {
-            ONode root = new ONode();
-            root.getOrNew("mcpServers").asArray();
-            return root;
-        }
-        String content = new String(java.nio.file.Files.readAllBytes(file), "UTF-8");
-        return ONode.ofJson(content);
-    }
-
-    private void saveMcpConfig(java.nio.file.Path file, ONode config) throws Exception {
-        java.nio.file.Files.createDirectories(file.getParent());
-        java.nio.file.Files.write(file, config.toJson().getBytes("UTF-8"));
     }
 
     // ==================== 设置：OpenApi 服务器管理 ====================
@@ -855,32 +858,19 @@ public class WebSettingsController {
     @Get
     @Mapping("/web/settings/webapi/servers")
     public Result<List<Map>> webapiServers() throws Exception {
-        java.nio.file.Path webapiFile = getWebapiServersFile();
         List<Map> list = new ArrayList<>();
-        if (!java.nio.file.Files.exists(webapiFile)) {
-            return Result.succeed(list);
-        }
-
-        String content = new String(java.nio.file.Files.readAllBytes(webapiFile), "UTF-8");
-        ONode root = ONode.ofJson(content);
-        ONode servers = root.get("apiServers");
-        if (servers != null && servers.isArray()) {
-            for (ONode node : servers.getArray()) {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("name", node.get("name").getString());
-                item.put("apiBaseUrl", node.get("apiBaseUrl").getString());
-                item.put("docUrl", node.get("docUrl").getString());
-                item.put("enabled", node.get("enabled").getBoolean(true));
-                ONode headersNode = node.get("headers");
-                if (headersNode != null && headersNode.isObject()) {
-                    Map<String, String> headersMap = new LinkedHashMap<>();
-                    for (Map.Entry<String, ONode> entry : headersNode.getObject().entrySet()) {
-                        headersMap.put(entry.getKey(), entry.getValue().getString());
-                    }
-                    item.put("headers", headersMap);
-                }
-                list.add(item);
+        for (Map.Entry<String, ApiSource> entry : settings.getApiServers().entrySet()) {
+            String name = entry.getKey();
+            ApiSource source = entry.getValue();
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", name);
+            item.put("apiBaseUrl", source.getApiBaseUrl());
+            item.put("docUrl", source.getDocUrl());
+            item.put("enabled", true);
+            if (source.getHeaders() != null) {
+                item.put("headers", source.getHeaders());
             }
+            list.add(item);
         }
         return Result.succeed(list);
     }
@@ -899,27 +889,35 @@ public class WebSettingsController {
             return Result.failure("name and apiBaseUrl are required");
         }
 
-        java.nio.file.Path webapiFile = getWebapiServersFile();
-        ONode config = loadWebapiConfig(webapiFile);
-        ONode servers = config.getOrNew("apiServers").asArray();
-
         // 检查重名
-        for (ONode s : servers.getArray()) {
-            if (name.equals(s.get("name").getString())) {
-                return Result.failure("Server name already exists: " + name);
+        if (settings.getApiServers().containsKey(name)) {
+            return Result.failure("Server name already exists: " + name);
+        }
+
+        boolean enabled = root.get("enabled").getBoolean(true);
+
+        ApiSource source = new ApiSource();
+        source.setApiBaseUrl(apiBaseUrl);
+        source.setDocUrl(root.get("docUrl").getString());
+        if (root.hasKey("headers")) {
+            Map<String, String> headersMap = new LinkedHashMap<>();
+            for (Map.Entry<String, ONode> entry : root.get("headers").getObject().entrySet()) {
+                headersMap.put(entry.getKey(), entry.getValue().getString());
+            }
+            source.setHeaders(headersMap);
+        }
+
+        settings.getApiServers().put(name, source);
+
+        // 如果启用，同步到引擎
+        if (enabled) {
+            OpenApiSkill restApi = engine.getOpenApiSkill();
+            if (restApi != null) {
+                restApi.addApi(source);
             }
         }
 
-        ONode newServer = new ONode();
-        newServer.set("name", name);
-        newServer.set("apiBaseUrl", apiBaseUrl);
-        newServer.set("docUrl", root.get("docUrl").getString());
-        newServer.set("enabled", root.get("enabled").getBoolean(true));
-        if (root.hasKey("headers")) newServer.set("headers", root.get("headers"));
-
-        servers.add(newServer);
-        saveWebapiConfig(webapiFile, config);
-
+        saveSettings();
         LOG.info("[Settings] OpenApi server added: {}", name);
         return Result.succeed();
     }
@@ -932,30 +930,59 @@ public class WebSettingsController {
     public Result webapiServersUpdate(Context ctx) throws Exception {
         ONode root = ONode.ofJson(ctx.body());
         String name = root.get("name").getString();
+        String originalName = root.get("originalName").getString();
 
         if (Assert.isEmpty(name)) {
             return Result.failure("name is required");
         }
 
-        java.nio.file.Path webapiFile = getWebapiServersFile();
-        ONode config = loadWebapiConfig(webapiFile);
-        ONode servers = config.get("apiServers");
+        // 如果 name 变了，使用 originalName 查找旧记录
+        String lookupName = (originalName != null && !originalName.isEmpty()) ? originalName : name;
 
-        if (servers != null && servers.isArray()) {
-            for (ONode s : servers.getArray()) {
-                if (name.equals(s.get("name").getString())) {
-                    if (root.hasKey("apiBaseUrl")) s.set("apiBaseUrl", root.get("apiBaseUrl").getString());
-                    if (root.hasKey("docUrl")) s.set("docUrl", root.get("docUrl").getString());
-                    if (root.hasKey("enabled")) s.set("enabled", root.get("enabled").getBoolean());
-                    if (root.hasKey("headers")) s.set("headers", root.get("headers"));
-                    saveWebapiConfig(webapiFile, config);
-                    LOG.info("[Settings] OpenApi server updated: {}", name);
-                    return Result.succeed();
-                }
+        ApiSource existing = settings.getApiServers().get(lookupName);
+        if (existing == null) {
+            return Result.failure("Server not found: " + lookupName);
+        }
+
+        // 从引擎移除旧的
+        OpenApiSkill restApi = engine.getOpenApiSkill();
+        if (restApi != null) {
+            restApi.removeApi(existing.getDocUrl());
+        }
+
+        // 如果名称变更，移除旧 key
+        if (!lookupName.equals(name)) {
+            settings.getApiServers().remove(lookupName);
+        }
+
+        boolean enabled = root.hasKey("enabled") ? root.get("enabled").getBoolean(true) : true;
+
+        // 构建新配置
+        ApiSource source = new ApiSource();
+        source.setApiBaseUrl(root.hasKey("apiBaseUrl") ? root.get("apiBaseUrl").getString() : existing.getApiBaseUrl());
+        source.setDocUrl(root.hasKey("docUrl") ? root.get("docUrl").getString() : existing.getDocUrl());
+        if (root.hasKey("headers")) {
+            Map<String, String> headersMap = new LinkedHashMap<>();
+            for (Map.Entry<String, ONode> entry : root.get("headers").getObject().entrySet()) {
+                headersMap.put(entry.getKey(), entry.getValue().getString());
+            }
+            source.setHeaders(headersMap);
+        } else {
+            source.setHeaders(existing.getHeaders());
+        }
+
+        settings.getApiServers().put(name, source);
+
+        // 如果启用，同步到引擎
+        if (enabled) {
+            if (restApi != null) {
+                restApi.addApi(source);
             }
         }
 
-        return Result.failure("Server not found: " + name);
+        saveSettings();
+        LOG.info("[Settings] OpenApi server updated: {}", name);
+        return Result.succeed();
     }
 
     /**
@@ -971,15 +998,17 @@ public class WebSettingsController {
             return Result.failure("name is required");
         }
 
-        java.nio.file.Path webapiFile = getWebapiServersFile();
-        ONode config = loadWebapiConfig(webapiFile);
-        ONode servers = config.get("apiServers");
-
-        if (servers != null && servers.isArray()) {
-            servers.getArray().removeIf(s -> name.equals(s.get("name").getString()));
+        ApiSource source = settings.getApiServers().get(name);
+        if (source != null) {
+            // 从引擎移除
+            OpenApiSkill restApi = engine.getOpenApiSkill();
+            if (restApi != null) {
+                restApi.removeApi(source.getDocUrl());
+            }
         }
 
-        saveWebapiConfig(webapiFile, config);
+        settings.getApiServers().remove(name);
+        saveSettings();
         LOG.info("[Settings] OpenApi server removed: {}", name);
         return Result.succeed();
     }
@@ -998,20 +1027,28 @@ public class WebSettingsController {
             return Result.failure("name is required");
         }
 
-        java.nio.file.Path webapiFile = getWebapiServersFile();
-        ONode config = loadWebapiConfig(webapiFile);
-        ONode servers = config.get("apiServers");
+        ApiSource source = settings.getApiServers().get(name);
+        if (source == null) {
+            return Result.failure("Server not found: " + name);
+        }
 
-        if (servers != null && servers.isArray()) {
-            for (ONode s : servers.getArray()) {
-                if (name.equals(s.get("name").getString())) {
-                    s.set("enabled", enabled);
-                    break;
-                }
+        OpenApiSkill restApi = engine.getOpenApiSkill();
+        if (enabled) {
+            // 启用：添加到引擎
+            if (restApi != null) {
+                restApi.addApi(source);
+            }
+        } else {
+            // 停用：从引擎移除
+            if (restApi != null) {
+                restApi.removeApi(source.getDocUrl());
             }
         }
 
-        saveWebapiConfig(webapiFile, config);
+        // 注意：ApiSource 没有 enabled 字段，暂时只操作引擎
+        // TODO: 后续在 ApiSource 添加 enabled 字段后可持久化
+
+        saveSettings();
         LOG.info("[Settings] OpenApi server toggled: {} -> {}", name, enabled);
         return Result.succeed();
     }
@@ -1078,197 +1115,53 @@ public class WebSettingsController {
             return Result.failure("Invalid format: apiServers not found");
         }
 
-        java.nio.file.Path webapiFile = getWebapiServersFile();
-        ONode config = loadWebapiConfig(webapiFile);
-        ONode servers = config.getOrNew("apiServers").asArray();
-        java.util.Set<String> existingNames = new java.util.HashSet<>();
-        for (ONode s : servers.getArray()) {
-            existingNames.add(s.get("name").getString());
-        }
-
         int imported = 0;
         if (serversNode.isObject()) {
             // Map 格式: name -> config
             for (Map.Entry<String, ONode> entry : serversNode.getObject().entrySet()) {
                 String name = entry.getKey();
-                if (existingNames.contains(name)) continue;
+                if (settings.getApiServers().containsKey(name)) continue;
                 ONode src = entry.getValue();
-                ONode newServer = new ONode();
-                newServer.set("name", name);
-                newServer.set("apiBaseUrl", src.hasKey("apiBaseUrl") ? src.get("apiBaseUrl").getString() : "");
-                newServer.set("docUrl", src.hasKey("docUrl") ? src.get("docUrl").getString() : "");
-                newServer.set("enabled", true);
-                if (src.hasKey("headers")) newServer.set("headers", src.get("headers"));
-                servers.add(newServer);
+                ApiSource source = new ApiSource();
+                source.setApiBaseUrl(src.hasKey("apiBaseUrl") ? src.get("apiBaseUrl").getString() : "");
+                source.setDocUrl(src.hasKey("docUrl") ? src.get("docUrl").getString() : "");
+                if (src.hasKey("headers")) {
+                    Map<String, String> headersMap = new LinkedHashMap<>();
+                    for (Map.Entry<String, ONode> e : src.get("headers").getObject().entrySet()) {
+                        headersMap.put(e.getKey(), e.getValue().getString());
+                    }
+                    source.setHeaders(headersMap);
+                }
+                settings.getApiServers().put(name, source);
                 imported++;
             }
         } else if (serversNode.isArray()) {
             for (ONode src : serversNode.getArray()) {
                 String name = src.get("name").getString();
-                if (existingNames.contains(name) || Assert.isEmpty(name)) continue;
-                servers.add(src);
+                if (settings.getApiServers().containsKey(name) || Assert.isEmpty(name)) continue;
+                ApiSource source = new ApiSource();
+                source.setApiBaseUrl(src.hasKey("apiBaseUrl") ? src.get("apiBaseUrl").getString() : "");
+                source.setDocUrl(src.hasKey("docUrl") ? src.get("docUrl").getString() : "");
+                if (src.hasKey("headers")) {
+                    Map<String, String> headersMap = new LinkedHashMap<>();
+                    for (Map.Entry<String, ONode> e : src.get("headers").getObject().entrySet()) {
+                        headersMap.put(e.getKey(), e.getValue().getString());
+                    }
+                    source.setHeaders(headersMap);
+                }
+                settings.getApiServers().put(name, source);
                 imported++;
             }
         }
 
-        saveWebapiConfig(webapiFile, config);
+        saveSettings();
         LOG.info("[Settings] OpenApi servers imported: {} items", imported);
         return Result.succeed("Imported " + imported + " server(s)");
     }
 
-    private java.nio.file.Path getWebapiServersFile() {
-        return java.nio.file.Paths.get(engine.getProps().getWorkspace(), ".soloncode", "webapi-servers.json");
-    }
-
-    private ONode loadWebapiConfig(java.nio.file.Path file) throws Exception {
-        if (!java.nio.file.Files.exists(file)) {
-            ONode root = new ONode();
-            root.getOrNew("apiServers").asArray();
-            return root;
-        }
-        String content = new String(java.nio.file.Files.readAllBytes(file), "UTF-8");
-        return ONode.ofJson(content);
-    }
-
-    private void saveWebapiConfig(java.nio.file.Path file, ONode config) throws Exception {
-        java.nio.file.Files.createDirectories(file.getParent());
-        java.nio.file.Files.write(file, config.toJson().getBytes("UTF-8"));
-    }
-
-    /**
-     * 从持久化文件加载 MCP 服务器到引擎（启动时调用）
-     */
-    public void loadPersistedMcpServers() {
-        try {
-            java.nio.file.Path mcpFile = getMcpServersFile();
-            if (!java.nio.file.Files.exists(mcpFile)) {
-                return;
-            }
-
-            ONode config = loadMcpConfig(mcpFile);
-            ONode servers = config.get("mcpServers");
-            if (servers == null || !servers.isArray()) {
-                return;
-            }
-
-            for (ONode node : servers.getArray()) {
-                boolean enabled = node.get("enabled").getBoolean(true);
-                if (!enabled) continue;
-
-                String name = node.get("name").getString();
-                String type = node.get("type").getString();
-                if (name == null || name.isEmpty()) continue;
-
-                try {
-                    McpClientProvider.Builder builder = McpClientProvider.builder();
-                    if ("stdio".equals(type)) {
-                        String command = node.get("command").getString();
-                        if (command == null || command.isEmpty()) continue;
-                        builder.channel(org.noear.solon.ai.mcp.McpChannel.STDIO).command(command);
-
-                        ONode argsNode = node.get("args");
-                        if (argsNode != null && argsNode.isArray()) {
-                            List<String> argsList = new ArrayList<>();
-                            for (ONode a : argsNode.getArray()) {
-                                String arg = a.getString();
-                                if (arg != null && !arg.isEmpty()) argsList.add(arg);
-                            }
-                            if (!argsList.isEmpty()) builder.args(argsList);
-                        }
-
-                        ONode envNode = node.get("env");
-                        if (envNode != null && envNode.isObject() && envNode.getObject().size() > 0) {
-                            Map<String, String> envMap = new LinkedHashMap<>();
-                            for (Map.Entry<String, ONode> entry : envNode.getObject().entrySet()) {
-                                envMap.put(entry.getKey(), entry.getValue().getString());
-                            }
-                            builder.env(envMap);
-                        }
-                    } else {
-                        String url = node.get("url").getString();
-                        if (url == null || url.isEmpty()) continue;
-                        String channel = "sse".equals(type)
-                                ? org.noear.solon.ai.mcp.McpChannel.SSE
-                                : org.noear.solon.ai.mcp.McpChannel.STREAMABLE;
-                        builder.channel(channel).url(url);
-
-                        ONode headersNode = node.get("headers");
-                        if (headersNode != null && headersNode.isObject()) {
-                            Map<String, String> headersMap = new LinkedHashMap<>();
-                            for (Map.Entry<String, ONode> entry : headersNode.getObject().entrySet()) {
-                                headersMap.put(entry.getKey(), entry.getValue().getString());
-                            }
-                            builder.headers(headersMap);
-                        }
-                    }
-
-                    McpClientProvider client = builder.build();
-                    McpGatewaySkill mcpGateway = engine.getMcpGatewaySkill();
-                    if (mcpGateway != null) {
-                        mcpGateway.addMcpServer(name, client);
-                    }
-                    LOG.info("[Settings] Loaded persisted MCP server: {} ({})", name, type);
-                } catch (Exception e) {
-                    LOG.warn("[Settings] Failed to load MCP server '{}': {}", name, e.getMessage());
-                }
-            }
-        } catch (Exception e) {
-            LOG.warn("[Settings] Failed to load persisted MCP servers: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * 从持久化文件加载 WebApi 服务器到引擎（启动时调用）
-     */
-    public void loadPersistedWebapiServers() {
-        try {
-            java.nio.file.Path webapiFile = getWebapiServersFile();
-            if (!java.nio.file.Files.exists(webapiFile)) {
-                return;
-            }
-            ONode config = loadWebapiConfig(webapiFile);
-            ONode servers = config.get("apiServers");
-            if (servers == null || !servers.isArray()) {
-                return;
-            }
-            OpenApiSkill restApi = engine.getOpenApiSkill();
-            for (ONode node : servers.getArray()) {
-                boolean enabled = node.get("enabled").getBoolean(true);
-                if (!enabled) continue;
-                String name = node.get("name").getString();
-                String apiBaseUrl = node.get("apiBaseUrl").getString();
-                String docUrl = node.get("docUrl").getString();
-                if (apiBaseUrl == null || apiBaseUrl.isEmpty()) continue;
-
-                Map<String, String> headersMap = null;
-                ONode headersNode = node.get("headers");
-                if (headersNode != null && headersNode.isObject()) {
-                    headersMap = new LinkedHashMap<>();
-                    for (Map.Entry<String, ONode> entry : headersNode.getObject().entrySet()) {
-                        headersMap.put(entry.getKey(), entry.getValue().getString());
-                    }
-                }
-
-                if (restApi != null) {
-                    restApi.addApi(docUrl, apiBaseUrl, headersMap);
-                }
-                LOG.info("[Settings] Loaded persisted WebApi server: {} -> {}", name, apiBaseUrl);
-            }
-        } catch (Exception e) {
-            LOG.warn("[Settings] Failed to load persisted WebApi servers: {}", e.getMessage());
-        }
-    }
 
     // ==================== 设置：Skills 市场（委派给 Market 接口） ====================
 
-    /**
-     * 技能市场代理接口 — 获取热门技能或搜索技能。
-     * <p>所有外部 API 调用均由后端 Market 适配器完成，前端不直接访问外部服务。</p>
-     *
-     * @param action "trending" 获取热门 | "search" 搜索
-     * @param query  搜索关键词（action=search 时使用）
-     * @param limit  返回数量限制
-     */
     /**
      * 获取所有可用市场列表
      */

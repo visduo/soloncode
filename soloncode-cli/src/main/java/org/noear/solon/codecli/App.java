@@ -17,9 +17,12 @@ package org.noear.solon.codecli;
 
 import org.noear.solon.Solon;
 import org.noear.solon.SolonApp;
+import org.noear.solon.Utils;
 import org.noear.solon.codecli.config.AgentFlags;
 import org.noear.solon.codecli.config.AgentProperties;
+import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.scheduling.annotation.EnableScheduling;
 import org.noear.solon.web.cors.CrossFilter;
 
@@ -39,7 +42,7 @@ public class App {
         AgentProperties agentProps = new AgentProperties();
 
         //配置用户扩展目录
-       System.setProperty("solon.extend", "!" + agentProps.getUserExtensions());
+        System.setProperty("solon.extend", "!" + agentProps.getUserExtensions());
 
         Solon.start(App.class, args, app -> {
             initAgentProperties(app, agentProps);
@@ -74,6 +77,8 @@ public class App {
         //设定系统提示词
         c.setSystemPrompt(c.getAgentsMd());
 
+        initAgentSettings(app, c);
+
         //推入容器
         app.context().wrapAndPut(AgentProperties.class, c);
 
@@ -100,6 +105,28 @@ public class App {
             enabledAcp(app, c);
             return;
         }
+    }
+
+    private static void initAgentSettings(SolonApp app, AgentProperties props) throws Exception {
+        URL settingsUrl = props.getSettingsUrl();
+        AgentSettings agentSettings = null;
+
+        if (settingsUrl != null) {
+            String settingsJson = ResourceUtil.getResourceAsString(settingsUrl);
+
+            if (Utils.isNotEmpty(settingsJson)) {
+                agentSettings = AgentSettings.fromJson(settingsJson);
+            }
+        }
+
+        if (agentSettings == null) {
+            agentSettings = new AgentSettings();
+        }
+
+        //与 AgentProperties 双向合并
+        agentSettings.mergeFrom(props);
+
+        app.context().wrapAndPut(AgentSettings.class, agentSettings);
     }
 
     private static void enabledWeb(SolonApp app, AgentProperties c) {
