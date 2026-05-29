@@ -55,7 +55,7 @@ import java.util.*;
  *   <li><b>模型管理</b>：可用模型列表查询、当前会话模型切换</li>
  *   <li><b>聊天输入</b>：接收用户消息与附件，路由到 WebGate 进行 AI 处理</li>
  *   <li><b>Git 集成</b>：仓库状态检测、初始化、Diff 查看、文件内容获取、提交（委派给 {@link GitService}）</li>
- *   <li><b>文件树浏览</b>：工作区目录结构的层级化浏览</li>
+ *   <li><b>文件浏览</b>：工作区目录结构浏览、文件搜索、文件内容读取（委派给 {@link FileService}）</li>
  * </ul>
  *
  * <h3>架构位置</h3>
@@ -65,8 +65,9 @@ import java.util.*;
  *
  * @author oisin 2026-3-13
  * @author noear 2026-4-18
- * @see WebGate   WebSocket 推送网关
- * @see GitService Git 业务逻辑服务
+ * @see WebGate    WebSocket 推送网关
+ * @see GitService  Git 业务逻辑服务
+ * @see FileService 文件浏览业务逻辑服务
  * @see HarnessEngine AI Agent 执行引擎
  */
 public class WebController {
@@ -85,14 +86,8 @@ public class WebController {
     /** Git 业务逻辑服务，封装工作区 Git 操作 */
     private final GitService gitService;
 
-    /**
-     * 文件树浏览时排除的目录名称集合。
-     * <p>包含各类构建产物、IDE 配置、版本控制等无需展示的目录，
-     * 如 .git、.idea、node_modules、target、__pycache__ 等。</p>
-     */
-    private static final Set<String> EXCLUDED_DIRS = new HashSet<>(Arrays.asList(
-            ".git", ".idea", ".soloncode", "node_modules", "target", "__pycache__", ".gradle", ".mvn", "build"
-    ));
+    /** 文件业务逻辑服务，封装工作区文件浏览、搜索、读取操作 */
+    private final FileService fileService;
 
     /**
      * 构造函数：初始化核心依赖并注册 Web 端 Loop 任务执行器。
@@ -106,6 +101,7 @@ public class WebController {
         this.webGate = webGate;
         this.loopScheduler = loopScheduler;
         this.gitService = new GitService(engine.getProps().getWorkspace(), engine);
+        this.fileService = new FileService(engine.getProps().getWorkspace());
 
         // 注入 Web 端 Loop 任务执行器：异步执行 AI 任务，通过 WebGate WebSocket 推送到前端
         if (loopScheduler != null) {
@@ -708,7 +704,7 @@ public class WebController {
     }
 
 
-    // ==================== 工具方法与文件树浏览 ====================
+    // ==================== 工具方法 ====================
 
     /**
      * 递归删除目录及其所有子文件和子目录。
@@ -755,208 +751,39 @@ public class WebController {
         return null;
     }
 
+    // ==================== 文件浏览（委派给 FileService） ====================
+
     /**
      * 工作区文件树浏览接口。
-     * <p>以工作区根目录为基准，按指定路径和深度返回目录结构。
-     * 排除以点号开头的隐藏文件和 {@link #EXCLUDED_DIRS} 中的目录。</p>
      *
-     * @param path  相对路径，基于工作区根目录；为空时从根目录开始
-     * @param depth 展开深度，默认为 1（仅展开第一层）
-     * @return 文件树列表，每项包含 name、path、type、expanded、children
-     * @throws Exception 文件系统访问异常
+     * @see FileService#tree(String, Integer)
      */
     @Get
     @Mapping("/web/chat/filer/tree")
     public Result<List<Map>> fileTree(@Param(value = "path", required = false) String path,
                                       @Param(value = "depth", required = false) Integer depth) throws Exception {
-        if (depth == null || depth < 1) depth = 1;
-        if (path == null) path = "";
-        if (path.contains("..")) {
-            return Result.failure(400, "Invalid path");
-        }
-
-        java.nio.file.Path workspace = java.nio.file.Paths.get(engine.getProps().getWorkspace()).toAbsolutePath().normalize();
-        java.nio.file.Path target = workspace.resolve(path).toAbsolutePath().normalize();
-
-        if (!target.startsWith(workspace)) {
-            return Result.failure(403, "Access denied");
-        }
-        if (!target.toFile().exists() || !target.toFile().isDirectory()) {
-            return Result.failure(404, "Directory not found");
-        }
-
-        List<Map> tree = buildTree(target, workspace, depth, 1);
-        return Result.succeed(tree);
+        return fileService.tree(path, depth);
     }
 
     /**
-     * 工作区文件搜索。
-     * <p>递归扫描整个工作区，返回路径中包含关键词的文件列表。
-     * 排除规则与文件树接口一致：隐藏文件和 EXCLUDED_DIRS 中的目录。</p>
+     * 工作区文件搜索接口。
      *
-     * @param keyword 搜索关键词，匹配文件路径（大小写不敏感）
-     * @return 匹配的文件列表，每项包含 name、path、type
-     * @throws Exception 文件系统访问异常
+     * @see FileService#search(String)
      */
     @Get
     @Mapping("/web/chat/filer/search")
     public Result<List<Map>> fileSearch(@Param("keyword") String keyword) throws Exception {
-        if (keyword == null || keyword.trim().isEmpty()) {
-            return Result.failure(400, "Keyword is required");
-        }
-        if (keyword.contains("..")) {
-            return Result.failure(400, "Invalid keyword");
-        }
-
-        java.nio.file.Path workspace = java.nio.file.Paths.get(engine.getProps().getWorkspace()).toAbsolutePath().normalize();
-        String kw = keyword.trim().toLowerCase();
-
-        List<Map> results = new ArrayList<>();
-        searchFiles(workspace.toFile(), workspace, kw, results, 0);
-
-        if (results.size() > 200) {
-            results = results.subList(0, 200);
-        }
-
-        return Result.succeed(results);
+        return fileService.search(keyword);
     }
 
     /**
-     * 读取工作区文件内容。
-     * <p>以工作区根目录为基准，读取指定路径的文件文本内容。
-     * 支持安全路径校验和文件大小限制。</p>
+     * 读取工作区文件内容接口。
      *
-     * @param path 相对路径，基于工作区根目录
-     * @return 文件信息，包含 content、path、name、size
-     * @throws Exception 文件系统访问异常
+     * @see FileService#read(String)
      */
     @Get
     @Mapping("/web/chat/filer/read")
     public Result<Map> fileRead(@Param("path") String path) throws Exception {
-        if (path == null || path.trim().isEmpty()) {
-            return Result.failure(400, "Path is required");
-        }
-        if (path.contains("..")) {
-            return Result.failure(400, "Invalid path");
-        }
-
-        java.nio.file.Path workspace = java.nio.file.Paths.get(engine.getProps().getWorkspace()).toAbsolutePath().normalize();
-        java.nio.file.Path target = workspace.resolve(path).toAbsolutePath().normalize();
-
-        if (!target.startsWith(workspace)) {
-            return Result.failure(403, "Access denied");
-        }
-        if (!target.toFile().exists() || target.toFile().isDirectory()) {
-            return Result.failure(404, "File not found");
-        }
-
-        File file = target.toFile();
-        // 限制文件大小：2MB
-        if (file.length() > 2 * 1024 * 1024) {
-            return Result.failure(413, "File too large (max 2MB)");
-        }
-
-        // 读取文件内容（尝试 UTF-8，失败回退系统默认编码）
-        String content;
-        try {
-            content = new String(java.nio.file.Files.readAllBytes(target), "UTF-8");
-        } catch (Exception e) {
-            BufferedReader reader = null;
-            try {
-                reader = new BufferedReader(new InputStreamReader(new FileInputStream(file)));
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    sb.append(line).append("\n");
-                }
-                content = sb.toString();
-            } finally {
-                if (reader != null) reader.close();
-            }
-        }
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("content", content);
-        data.put("path", path);
-        data.put("name", file.getName());
-        data.put("size", file.length());
-
-        return Result.succeed(data);
-    }
-
-    /**
-     * 递归构建文件树结构。
-     * <p>对指定目录进行扫描，目录排在前面、文件排在后面，均按名称字典序排列。
-     * 跳过以点号开头的隐藏文件和 {@link #EXCLUDED_DIRS} 中定义的目录。
-     * 当达到最大深度时，目录节点不再展开（children 为 null）。</p>
-     *
-     * @param dir          当前扫描的目录路径
-     * @param workspace    工作区根路径，用于计算相对路径
-     * @param maxDepth     最大展开深度
-     * @param currentDepth 当前递归深度
-     * @return 当前层级的文件/目录信息列表
-     */
-    private List<Map> buildTree(java.nio.file.Path dir, java.nio.file.Path workspace, int maxDepth, int currentDepth) {
-        File[] files = dir.toFile().listFiles();
-        if (files == null) return Collections.emptyList();
-
-        Arrays.sort(files, (a, b) -> {
-            if (a.isDirectory() && !b.isDirectory()) return -1;
-            if (!a.isDirectory() && b.isDirectory()) return 1;
-            return a.getName().compareToIgnoreCase(b.getName());
-        });
-
-        List<Map> result = new ArrayList<>();
-        for (File f : files) {
-            if (f.getName().startsWith(".") || EXCLUDED_DIRS.contains(f.getName())) continue;
-
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("name", f.getName());
-            item.put("path", workspace.relativize(f.toPath().toAbsolutePath().normalize()).toString().replace('\\', '/'));
-            item.put("type", f.isDirectory() ? "directory" : "file");
-
-            if (f.isDirectory() && currentDepth < maxDepth) {
-                item.put("expanded", true);
-                item.put("children", buildTree(f.toPath(), workspace, maxDepth, currentDepth + 1));
-            } else if (f.isDirectory()) {
-                item.put("expanded", false);
-                item.put("children", null);
-            }
-            result.add(item);
-        }
-        return result;
-    }
-
-    /**
-     * 递归搜索匹配关键词的文件。
-     *
-     * @param dir       当前扫描的目录
-     * @param workspace 工作区根路径，用于计算相对路径
-     * @param keyword   小写化后的搜索关键词
-     * @param results   收集结果的列表
-     * @param depth     当前递归深度，超过 20 层停止
-     */
-    private void searchFiles(File dir, java.nio.file.Path workspace, String keyword, List<Map> results, int depth) {
-        if (depth > 20) return;
-        File[] files = dir.listFiles();
-        if (files == null) return;
-
-        for (File f : files) {
-            if (f.getName().startsWith(".") || (f.isDirectory() && EXCLUDED_DIRS.contains(f.getName()))) continue;
-
-            String relativePath = workspace.relativize(f.toPath().toAbsolutePath().normalize()).toString().replace('\\', '/');
-
-            if (relativePath.toLowerCase().contains(keyword)) {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("name", f.getName());
-                item.put("path", relativePath);
-                item.put("type", f.isDirectory() ? "directory" : "file");
-                results.add(item);
-            }
-
-            if (f.isDirectory()) {
-                searchFiles(f, workspace, keyword, results, depth + 1);
-            }
-        }
+        return fileService.read(path);
     }
 }

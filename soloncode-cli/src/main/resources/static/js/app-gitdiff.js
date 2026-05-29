@@ -116,6 +116,15 @@
     // ---- 渲染文件列表（带 checkbox）----
     function renderFileList(data) {
         if (!gitDiffFileList) return;
+
+        // 在清空列表前，记录当前已勾选的文件路径
+        var prevChecked = {};
+        var hasPrevState = false;
+        gitDiffFileList.querySelectorAll('.git-file-checkbox').forEach(function(cb) {
+            hasPrevState = true;
+            if (cb.checked) prevChecked[cb.getAttribute('data-path')] = true;
+        });
+
         gitDiffFileList.innerHTML = '';
 
         var files = [];
@@ -143,18 +152,15 @@
         gitDiffFileList.style.display = '';
         if (gitCommitBar) gitCommitBar.style.display = '';
 
-        // 全选默认勾选
-        if (gitSelectAll) gitSelectAll.checked = true;
-
         files.forEach(function(file) {
             var item = document.createElement('div');
             item.className = 'git-file-item';
 
-            // checkbox
+            // checkbox：如果之前有选中状态则恢复，否则默认全选
             var cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.className = 'git-file-checkbox';
-            cb.checked = true;
+            cb.checked = hasPrevState ? !!prevChecked[file.path] : true;
             cb.setAttribute('data-path', file.path);
             cb.addEventListener('click', function(e) {
                 e.stopPropagation(); // 防止触发外层 click 打开 diff
