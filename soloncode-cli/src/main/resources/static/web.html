@@ -65,9 +65,9 @@
 
     <!-- Welcome View -->
     <div class="welcome-view" id="welcomeView">
-        <div class="welcome-avatar">
+        <a class="welcome-avatar" href="https://solon.noear.org/article/soloncode" target="_blank" rel="noopener noreferrer" title="了解更多关于 SolonCode">
             <img src="/img/favicon.png" alt="SolonCode" />
-        </div>
+        </a>
         <div class="welcome-title" id="welcomeTitle">你好，我是 SolonCode ！</div>
         <div class="welcome-sub">需要什么帮助吗?</div>
         <div class="welcome-input-box" id="welcomeDropZone">
@@ -305,6 +305,7 @@
                 <button class="settings-tab" data-tab="mcp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> MCP 服务器</button>
                 <button class="settings-tab" data-tab="webapi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> OpenApi 服务器</button>
                 <div class="settings-tabs-footer">
+                    <div class="settings-product-name">SolonCode</div>
                     <span id="appVersionLabel" class="settings-version"></span>
                 </div>
             </div>
@@ -317,7 +318,6 @@
                             <div class="settings-section-header">
                                 <span class="settings-section-title">大语言模型</span>
                                 <div class="llm-header-actions">
-                                    <button class="settings-add-btn" id="llmExportBtn">导出</button>
                                     <button class="settings-add-btn" id="llmAddBtn">+ 添加模型</button>
                                 </div>
                             </div>
@@ -428,8 +428,6 @@
                             <div class="settings-section-header">
                                 <span class="settings-section-title">MCP 服务器</span>
                                 <div class="mcp-header-actions">
-                                    <button class="settings-add-btn" id="mcpExportBtn">导出</button>
-                                    <button class="settings-add-btn" id="mcpImportBtn">导入</button>
                                     <button class="settings-add-btn" id="mcpAddBtn">+ 添加服务器</button>
                                 </div>
                             </div>
@@ -501,20 +499,7 @@
                             </div>
                         </div>
                     </div>
-                    <!-- Import Dialog -->
-                    <div class="mcp-import-dialog" id="mcpImportDialog" style="display:none">
-                        <div class="mcp-import-dialog-content">
-                            <div class="mcp-import-dialog-title">导入 MCP 配置</div>
-                            <div class="form-group">
-                                <label>粘贴标准格式 JSON（支持 Claude Desktop / Cursor / 本系统格式）</label>
-                                <textarea id="mcpImportText" rows="8" placeholder='{"mcpServers":{...}}'></textarea>
-                            </div>
-                            <div class="form-actions">
-                                <button class="btn-secondary" id="mcpImportCancelBtn">取消</button>
-                                <button class="btn-primary" id="mcpImportConfirmBtn">导入</button>
-                            </div>
-                        </div>
-                    </div>
+
                 </div>
                 <!-- OpenApi Tab -->
                 <div class="settings-tab-content" id="settingsTabWebapi">
@@ -524,8 +509,6 @@
                             <div class="settings-section-header">
                                 <span class="settings-section-title">OpenApi 服务器</span>
                                 <div class="webapi-header-actions">
-                                    <button class="settings-add-btn" id="webapiExportBtn">导出</button>
-                                    <button class="settings-add-btn" id="webapiImportBtn">导入</button>
                                     <button class="settings-add-btn" id="webapiAddBtn">+ 添加服务器</button>
                                 </div>
                             </div>
@@ -573,20 +556,7 @@
                             </div>
                         </div>
                     </div>
-                    <!-- Import Dialog -->
-                    <div class="mcp-import-dialog" id="webapiImportDialog" style="display:none">
-                        <div class="mcp-import-dialog-content">
-                            <div class="mcp-import-dialog-title">导入 OpenApi 配置</div>
-                            <div class="form-group">
-                                <label>粘贴 JSON 配置</label>
-                                <textarea id="webapiImportText" rows="8" placeholder='{"apiServers":{"api1":{"apiBaseUrl":"https://...","headers":{}}}}'></textarea>
-                            </div>
-                            <div class="form-actions">
-                                <button class="btn-secondary" id="webapiImportCancelBtn">取消</button>
-                                <button class="btn-primary" id="webapiImportConfirmBtn">导入</button>
-                            </div>
-                        </div>
-                    </div>
+
                 </div>
             </div><!-- /.settings-body -->
         </div><!-- /.settings-content -->

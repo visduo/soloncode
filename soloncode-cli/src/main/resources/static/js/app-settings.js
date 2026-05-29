@@ -30,16 +30,6 @@
         return obj;
     }
 
-    /** 下载 JSON 文件 */
-    function downloadJson(obj, filename) {
-        var blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(a.href);
-    }
-
     /** 通用 POST JSON */
     function postJson(url, data, doneFn, alwaysFn) {
         return $.ajax({ url: url, method: 'POST', data: JSON.stringify(data), contentType: 'application/json', dataType: 'json' })
@@ -109,8 +99,6 @@
     var $mcpFormView = $('#mcpFormView');
     var $mcpTypeBtns = $('.mcp-type-btn');
     var $mcpCheckResult = $('#mcpCheckResult');
-    var $mcpImportDialog = $('#mcpImportDialog');
-
     // OpenApi
     var $webapiServerList = $('#webapiServerList');
     var $webapiSaveBtn = $('#webapiSaveBtn');
@@ -118,7 +106,6 @@
     var $webapiListView = $('#webapiListView');
     var $webapiFormView = $('#webapiFormView');
     var $webapiCheckResult = $('#webapiCheckResult');
-    var $webapiImportDialog = $('#webapiImportDialog');
 
     // ==================== 状态 ====================
 
@@ -405,14 +392,6 @@
             .always(function () { $btn.prop('disabled', false).html(btnOriginal); });
     });
 
-    // LLM 导出
-    $('#llmExportBtn').on('click', function () {
-        $.get('/web/settings/llm/models/export', function (resp) {
-            downloadJson({ models: resp.data || [] }, 'llm-models.json');
-        });
-    });
-
-
     // LLM API Key 显示切换
     $('#llmApiKeyToggle').on('click', function () {
         var $input = $('#llmApiKey');
@@ -626,43 +605,6 @@
     });
 
     // MCP 导入导出
-    $('#mcpExportBtn').on('click', function () {
-        $.get('/web/settings/mcp/servers', function (resp) {
-            var servers = resp.data || [];
-            var exportObj = { mcpServers: {} };
-            servers.forEach(function (s) {
-                var entry = { type: s.type };
-                if (s.type === 'stdio') {
-                    if (s.command) entry.command = s.command;
-                    if (s.args) entry.args = s.args;
-                    if (s.env) entry.env = s.env;
-                } else {
-                    if (s.url) entry.url = s.url;
-                    if (s.headers) entry.headers = s.headers;
-                    if (s.timeout) entry.timeout = s.timeout;
-                }
-                exportObj.mcpServers[s.name] = entry;
-            });
-            downloadJson(exportObj, 'mcp-servers.json');
-        });
-    });
-
-    $('#mcpImportBtn').on('click', function () { $mcpImportDialog.css('display', 'flex'); $('#mcpImportText').val(''); });
-    $('#mcpImportCancelBtn').on('click', function () { $mcpImportDialog.hide(); });
-    $('#mcpImportConfirmBtn').on('click', function () {
-        var text = $('#mcpImportText').val().trim();
-        if (!text) { showToast('请粘贴 JSON 配置', 'error'); return; }
-        try { JSON.parse(text); } catch (e) { showToast('JSON 格式无效', 'error'); return; }
-        var $btn = $(this).prop('disabled', true);
-        $.ajax({ url: '/web/settings/mcp/servers/import', method: 'POST', data: text, contentType: 'application/json', dataType: 'json' })
-            .done(function (resp) {
-                if (resp.code === 200) { loadMcpList(); $mcpImportDialog.hide(); }
-                else showToast('导入失败: ' + (resp.message || '未知错误'), 'error');
-            })
-            .fail(function () { showToast('网络错误', 'error'); })
-            .always(function () { $btn.prop('disabled', false); });
-    });
-
     // ==================== OpenApi 管理 ====================
 
     function loadWebapiList() {
@@ -698,6 +640,7 @@
                     + '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:var(--text-secondary);">'
                     + '<input type="checkbox" ' + (enabled ? 'checked' : '') + ' data-name="' + escapeAttr(name) + '" class="webapi-toggle"/>'
                     + '</label>'
+                    + '<button class="mcp-action-btn copy" data-name="' + escapeAttr(name) + '" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>'
                     + '<button class="mcp-action-btn edit" data-name="' + escapeAttr(name) + '" title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
                     + '<button class="mcp-action-btn delete" data-name="' + escapeAttr(name) + '" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>'
                     + '</div></div>';
@@ -710,6 +653,9 @@
     $webapiServerList
         .on('change', '.webapi-toggle', function () {
             webapiToggleServer($(this).attr('data-name'), this.checked);
+        })
+        .on('click', '.mcp-action-btn.copy', function () {
+            webapiCopyServer($(this).attr('data-name'));
         })
         .on('click', '.mcp-action-btn.edit', function () {
             webapiEditServer($(this).attr('data-name'));
@@ -758,6 +704,16 @@
         showWebapiFormView('编辑服务器');
         $webapiSaveBtn.text('更新');
         $('#webapiName').val(server.name).prop('readOnly', true);
+        fillWebapiForm(server);
+    }
+
+    function webapiCopyServer(name) {
+        var server = webapiCachedList.find(function (s) { return s.name === name; });
+        if (!server) return;
+        webapiEditName = null;
+        showWebapiFormView('添加服务器');
+        $webapiSaveBtn.text('保存');
+        $('#webapiName').val(server.name + '-copy').prop('readOnly', false);
         fillWebapiForm(server);
     }
 
@@ -819,38 +775,6 @@
             })
             .fail(function () { showToast('网络错误', 'error'); })
             .always(function () { $webapiSaveBtn.prop('disabled', false); });
-    });
-
-    // OpenApi 导入导出
-    $('#webapiExportBtn').on('click', function () {
-        $.get('/web/settings/webapi/servers', function (resp) {
-            var servers = resp.data || [];
-            var exportObj = { apiServers: {} };
-            servers.forEach(function (s) {
-                var entry = {};
-                if (s.apiBaseUrl) entry.apiBaseUrl = s.apiBaseUrl;
-                if (s.docUrl) entry.docUrl = s.docUrl;
-                if (s.headers) entry.headers = s.headers;
-                exportObj.apiServers[s.name] = entry;
-            });
-            downloadJson(exportObj, 'openapi-servers.json');
-        });
-    });
-
-    $('#webapiImportBtn').on('click', function () { $webapiImportDialog.css('display', 'flex'); $('#webapiImportText').val(''); });
-    $('#webapiImportCancelBtn').on('click', function () { $webapiImportDialog.hide(); });
-    $('#webapiImportConfirmBtn').on('click', function () {
-        var text = $('#webapiImportText').val().trim();
-        if (!text) { showToast('请粘贴 JSON 配置', 'error'); return; }
-        try { JSON.parse(text); } catch (e) { showToast('JSON 格式无效', 'error'); return; }
-        var $btn = $(this).prop('disabled', true);
-        $.ajax({ url: '/web/settings/webapi/servers/import', method: 'POST', data: text, contentType: 'application/json', dataType: 'json' })
-            .done(function (resp) {
-                if (resp.code === 200) { loadWebapiList(); $webapiImportDialog.hide(); }
-                else showToast('导入失败: ' + (resp.message || '未知错误'), 'error');
-            })
-            .fail(function () { showToast('网络错误', 'error'); })
-            .always(function () { $btn.prop('disabled', false); });
     });
 
 })();
