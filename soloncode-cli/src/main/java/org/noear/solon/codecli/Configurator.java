@@ -5,6 +5,7 @@ import com.agentclientprotocol.sdk.agent.transport.WebSocketSolonAcpAgentTranspo
 import com.agentclientprotocol.sdk.spec.AcpAgentTransport;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import org.noear.solon.Solon;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.session.FileAgentSession;
@@ -19,6 +20,7 @@ import org.noear.solon.codecli.config.AgentFlags;
 import org.noear.solon.codecli.config.AgentProperties;
 import org.noear.solon.codecli.command.builtin.LoopScheduler;
 import org.noear.solon.codecli.channel.Channel;
+import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.codecli.memory.MemoryFactory;
 import org.noear.solon.codecli.portal.*;
 import org.noear.solon.codecli.portal.acp.AcpLink;
@@ -34,11 +36,13 @@ import org.noear.solon.codecli.portal.desktop.provider.ModelProviderFactory;
 import org.noear.solon.core.AppContext;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.util.JavaUtil;
+import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.net.websocket.WebSocketRouter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
@@ -69,7 +73,7 @@ public class Configurator {
     private LoopScheduler loopScheduler;
 
     @Bean
-    public HarnessEngine agentRuntime(AgentProperties props) {
+    public HarnessEngine agentRuntime(AgentProperties props) throws Exception {
         props.getSkillPools().put("@global", Paths.get(props.getUserHome(), props.getHarnessSkills()).toString());
         props.getSkillPools().put("@local", Paths.get(props.getWorkspace(), props.getHarnessSkills()).toString());
 
@@ -87,6 +91,34 @@ public class Configurator {
         props.getAgentPools().add(Paths.get(props.getUserHome(), props.getHarnessAgents()).toString()); //global
         props.getAgentPools().add(Paths.get(props.getWorkspace(), props.getHarnessAgents()).toString()); //local
 
+
+        URL settingsUrl = props.getSettingsUrl();
+        if(settingsUrl != null) {
+            String settingsJson = ResourceUtil.getResourceAsString(settingsUrl);
+
+            if (Utils.isNotEmpty(settingsJson)) {
+                //同步 settings.json 的配置
+                AgentSettings agentSettings = AgentSettings.fromJson(settingsJson);
+
+                if (agentSettings.getModels().size() > 0) {
+                    props.getModels().addAll(agentSettings.getModels());
+                    props.getModels().clear();
+                }
+
+                if (agentSettings.getMcpServers().size() > 0) {
+                    props.getMcpServers().putAll(agentSettings.getMcpServers());
+                    props.getMcpServers().clear();
+                }
+
+                if (agentSettings.getApiServers().size() > 0) {
+                    props.getApiServers().putAll(agentSettings.getApiServers());
+                    props.getApiServers().clear();
+                }
+            }
+        }
+
+
+        //-----------------
 
         Map<String, AgentSession> sessionMap = new ConcurrentHashMap<>();
 
@@ -111,6 +143,7 @@ public class Configurator {
         // loop scheduler
         this.loopScheduler = new LoopScheduler();
         engine.getCommandRegistry().register(new LoopCommand(loopScheduler));
+
 
         return engine;
     }
