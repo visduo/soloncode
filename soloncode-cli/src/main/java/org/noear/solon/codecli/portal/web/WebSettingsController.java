@@ -123,6 +123,47 @@ public class WebSettingsController {
     // ==================== 设置：LLM 模型管理 ====================
 
     /**
+     * 获取单个模型配置详情（用于编辑/复制时填充表单）
+     */
+    @Get
+    @Mapping("/web/settings/llm/models/get")
+    public Result<Map> llmModelsGet(@Param("name") String name) throws Exception {
+        if (Assert.isEmpty(name)) {
+            return Result.failure("name is required");
+        }
+
+        ChatConfig config = null;
+        for (ChatConfig c : settings.getModels()) {
+            if (name.equals(c.getName())) {
+                config = c;
+                break;
+            }
+        }
+
+        if (config == null) {
+            return Result.failure("Model not found: " + name);
+        }
+
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("apiUrl", config.getApiUrl());
+        item.put("model", config.getModel());
+        item.put("name", config.getName());
+        item.put("apiKey", config.getApiKey());
+        item.put("provider", config.getProvider());
+        if (config.getTimeout() != null) {
+            item.put("timeout", config.getTimeout().toString());
+        }
+        if (config.getUserAgent() != null) {
+            item.put("userAgent", config.getUserAgent());
+        }
+        if (config.getContextLength() > 0) {
+            item.put("contextLength", String.valueOf(config.getContextLength()));
+        }
+
+        return Result.succeed(item);
+    }
+
+    /**
      * 测试模型连接 — 通过 ChatModel 发送 hello 提示语，验证连接可用性
      */
     @Post
@@ -201,20 +242,20 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/llm/models/remove")
-    public Result llmModelsRemove(@Param("modelName") String modelName) throws Exception {
-        if (Assert.isEmpty(modelName)) {
-            return Result.failure("modelName is required");
+    public Result llmModelsRemove(@Param("name") String name) throws Exception {
+        if (Assert.isEmpty(name)) {
+            return Result.failure("name is required");
         }
-        if (modelName.equals(engine.getMainModel().getNameOrModel())) {
+        if (name.equals(engine.getMainModel().getConfig().getName())) {
             return Result.failure("Cannot remove the active main model");
         }
 
-        engine.getProps().removeModel(modelName);
+        engine.getProps().removeModel(name);
 
-        settings.getModels().removeIf(c -> modelName.equals(c.getName()) || modelName.equals(c.getModel()));
+        settings.getModels().removeIf(c -> name.equals(c.getName()));
         saveSettings();
 
-        LOG.info("[Settings] Model removed: {}", modelName);
+        LOG.info("[Settings] Model removed: {}", name);
         return Result.succeed();
     }
 
@@ -288,13 +329,13 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/llm/models/setDefault")
-    public Result llmModelsSetDefault(@Param("modelName") String modelName) throws Exception {
-        if (Assert.isEmpty(modelName)) {
-            return Result.failure("modelName is required");
+    public Result llmModelsSetDefault(@Param("name") String name) throws Exception {
+        if (Assert.isEmpty(name)) {
+            return Result.failure("name is required");
         }
-        engine.switchMainModel(modelName);
+        engine.switchMainModel(name);
         saveSettings();
-        LOG.info("[Settings] Default model set to: {}", modelName);
+        LOG.info("[Settings] Default model set to: {}", name);
         return Result.succeed();
     }
 

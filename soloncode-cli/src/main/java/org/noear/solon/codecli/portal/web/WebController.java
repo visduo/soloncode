@@ -19,6 +19,7 @@ import org.noear.snack4.ONode;
 import org.noear.solon.Solon;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.chat.ChatConfig;
+import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessFlags;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
@@ -1048,6 +1049,116 @@ public class WebController {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("stdout", commitResult.stdout.trim());
         return Result.succeed(data);
+    }
+
+    /**
+     * Git 提交摘要生成：通过 AI 分析 diff 内容，生成简洁的提交信息。
+     * <p>通过 sessionId 获取当前会话的 LLM 模型，收集指定文件的 diff，
+     * 直接调用 ChatModel 进行纯文本生成（不走 ReAct Agent），HTTP 直接返回结果。</p>
+     *
+     * @param sessionId 当前会话 ID，用于获取用户选择的 LLM 模型
+     * @param paths     需要分析的文件路径列表（JSON 数组格式）
+     * @return 包含 summary（AI 生成的提交摘要）的结果对象
+     */
+    @Post
+    @Mapping("/web/chat/git/summary")
+    public Result<Map> gitSummary(@Param("sessionId") String sessionId,
+                                  @Param("paths") String paths) {
+        if (sessionId == null || sessionId.isEmpty()) {
+            return Result.failure(400, "sessionId is required");
+        }
+        if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+            return Result.failure(400, "Invalid sessionId");
+        }
+
+        // 解析文件路径列表
+        List<String> files = new ArrayList<>();
+        if (paths != null && !paths.trim().isEmpty()) {
+            try {
+                ONode json = ONode.ofJson(paths);
+                if (json != null && json.isArray()) {
+                    for (ONode f : json.getArray()) {
+                        String p = f.getString();
+                        if (p != null && !p.isEmpty()) {
+                            files.add(p);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                return Result.failure(400, "Invalid paths format, expected JSON array");
+            }
+        }
+        if (files.isEmpty()) {
+            return Result.failure(400, "paths is required");
+        }
+
+        try {
+            // 通过 sessionId 获取会话，复用用户选择的 LLM 模型
+            AgentSession session = engine.getSession(sessionId);
+            String selectedModel = session.getContext().getOrDefault(
+                    HarnessFlags.VAR_MODEL_SELECTED,
+                    engine.getMainModel().getNameOrModel()
+            );
+            ChatModel chatModel = engine.getModelOrMain(selectedModel);
+
+            // 收集 diff 内容（最多 15 个文件）
+            File workspaceDir = new File(engine.getProps().getWorkspace());
+            List<String> targetFiles = files.size() > 15 ? files.subList(0, 15) : files;
+            StringBuilder combinedDiff = new StringBuilder();
+            int MAX_DIFF_LINES = 500;
+            int MAX_TOTAL_CHARS = 20000;
+
+            for (String filePath : targetFiles) {
+                if (filePath.contains("..") || filePath.startsWith("/")) continue;
+                ProcessResult diffResult = runGitCommand(workspaceDir, "git", "diff", "--", filePath);
+                ProcessResult cachedResult = runGitCommand(workspaceDir, "git", "diff", "--cached", "--", filePath);
+                String diff = diffResult.stdout;
+                if (!cachedResult.stdout.isEmpty()) {
+                    diff += "\n" + cachedResult.stdout;
+                }
+                if (diff.trim().isEmpty()) {
+                    diff = "(无差异内容)";
+                }
+                // 单文件截断 500 行
+                String[] lines = diff.split("\n");
+                if (lines.length > MAX_DIFF_LINES) {
+                    diff = String.join("\n", Arrays.copyOf(lines, MAX_DIFF_LINES)) + "\n... (已截断)";
+                }
+                combinedDiff.append("\n\n=== ").append(filePath).append(" ===\n").append(diff);
+            }
+
+            // 总字符截断
+            if (combinedDiff.length() > MAX_TOTAL_CHARS) {
+                combinedDiff.setLength(MAX_TOTAL_CHARS);
+                combinedDiff.append("\n\n... (总差异过大，已截断)");
+            }
+
+            String statInfo = targetFiles.size() + " 个文件" + (targetFiles.size() < files.size() ? "（仅前 15 个）" : "");
+
+            // 构造 prompt，直接调 LLM（纯文本，不走 ReAct Agent）
+            String prompt = "请根据以下 Git diff 变更内容，生成一条简洁的提交信息摘要。"
+                    + "要求：用中文，不超过 100 字，直接输出摘要文本，不要包含代码、不要使用 Markdown 格式。"
+                    + "\n\n变更统计：" + statInfo
+                    + "\n\n--- Diff 内容 ---\n" + combinedDiff;
+
+            String summary = chatModel.prompt(prompt).call().getMessage().getContent();
+
+            // 清理 Markdown 格式
+            if (summary != null) {
+                summary = summary.replace("**", "")
+                        .replace("*", "")
+                        .replaceAll("^#+\\s", "")
+                        .replace("`", "")
+                        .trim();
+            }
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("summary", summary != null ? summary : "");
+            return Result.succeed(data);
+        } catch (Exception e) {
+            LOG.error("[Web] gitSummary error: {}", e.getMessage());
+            return Result.failure(500, "生成摘要失败: " + e.getMessage());
+        }
     }
 
     // ==================== 工具方法与文件树浏览 ====================

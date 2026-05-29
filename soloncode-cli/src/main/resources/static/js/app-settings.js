@@ -215,22 +215,22 @@
         } else {
             var providerIcons = { 'openai': 'OAI', 'ollama': 'OLA', 'zhipu': 'ZP', 'deepseek': 'DS', 'baidu-qianfan': 'BD', 'ali-tongyi': 'ALI', 'moonshot': 'MS', 'minimax': 'MM' };
             list.forEach(function (item) {
-                var modelName = item.model || '';
+                var model = item.model || '';
                 var provider = item.provider || '';
                 var name = item.name || '';
                 var apiUrl = item.apiUrl || '';
                 var isActive = (name === selected);
-                var icon = providerIcons[provider] || modelName.substring(0, 2).toUpperCase();
+                var icon = providerIcons[provider] || model.substring(0, 2).toUpperCase();
                 var apiUrlShort = apiUrl ? apiUrl.replace(/^https?:\/\//, '').split('/')[0] : '';
 
-                var displayName = name || modelName;
+                var displayName = name || model;
                 var metaLine = '';
-                if (apiUrlShort && modelName) {
-                    metaLine = escapeHtml(apiUrlShort) + ' / ' + escapeHtml(modelName);
+                if (apiUrlShort && model) {
+                    metaLine = escapeHtml(apiUrlShort) + ' / ' + escapeHtml(model);
                 } else if (apiUrlShort) {
                     metaLine = escapeHtml(apiUrlShort);
-                } else if (modelName) {
-                    metaLine = escapeHtml(modelName);
+                } else if (model) {
+                    metaLine = escapeHtml(model);
                 }
 
                 html += '<div class="llm-model-item' + (isActive ? ' active' : '') + '" data-model="' + escapeAttr(name) + '">'
@@ -285,11 +285,16 @@
     function fillLlmForm(item) {
         if (item.provider) $('#llmProvider').val(item.provider);
         if (item.apiUrl) $('#llmApiUrl').val(item.apiUrl);
-        $('#llmApiKey').val('').attr('placeholder', item.apiKey ? '已配置（留空保持不变）' : 'sk-...');
+        if (item.apiKey) {
+            $('#llmApiKey').val(item.apiKey);
+        } else {
+            $('#llmApiKey').val('');
+        }
+        $('#llmApiKey').attr('placeholder', item.apiKey ? '已配置（留空保持不变）' : 'sk-...');
         if (item.model) $('#llmModel').val(item.model);
-        if (item.name && item.name !== item.model) $('#llmName').val(item.name);
+        if (item.name) $('#llmName').val(item.name);
+        if (item.timeout) $('#llmTimeout').val(item.timeout);
         if (item.contextLength) $('#llmContextLength').val(item.contextLength);
-        if (item.defaultOptions) $('#llmDefaultOptions').val(JSON.stringify(item.defaultOptions, null, 2));
     }
 
     function buildLlmBodyObj() {
@@ -312,27 +317,39 @@
         return bodyObj;
     }
 
-    function llmEditModelFunc(modelName) {
-        var item = llmCachedList.find(function (m) { return m.name === modelName || m.model === modelName; });
-        if (!item) return;
-        llmEditModel = modelName;
+    function llmEditModelFunc(model) {
+        llmEditModel = model;
         showLlmFormView('编辑模型');
         $llmSaveBtn.text('更新');
-        fillLlmForm(item);
+        resetLlmForm();
+
+        $.get('/web/settings/llm/models/get?name=' + encodeURIComponent(model), function (resp) {
+            if (resp.code === 200 && resp.data) {
+                fillLlmForm(resp.data);
+            } else {
+                showToast('获取模型详情失败: ' + (resp.message || '未知错误'), 'error');
+            }
+        }).fail(function () { showToast('网络错误', 'error'); });
     }
 
-    function llmCopyModel(modelName) {
-        var item = llmCachedList.find(function (m) { return m.name === modelName || m.model === modelName; });
-        if (!item) return;
+    function llmCopyModel(model) {
         llmEditModel = null;
         showLlmFormView('添加模型');
         $llmSaveBtn.text('保存');
-        fillLlmForm(item);
-        $('#llmName').val((item.name || item.model) + '-copy');
+        resetLlmForm();
+
+        $.get('/web/settings/llm/models/get?name=' + encodeURIComponent(model), function (resp) {
+            if (resp.code === 200 && resp.data) {
+                fillLlmForm(resp.data);
+                $('#llmName').val((resp.data.name || resp.data.model) + '-copy');
+            } else {
+                showToast('获取模型详情失败: ' + (resp.message || '未知错误'), 'error');
+            }
+        }).fail(function () { showToast('网络错误', 'error'); });
     }
 
-    function llmSetDefaultModel(modelName) {
-        $.post('/web/settings/llm/models/setDefault?modelName=' + encodeURIComponent(modelName), function (resp) {
+    function llmSetDefaultModel(model) {
+        $.post('/web/settings/llm/models/setDefault?name=' + encodeURIComponent(model), function (resp) {
             if (resp.code === 200) {
                 if (typeof modelsLoaded !== 'undefined') modelsLoaded = false;
                 loadLlmList();
@@ -340,8 +357,8 @@
         });
     }
 
-    function llmRemoveModel(modelName) {
-        $.post('/web/settings/llm/models/remove?modelName=' + encodeURIComponent(modelName), function (resp) {
+    function llmRemoveModel(model) {
+        $.post('/web/settings/llm/models/remove?name=' + encodeURIComponent(model), function (resp) {
             if (resp.code === 200) {
                 if (typeof modelsLoaded !== 'undefined') modelsLoaded = false;
                 loadLlmList();
