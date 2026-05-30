@@ -186,3 +186,11 @@
 /* 返回按钮 */
 .settings-back-btn { background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px 6px; border-radius: 6px; display: inline-flex; align-items: center; transition: all 0.15s; }
 .settings-back-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* ===== 挂载池 ===== */
+.mounts-pool-item { cursor: pointer; }
+.mounts-pool-item:hover { border-color: var(--accent); }
+.mounts-pool-item.mounts-system { opacity: 0.85; }
+.mounts-system-badge { font-size: 10px; background: var(--bg-accent-subtle, rgba(59,130,246,0.1)); color: var(--accent); padding: 1px 6px; border-radius: 3px; margin-left: 6px; vertical-align: middle; }
+.mounts-skills-count { font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; padding: 0 4px; }
+.form-hint { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }

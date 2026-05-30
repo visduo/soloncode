@@ -36,6 +36,8 @@ public class AgentSettings implements Serializable {
     private Map<String, McpServerParameters> mcpServers = new LinkedHashMap<>();
     //api集
     private Map<String, ApiSource> apiServers = new LinkedHashMap<>();
+    //挂载池
+    private Map<String, String> mountPools = new LinkedHashMap<>();
 
     /**
      * 从 JSON 字符串反序列化
@@ -69,6 +71,13 @@ public class AgentSettings implements Serializable {
             props.getApiServers().putAll(this.apiServers);
         } else {
             this.apiServers.putAll(props.getApiServers());
+        }
+
+        if (this.mountPools.size() > 0) {
+            props.getSkillPools().clear();
+            props.getSkillPools().putAll(this.mountPools);
+        } else {
+            this.mountPools.putAll(props.getSkillPools());
         }
     }
 
@@ -140,6 +149,12 @@ public class AgentSettings implements Serializable {
                         item.set("timeout", entry.getValue().getTimeout().getSeconds() + "s");
                     }
                 });
+            }
+        });
+
+        oNode.getOrNew("mountPools").asObject().then(map -> {
+            for (Map.Entry<String, String> entry : mountPools.entrySet()) {
+                map.set(entry.getKey(), entry.getValue());
             }
         });
 

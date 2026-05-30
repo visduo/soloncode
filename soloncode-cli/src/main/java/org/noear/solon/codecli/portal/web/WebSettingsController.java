@@ -35,6 +35,11 @@ import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.noear.solon.ai.skills.cli.SkillDir;
+
+import java.io.File;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -1253,5 +1258,163 @@ public class WebSettingsController {
         }
 
         return result;
+    }
+
+    // ==================== 设置：挂载池管理 ====================
+
+    /**
+     * 获取所有挂载池列表（含系统池标记）
+     */
+    @Get
+    @Mapping("/web/settings/mounts")
+    public Result mountsList(Context ctx) {
+        Map<String, String> pools = engine.getProps().getSkillPools();
+        Set<String> systemPools = new HashSet<>(Arrays.asList("@global", "@local", "@skills"));
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Map.Entry<String, String> entry : pools.entrySet()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("alias", entry.getKey());
+            item.put("path", entry.getValue());
+            item.put("system", systemPools.contains(entry.getKey()));
+            list.add(item);
+        }
+        return Result.succeed(list);
+    }
+
+    /**
+     * 添加挂载池
+     */
+    @Post
+    @Mapping("/web/settings/mounts/add")
+    public Result mountsAdd(Context ctx, @Param("alias") String alias, @Param("path") String path) {
+        if (Assert.isEmpty(alias) || Assert.isEmpty(path)) return Result.failure("参数不完整");
+        if (!alias.startsWith("@")) return Result.failure("别名必须以 @ 开头");
+        if (engine.getProps().getSkillPools().containsKey(alias)) return Result.failure("别名已存在");
+
+        engine.getProps().getSkillPools().put(alias, path);
+        settings.getMountPools().put(alias, path);
+        saveSettings();
+        refreshPoolManager();
+        return Result.succeed("添加成功");
+    }
+
+    /**
+     * 移除挂载池
+     */
+    @Post
+    @Mapping("/web/settings/mounts/remove")
+    public Result mountsRemove(Context ctx, @Param("alias") String alias) {
+        if (Arrays.asList("@global", "@local", "@skills").contains(alias))
+            return Result.failure("系统挂载池不可移除");
+        if (!engine.getProps().getSkillPools().containsKey(alias))
+            return Result.failure("挂载池不存在");
+
+        engine.getProps().getSkillPools().remove(alias);
+        settings.getMountPools().remove(alias);
+        saveSettings();
+        refreshPoolManager();
+        return Result.succeed("移除成功");
+    }
+
+    /**
+     * 获取某挂载池内的技能包列表
+     */
+    @Get
+    @Mapping("/web/settings/mounts/skills")
+    public Result mountsSkills(Context ctx, @Param("alias") String alias) {
+        String poolPath = engine.getProps().getSkillPools().get(alias);
+        if (poolPath == null) return Result.failure("挂载池不存在: " + alias);
+
+        // 展开 ~/ 为用户目录
+        if (poolPath.startsWith("~/")) {
+            poolPath = Paths.get(AgentProperties.getUserHome(), poolPath.substring(2)).toString();
+        }
+
+        // 构建 SkillDir 快速查找索引
+        Map<String, SkillDir> skillDirMap = engine.getPoolManager().getSkillMap();
+        List<Map<String, String>> skills = new ArrayList<>();
+        File poolDir = new File(poolPath);
+
+        if (poolDir.exists() && poolDir.isDirectory()) {
+            File[] subDirs = poolDir.listFiles(File::isDirectory);
+            if (subDirs != null) {
+                for (File subDir : subDirs) {
+                    if (new File(subDir, "SKILL.md").exists()) {
+                        Map<String, String> skillItem = new LinkedHashMap<>();
+                        skillItem.put("name", subDir.getName());
+                        skillItem.put("path", subDir.getAbsolutePath());
+
+                        // 优先从 PoolManager 获取描述
+                        SkillDir matched = skillDirMap.get(subDir.getName());
+                        String desc = "";
+                        if (matched != null && matched.getDescription() != null) {
+                            desc = matched.getDescription();
+                        }
+                        if (desc != null) {
+                            int idx = desc.indexOf('\n');
+                            if (idx > 0) desc = desc.substring(0, idx);
+                            if (desc.length() > 60) desc = desc.substring(0, 60) + "...";
+                        }
+                        skillItem.put("description", desc != null ? desc : "");
+                        skills.add(skillItem);
+                    }
+                }
+            }
+        }
+        return Result.succeed(skills);
+    }
+
+    /**
+     * 删除挂载池内的技能包
+     */
+    @Post
+    @Mapping("/web/settings/mounts/skills/remove")
+    public Result mountsSkillsRemove(Context ctx, @Param("alias") String alias, @Param("skillName") String skillName) {
+        String poolPath = engine.getProps().getSkillPools().get(alias);
+        if (poolPath == null) return Result.failure("挂载池不存在: " + alias);
+
+        if (poolPath.startsWith("~/")) {
+            poolPath = Paths.get(AgentProperties.getUserHome(), poolPath.substring(2)).toString();
+        }
+
+        File skillDir = new File(poolPath, skillName);
+        if (!skillDir.exists()) return Result.failure("技能包不存在: " + skillName);
+
+        // 安全校验：防止路径穿越
+        if (!skillDir.toPath().normalize().startsWith(new File(poolPath).toPath().normalize())) {
+            return Result.failure("非法路径");
+        }
+
+        try {
+            deleteRecursively(skillDir.toPath());
+            refreshPoolManager();
+            return Result.succeed("删除成功");
+        } catch (Exception e) {
+            LOG.warn("[Settings] Failed to delete skill: {}", e.getMessage());
+            return Result.failure("删除失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 递归删除目录
+     */
+    private void deleteRecursively(Path path) throws Exception {
+        if (Files.isDirectory(path)) {
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(path)) {
+                for (Path child : stream) deleteRecursively(child);
+            }
+        }
+        Files.deleteIfExists(path);
+    }
+
+    /**
+     * 刷新技能池索引
+     */
+    private void refreshPoolManager() {
+        try {
+            engine.getPoolManager().refresh();
+        } catch (Exception e) {
+            LOG.warn("[Settings] Pool refresh error: {}", e.getMessage());
+        }
     }
 }
