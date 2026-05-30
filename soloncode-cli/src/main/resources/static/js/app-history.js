@@ -340,6 +340,16 @@ function handleInputForCommands(e) {
     }
 }
 
+// History button handler (toolbar)
+$('#chatHistoryBtn').on('click', function(e) {
+    e.stopPropagation();
+    if ($chatHistoryPanel.hasClass('show')) {
+        hideHistoryPanel();
+    } else {
+        showHistoryPanel();
+    }
+});
+
 // Command & Agent button handlers
 function triggerCmdComplete(inputEl, completeEl, prefix) {
     inputEl.value = prefix;
@@ -415,7 +425,7 @@ $chatCmdComplete.on('click', function(e) {
 // Hide on outside click
 $(document).on('click', function(e) {
     var $target = $(e.target);
-    if (!$target.closest('.cmd-complete').length && !$target.closest('.history-panel').length && !$target.closest('textarea').length && !$target.closest('#welcomeCmdBtn').length && !$target.closest('#welcomeAgentBtn').length && !$target.closest('#chatCmdBtn').length && !$target.closest('#chatAgentBtn').length && !$target.closest('#welcomeSkillBtn').length && !$target.closest('#chatSkillBtn').length) {
+    if (!$target.closest('.cmd-complete').length && !$target.closest('.history-panel').length && !$target.closest('textarea').length && !$target.closest('#welcomeCmdBtn').length && !$target.closest('#welcomeAgentBtn').length && !$target.closest('#chatCmdBtn').length && !$target.closest('#chatAgentBtn').length && !$target.closest('#welcomeSkillBtn').length && !$target.closest('#chatSkillBtn').length && !$target.closest('#chatHistoryBtn').length) {
         hideCmdComplete();
         hideHistoryPanel();
     }
