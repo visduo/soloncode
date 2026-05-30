@@ -5,6 +5,7 @@
 /* ===== Message Rendering (Session-Aware) ===== */
 function appendUserMessage(sess, text, imageDataUrls, fileAttachments, createdAt) {
     var row = $('<div>').addClass('msg-row user')[0];
+    row.setAttribute('data-user-msg-idx', sess.userMsgCounter++);
     row.innerHTML = '<button class="user-copy-btn" title="复制"><i class="layui-icon layui-icon-file"></i></button><div class="msg-bubble"></div><div class="msg-avatar">我</div>';
     var bubble = $(row).find('.msg-bubble')[0];
 
@@ -48,6 +49,12 @@ function appendUserMessage(sess, text, imageDataUrls, fileAttachments, createdAt
             });
         }
     });
+
+    // 时间戳
+    if (createdAt) {
+        var timeEl = $('<div>').addClass('msg-time').text(formatMsgTime(createdAt))[0];
+        $(bubble).append(timeEl);
+    }
 
     addImageLightbox(bubble);
     $(sess.container).append(row);

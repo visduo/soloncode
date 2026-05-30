@@ -427,23 +427,31 @@ var historyActiveIndex = -1;
 
 /**
  * 从当前会话 DOM 中提取用户发送过的文本，倒序返回（最新在前）
+ * 返回 [{text, idx, time}]
  */
 function extractUserMessages() {
     var sess = activeSessionId ? sessionMap[activeSessionId] : null;
     if (!sess) return [];
     var $rows = $(sess.container).find('.msg-row.user');
-    var texts = [];
+    var items = [];
     for (var i = $rows.length - 1; i >= 0; i--) {
-        var $bubble = $($rows[i]).find('.msg-bubble');
+        var $row = $($rows[i]);
+        var $bubble = $row.find('.msg-bubble');
         if (!$bubble.length) continue;
-        // 用户文本在 .msg-bubble 内的 .user-msg-text 中
         var $lastSpan = $bubble.find('.user-msg-text');
         var text = $lastSpan.length ? $lastSpan.text().trim() : '';
-        if (text && texts.indexOf(text) === -1) {
-            texts.push(text);
+        if (!text) continue;
+        // 去重
+        var dup = false;
+        for (var j = 0; j < items.length; j++) {
+            if (items[j].text === text) { dup = true; break; }
         }
+        if (dup) continue;
+        var idx = parseInt($row.attr('data-user-msg-idx'));
+        var time = $bubble.find('.msg-time').text() || '';
+        items.push({ text: text, idx: isNaN(idx) ? -1 : idx, time: time });
     }
-    return texts;
+    return items;
 }
 
 function showHistoryPanel() {
@@ -451,16 +459,51 @@ function showHistoryPanel() {
     if (messages.length === 0) {
         $chatHistoryPanel.html('<div class="history-panel-empty">暂无输入历史</div>');
     } else {
-        var html = '';
+        var html = '<div class="history-panel-search">'
+            + '<input type="text" class="history-search-input" placeholder="搜索历史消息..." />'
+            + '</div>';
+        html += '<div class="history-panel-list">';
         for (var i = 0; i < messages.length; i++) {
-            var display = messages[i].length > 80
-                ? messages[i].substring(0, 80) + '...'
-                : messages[i];
-            html += '<div class="history-panel-item" data-index="' + i + '">'
-                + escapeHtml(display)
+            var display = messages[i].text.length > 80
+                ? messages[i].text.substring(0, 80) + '...'
+                : messages[i].text;
+            var timeStr = messages[i].time ? '<span class="history-item-time">' + escapeHtml(messages[i].time) + '</span>' : '';
+            html += '<div class="history-panel-item" data-index="' + i + '" data-msg-idx="' + messages[i].idx + '">'
+                + '<span class="history-item-text">' + escapeHtml(display) + '</span>'
+                + '<span class="history-item-actions">'
+                + timeStr
+                + '<button class="history-locate-btn" title="定位到该消息">◎</button>'
+                + '</span>'
                 + '</div>';
         }
+        html += '</div>';
         $chatHistoryPanel.html(html);
+
+        // 绑定搜索过滤
+        var $searchInput = $chatHistoryPanel.find('.history-search-input');
+        $searchInput.on('input', function() {
+            var query = this.value.trim().toLowerCase();
+            var $items = $chatHistoryPanel.find('.history-panel-item');
+            for (var k = 0; k < $items.length; k++) {
+                var txt = $($items[k]).find('.history-item-text').text().toLowerCase();
+                if (!query || txt.indexOf(query) >= 0) {
+                    $($items[k]).show();
+                } else {
+                    $($items[k]).hide();
+                }
+            }
+        });
+
+        // 阻止搜索框按键冒泡，避免干扰历史面板导航
+        $searchInput.on('keydown', function(e) {
+            if (e.key === 'Escape') {
+                hideHistoryPanel();
+                chatInput.focus();
+                e.stopPropagation();
+                return;
+            }
+            e.stopPropagation();
+        });
     }
     // 确保互斥：关闭命令补全
     hideCmdComplete();
@@ -476,10 +519,33 @@ function hideHistoryPanel() {
 function applyHistorySelection() {
     var messages = extractUserMessages();
     if (historyActiveIndex >= 0 && historyActiveIndex < messages.length) {
-        chatInput.value = messages[historyActiveIndex];
+        chatInput.value = messages[historyActiveIndex].text;
         autoResize(chatInput);
     }
     hideHistoryPanel();
+}
+
+/**
+ * 定位到指定 idx 的用户消息，平滑滚动并高亮闪烁
+ */
+function locateUserMessage(msgIdx) {
+    if (isNaN(msgIdx) || msgIdx < 0) return;
+    var sess = activeSessionId ? sessionMap[activeSessionId] : null;
+    if (!sess) return;
+    var $target = $(sess.container).find('.msg-row.user[data-user-msg-idx="' + msgIdx + '"]');
+    if (!$target.length) return;
+
+    // 先关闭历史面板
+    hideHistoryPanel();
+
+    // 滚动到目标消息
+    $target[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    // 高亮闪烁
+    $target.addClass('msg-highlight');
+    setTimeout(function() {
+        $target.removeClass('msg-highlight');
+    }, 1800);
 }
 
 /**
@@ -524,8 +590,15 @@ function navigateHistory(e) {
     return false;
 }
 
-// Click on history item
+// Click on history item — text area fills input, locate button jumps to message
 $chatHistoryPanel.on('click', function(e) {
+    var $locateBtn = $(e.target).closest('.history-locate-btn');
+    if ($locateBtn.length) {
+        var $item = $locateBtn.closest('.history-panel-item');
+        var msgIdx = parseInt($item.attr('data-msg-idx'));
+        if (!isNaN(msgIdx)) locateUserMessage(msgIdx);
+        return;
+    }
     var $item = $(e.target).closest('.history-panel-item');
     if ($item.length) {
         historyActiveIndex = parseInt($item.attr('data-index'));

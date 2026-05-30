@@ -249,6 +249,16 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 /* Msg Time */
 .msg-time { font-size: 11px; color: var(--text-secondary); opacity: 0.55; margin-top: 4px; line-height: 1; }
 .msg-row.user .msg-time { text-align: right; }
+
+/* Message Highlight Animation (locate/locateUserMessage) */
+.msg-row.user.msg-highlight .msg-bubble {
+    animation: msg-locate-pulse 1.8s ease-out;
+}
+@keyframes msg-locate-pulse {
+    0% { box-shadow: 0 0 0 3px rgba(79,110,247,0.5); }
+    30% { box-shadow: 0 0 0 5px rgba(79,110,247,0.35); }
+    100% { box-shadow: 0 0 0 3px rgba(79,110,247,0); }
+}
 .msg-elapsed { font-size: 11px; color: var(--text-secondary); opacity: 0.5; text-align: right; margin-top: 2px; line-height: 1; pointer-events: none; }
 /* Msg Actions */
 .msg-actions { display: flex; gap: 6px; margin-top: 10px; opacity: 0; transition: opacity 0.2s; }
@@ -385,13 +395,24 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 .cmd-complete::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
 
 /* Input History Panel */
-.history-panel { position: absolute; bottom: 100%; left: 0; right: 0; margin-bottom: 4px; background: var(--bg-input-box); border: 1px solid var(--border-color); border-radius: 10px; box-shadow: var(--shadow-lg); max-height: 260px; overflow-y: auto; display: none; z-index: 100; }
-.history-panel.show { display: block; animation: drop-up 0.15s ease-out; }
-.history-panel-item { padding: 10px 14px; cursor: pointer; font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background 0.12s; }
+.history-panel { position: absolute; bottom: 100%; left: 0; right: 0; margin-bottom: 4px; background: var(--bg-input-box); border: 1px solid var(--border-color); border-radius: 10px; box-shadow: var(--shadow-lg); max-height: 320px; overflow: hidden; display: none; z-index: 100; }
+.history-panel.show { display: flex; flex-direction: column; animation: drop-up 0.15s ease-out; }
+.history-panel-search { padding: 8px 10px; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+.history-search-input { width: 100%; border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; font-size: 13px; background: var(--bg-input-box); color: var(--text-primary); outline: none; box-sizing: border-box; }
+.history-search-input:focus { border-color: var(--accent); }
+.history-search-input::placeholder { color: var(--text-secondary); }
+.history-panel-list { overflow-y: auto; max-height: 260px; }
+.history-panel-item { display: flex; align-items: center; padding: 10px 14px; cursor: pointer; font-size: 13px; color: var(--text-primary); transition: background 0.12s; gap: 8px; }
 .history-panel-item:hover, .history-panel-item.active { background: var(--bg-hover); }
+.history-item-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.history-item-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.history-item-time { font-size: 11px; color: var(--text-secondary); opacity: 0.6; }
+.history-locate-btn { background: none; border: 1px solid var(--border-color); border-radius: 6px; padding: 2px 8px; cursor: pointer; color: var(--text-secondary); font-size: 14px; line-height: 1; opacity: 0; transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
+.history-panel-item:hover .history-locate-btn { opacity: 0.7; }
+.history-locate-btn:hover { opacity: 1 !important; background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
 .history-panel-empty { padding: 18px; text-align: center; color: var(--text-secondary); font-size: 13px; }
-.history-panel::-webkit-scrollbar { width: 4px; }
-.history-panel::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
+.history-panel-list::-webkit-scrollbar { width: 4px; }
+.history-panel-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
 
 @media (max-width: 768px) { .sidebar { display: none; } }
 
@@ -1239,7 +1260,7 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 }
 
 /* ===== Firefox Scrollbar ===== */
-.messages-wrap, .sidebar-list, .thinking-block-body, .model-dropdown, .cmd-complete, .history-panel, .filer-panel-tree, .git-diff-file-list {
+.messages-wrap, .sidebar-list, .thinking-block-body, .model-dropdown, .cmd-complete, .history-panel-list, .filer-panel-tree, .git-diff-file-list {
     scrollbar-width: thin;
     scrollbar-color: var(--border-color) transparent;
 }
