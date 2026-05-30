@@ -678,13 +678,13 @@ harnessProps.addTools(ToolPermission.TOOL_ALL_FULL); //设定工具权限
 
 #### 扩展配置
 
-| 配置项 | 类型 | 默认值 | 描述 |
-|---|---|---|---|
-| `skillPools` | `Map<String, String>` | / | 技能池配置（alias 必须以 `@` 开头） |
-| `agentPools` | `List<String>` | / | 代理池配置 |
-| `mcpServers` | `Map<String, McpServerParameters>` | / | MCP 服务配置 |
-| `apiServers` | `Map<String, ApiSource>` | / | Web API 服务配置 |
-| `lspServers` | `Map<String, LspServerParameters>` | / | LSP 服务配置 |
+| 配置项          | 类型 | 默认值 | 描述                      |
+|--------------|---|---|-------------------------|
+| `mountPools` | `Map<String, String>` | / | 挂载池配置（alias 必须以 `@` 开头） |
+| `agentPools` | `List<String>` | / | 代理池配置                   |
+| `mcpServers` | `Map<String, McpServerParameters>` | / | MCP 服务配置                |
+| `apiServers` | `Map<String, ApiSource>` | / | Web API 服务配置            |
+| `lspServers` | `Map<String, LspServerParameters>` | / | LSP 服务配置                |
 
 ### 工具权限配置 (ToolPermission)
 

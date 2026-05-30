@@ -8,7 +8,7 @@
  *   GET  /web/settings/skills/markets                     — 获取可用市场列表
  *   GET  /web/settings/skills/proxy?action=trending       — 热门技能列表
  *   GET  /web/settings/skills/proxy?action=search&q=xxx   — 搜索技能
- *   POST /web/settings/skills/install  {slug, marketName}  — 安装技能
+ *   POST /web/settings/skills/install  {slug, marketName, mountAlias}  — 安装技能
  */
 
 (function () {
@@ -21,6 +21,7 @@
     // ==================== DOM 引用 ====================
 
     var $skillsMarketSelect = $('#skillsMarketSelect');
+    var $skillsMountSelect = $('#skillsMountSelect');
     var $skillsSearchInput = $('#skillsSearchInput');
     var $skillsSearchClear = $('#skillsSearchClear');
     var $skillsList = $('#skillsList');
@@ -33,6 +34,7 @@
     var _installedSkillsCache = null;
     var _skillsSearchTimer = null;
     var _currentMarketName = '';  // 当前选中的市场名称
+    var _currentMountAlias = '@skills';  // 当前选中的挂载池别名（默认 @skills）
 
     // ==================== 工具函数 ====================
 
@@ -75,6 +77,41 @@
         }).fail(function () {
             $skillsMarketSelect.html('<option value="">ClawHub</option>');
             _currentMarketName = '';
+        });
+    }
+
+    // ==================== 挂载池选择器初始化 ====================
+
+    /**
+     * 从后端加载挂载池列表并填充下拉框，默认选中 @skills
+     */
+    function loadMountOptions() {
+        $.ajax({
+            url: '/web/settings/mounts',
+            method: 'GET',
+            timeout: 5000,
+            dataType: 'json'
+        }).done(function (resp) {
+            var pools = (resp && resp.code === 200 && resp.data) ? resp.data : [];
+            var html = '';
+            var defaultAlias = '';
+            pools.forEach(function (p) {
+                var alias = p.alias || '';
+                var label = escapeHtml(alias);
+                html += '<option value="' + escapeAttr(alias) + '">' + label + '</option>';
+                // 优先选中 @skills
+                if (alias === '@skills') defaultAlias = alias;
+            });
+            $skillsMountSelect.html(html);
+            if (defaultAlias) {
+                _currentMountAlias = defaultAlias;
+            } else if (pools.length > 0) {
+                _currentMountAlias = pools[0].alias || '';
+            }
+            $skillsMountSelect.val(_currentMountAlias);
+        }).fail(function () {
+            $skillsMountSelect.html('<option value="@skills">@skills</option>');
+            _currentMountAlias = '@skills';
         });
     }
 
@@ -229,6 +266,11 @@
         loadSkillsList(null);
     });
 
+    // 挂载池切换
+    $skillsMountSelect.on('change', function () {
+        _currentMountAlias = $(this).val() || '@skills';
+    });
+
     // 安装按钮（事件委托）
     $skillsList.on('click', '.skill-install-btn:not(.installed)', function () {
         var $btn = $(this);
@@ -239,6 +281,7 @@
 
         var postData = { slug: slug };
         if (marketUrl) postData.marketName = marketUrl;
+        if (_currentMountAlias) postData.mountAlias = _currentMountAlias;
 
         $.ajax({
             url: '/web/settings/skills/install',
@@ -316,6 +359,7 @@
         resetAndLoad: function () {
             _installedSkillsCache = null;
             loadMarketOptions();
+            loadMountOptions();
             loadSkillsList(null);
         }
     };

@@ -15,12 +15,14 @@
  */
 package org.noear.solon.codecli.portal.web;
 
+import org.eclipse.jetty.util.Pool;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
+import org.noear.solon.ai.skills.cli.PoolDir;
 import org.noear.solon.ai.skills.openapi.ApiSource;
 import org.noear.solon.ai.skills.openapi.OpenApiSkill;
 import org.noear.solon.ai.skills.toolgateway.McpGatewaySkill;
@@ -1234,24 +1236,40 @@ public class WebSettingsController {
     /**
      * 安装技能 — 委派给 Market 适配器完成下载、解压，然后刷新技能池。
      *
-     * @param slug 技能 slug（必填）
+     * @param slug       技能 slug（必填）
+     * @param marketName 市场名称（可选）
+     * @param mountAlias 挂载池别名（可选，默认安装到 workspace/skills）
      */
     @Post
     @Mapping("/web/settings/skills/install")
     public Result skillsInstall(Context ctx, @Param("slug") String slug,
-                                @Param(value = "marketName", defaultValue = "") String marketName) {
+                                @Param(value = "marketName", defaultValue = "") String marketName,
+                                @Param(value = "mountAlias", defaultValue = "") String mountAlias) {
         if (Assert.isEmpty(slug)) {
             return Result.failure("slug is required");
         }
 
         Market market = marketManager.getMarketByName(marketName);
-        Path skillsDir = Paths.get(engine.getProps().getWorkspace(), "skills");
+
+        // 确定安装目标目录：若指定了挂载池别名，则安装到对应池目录；否则默认 workspace/skills
+        Path skillsDir;
+        if (!Assert.isEmpty(mountAlias)) {
+            PoolDir poolDir = engine.getPoolManager().getPool(mountAlias);
+            if (poolDir == null) {
+                return Result.failure("挂载池不存在: " + mountAlias);
+            }
+
+            skillsDir = poolDir.getRealPath();
+        } else {
+            skillsDir = Paths.get(engine.getProps().getWorkspace(), "skills");
+        }
+
         Result<String> result = market.install(slug, skillsDir);
 
         // 安装成功后刷新技能池
         if (result.getCode() == 200) {
             try {
-                engine.getPoolManager().refresh();
+                engine.getPoolManager().refresh(mountAlias);
             } catch (Exception e) {
                 LOG.warn("[Settings] Skill pool refresh error after install: {}", e.getMessage());
             }
@@ -1268,7 +1286,7 @@ public class WebSettingsController {
     @Get
     @Mapping("/web/settings/mounts")
     public Result mountsList(Context ctx) {
-        Map<String, String> pools = engine.getProps().getSkillPools();
+        Map<String, String> pools = engine.getProps().getMountPools();
         Set<String> systemPools = new HashSet<>(Arrays.asList("@global", "@local", "@skills"));
         List<Map<String, Object>> list = new ArrayList<>();
         for (Map.Entry<String, String> entry : pools.entrySet()) {
@@ -1289,9 +1307,9 @@ public class WebSettingsController {
     public Result mountsAdd(Context ctx, @Param("alias") String alias, @Param("path") String path) {
         if (Assert.isEmpty(alias) || Assert.isEmpty(path)) return Result.failure("参数不完整");
         if (!alias.startsWith("@")) return Result.failure("别名必须以 @ 开头");
-        if (engine.getProps().getSkillPools().containsKey(alias)) return Result.failure("别名已存在");
+        if (engine.getProps().getMountPools().containsKey(alias)) return Result.failure("别名已存在");
 
-        engine.getProps().getSkillPools().put(alias, path);
+        engine.getProps().getMountPools().put(alias, path);
         settings.getMountPools().put(alias, path);
         saveSettings();
         refreshPoolManager();
@@ -1306,10 +1324,10 @@ public class WebSettingsController {
     public Result mountsRemove(Context ctx, @Param("alias") String alias) {
         if (Arrays.asList("@global", "@local", "@skills").contains(alias))
             return Result.failure("系统挂载池不可移除");
-        if (!engine.getProps().getSkillPools().containsKey(alias))
+        if (!engine.getProps().getMountPools().containsKey(alias))
             return Result.failure("挂载池不存在");
 
-        engine.getProps().getSkillPools().remove(alias);
+        engine.getProps().getMountPools().remove(alias);
         settings.getMountPools().remove(alias);
         saveSettings();
         refreshPoolManager();
@@ -1322,7 +1340,7 @@ public class WebSettingsController {
     @Get
     @Mapping("/web/settings/mounts/skills")
     public Result mountsSkills(Context ctx, @Param("alias") String alias) {
-        String poolPath = engine.getProps().getSkillPools().get(alias);
+        String poolPath = engine.getProps().getMountPools().get(alias);
         if (poolPath == null) return Result.failure("挂载池不存在: " + alias);
 
         // 展开 ~/ 为用户目录
@@ -1370,7 +1388,7 @@ public class WebSettingsController {
     @Post
     @Mapping("/web/settings/mounts/skills/remove")
     public Result mountsSkillsRemove(Context ctx, @Param("alias") String alias, @Param("skillName") String skillName) {
-        String poolPath = engine.getProps().getSkillPools().get(alias);
+        String poolPath = engine.getProps().getMountPools().get(alias);
         if (poolPath == null) return Result.failure("挂载池不存在: " + alias);
 
         if (poolPath.startsWith("~/")) {

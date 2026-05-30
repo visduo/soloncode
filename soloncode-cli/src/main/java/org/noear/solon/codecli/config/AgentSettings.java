@@ -74,10 +74,10 @@ public class AgentSettings implements Serializable {
         }
 
         if (this.mountPools.size() > 0) {
-            props.getSkillPools().clear();
-            props.getSkillPools().putAll(this.mountPools);
+            props.getMountPools().clear();
+            props.getMountPools().putAll(this.mountPools);
         } else {
-            this.mountPools.putAll(props.getSkillPools());
+            this.mountPools.putAll(props.getMountPools());
         }
     }
 
