@@ -1,5 +1,9 @@
 package org.noear.solon.codecli.portal.web.market.impl;
 
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.noear.solon.codecli.portal.web.market.Market;
 import org.noear.solon.codecli.portal.web.market.MarketDetail;
 import org.noear.solon.codecli.portal.web.market.MarketItem;
@@ -14,8 +18,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -32,15 +34,6 @@ public class SkillsShMarket implements Market {
 
     private static final String BASE_URL = "https://www.skills.sh";
     private static final String USER_AGENT = "SolonCode/1.0";
-
-    // HTML 行解析：序号  技能名  owner/repo  安装量
-    // 示例: "1 find-skills vercel-labs/skills 1.7M"
-    private static final Pattern LINE_PATTERN = Pattern.compile(
-            "^\\s*(\\d+)\\s+" +           // 排名
-            "([a-zA-Z0-9_-]+)\\s+" +      // slug
-            "([\\w./-]+?)\\s+" +          // owner/repo
-            "([\\d.,]+[KkMm]?)\\s*$"      // 安装量
-    );
 
     @Override
     public String name() {
@@ -217,7 +210,7 @@ public class SkillsShMarket implements Market {
 
     // ==================== 内部工具方法 ====================
 
-    private String httpGet(String url) throws Exception {
+    protected String httpGet(String url) throws Exception {
         return HttpUtils.http(url)
                 .header("User-Agent", USER_AGENT)
                 .timeout(15000)
@@ -237,52 +230,152 @@ public class SkillsShMarket implements Market {
     }
 
     /**
-     * 解析 HTML 页面中的技能列表
+     * 使用 jsoup 解析 HTML 页面中的技能列表。
+     *
+     * <p>解析策略：先尝试查找结构化 HTML 元素（table/tr 或有序列表），
+     * 若无结构化元素则按文本行回退解析。兼容 Next.js 服务端渲染和纯文本场景。</p>
      */
-    private List<MarketItem> parseHtmlItems(String html, int limit) {
+    List<MarketItem> parseHtmlItems(String html, int limit) {
         List<MarketItem> items = new ArrayList<>();
         if (html == null || html.isEmpty()) return items;
 
-        String[] lines = html.split("\n");
+        Document doc = Jsoup.parse(html);
+
+        // 策略一：尝试从 HTML 结构化元素中提取（table 行或列表项）
+        if (tryParseStructured(doc, items, limit)) {
+            return items;
+        }
+
+        // 策略二：回退到原始文本行解析（按原始 HTML 换行分割）
+        String[] lines = html.split("\\r?\\n");
         for (String line : lines) {
             if (items.size() >= limit) break;
-
-            line = line.trim();
-            if (line.isEmpty()) continue;
-
-            // 尝试匹配排名行格式: "1 find-skills vercel-labs/skills 1.7M"
-            try {
-                Matcher m = LINE_PATTERN.matcher(line);
-                if (m.find()) {
-                    String slug = m.group(2);
-                    String ownerRepo = m.group(3);
-                    String installsStr = m.group(4);
-
-                    // 从 ownerRepo 中提取 owner
-                    String owner = ownerRepo.contains("/") ? ownerRepo.split("/")[0] : ownerRepo;
-
-                    MarketItem item = new MarketItem()
-                            .slug(slug)
-                            .name(slug)
-                            .displayName(slug)
-                            .ownerHandle(ownerRepo)
-                            .installs(parseInstallCount(installsStr))
-                            .stars(0);
-
-                    items.add(item);
-                }
-            } catch (Exception e) {
-                // 跳过无法解析的行
-            }
+            parseLineItem(line, items);
         }
 
         return items;
     }
 
     /**
+     * 从结构化 HTML 元素中解析技能列表
+     */
+    private boolean tryParseStructured(Document doc, List<MarketItem> items, int limit) {
+        // 尝试 table 行
+        Elements rows = doc.select("table tr");
+        if (rows.size() > 1) {
+            for (Element row : rows) {
+                if (items.size() >= limit) break;
+                Elements cells = row.select("td");
+                if (cells.size() >= 3) {
+                    MarketItem item = buildItemFromCells(cells);
+                    if (item != null) {
+                        items.add(item);
+                    }
+                }
+            }
+            return !items.isEmpty();
+        }
+
+        // 尝试有序/无序列表项
+        Elements lis = doc.select("ol > li, ul > li");
+        if (!lis.isEmpty()) {
+            for (Element li : lis) {
+                if (items.size() >= limit) break;
+                String line = li.text().trim();
+                parseLineItem(line, items);
+            }
+            return !items.isEmpty();
+        }
+
+        // 尝试 div 或 a 链接列表（常见 SPA 渲染结果）
+        Elements links = doc.select("a[href*=\"/skill/\"], a[href*=\"/skills/\"]");
+        if (!links.isEmpty()) {
+            for (Element a : links) {
+                if (items.size() >= limit) break;
+                String line = a.text().trim();
+                parseLineItem(line, items);
+            }
+            return !items.isEmpty();
+        }
+
+        return false;
+    }
+
+    /**
+     * 从 table 单元格构建 MarketItem
+     */
+    private MarketItem buildItemFromCells(Elements cells) {
+        try {
+            String slug = cells.get(0).text().trim();
+            String ownerRepo = cells.get(1).text().trim();
+            String installsStr = cells.size() > 2 ? cells.get(2).text().trim() : "0";
+
+            // 过滤无效行（如表头）
+            if (slug.isEmpty() || slug.equalsIgnoreCase("name")
+                    || slug.equalsIgnoreCase("skill") || slug.equalsIgnoreCase("#")) {
+                return null;
+            }
+
+            return new MarketItem()
+                    .slug(slug)
+                    .name(slug)
+                    .displayName(slug)
+                    .ownerHandle(ownerRepo)
+                    .installs(parseInstallCount(installsStr))
+                    .stars(0);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 按文本行解析单条技能记录。
+     * 支持格式: "1 find-skills vercel-labs/skills 1.7M" 或 "find-skills vercel-labs/skills 1.7M"
+     */
+    private void parseLineItem(String line, List<MarketItem> items) {
+        line = line.trim();
+        if (line.isEmpty()) return;
+
+        try {
+            // 带排名: "1 find-skills vercel-labs/skills 1.7M"
+            String[] parts = line.split("\\s+");
+            int offset = 0;
+
+            // 如果第一个部分是纯数字，视为排名
+            if (parts.length > 0 && parts[0].matches("\\d+")) {
+                offset = 1;
+            }
+
+            if (parts.length < offset + 3) return;
+
+            String slug = parts[offset];
+            String ownerRepo = parts[offset + 1];
+            String installsStr = parts[offset + 2];
+
+            // 校验 slug 格式
+            if (!slug.matches("[a-zA-Z0-9_-]+")) return;
+
+            // 校验安装量格式
+            if (!installsStr.matches("[\\d.,]+[KkMm]?")) return;
+
+            MarketItem item = new MarketItem()
+                    .slug(slug)
+                    .name(slug)
+                    .displayName(slug)
+                    .ownerHandle(ownerRepo)
+                    .installs(parseInstallCount(installsStr))
+                    .stars(0);
+
+            items.add(item);
+        } catch (Exception e) {
+            // 跳过无法解析的行
+        }
+    }
+
+    /**
      * 解析安装数字符串，如 "1.7M", "474.8K", "56.8K"
      */
-    private long parseInstallCount(String str) {
+    long parseInstallCount(String str) {
         if (str == null || str.isEmpty()) return 0;
         try {
             str = str.trim().replace(",", "");
