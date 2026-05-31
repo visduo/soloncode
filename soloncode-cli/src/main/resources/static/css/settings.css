@@ -48,8 +48,9 @@
 .llm-fetch-item { padding: 8px 12px; font-size: 13px; cursor: pointer; color: var(--text-primary); transition: background 0.15s; }
 .llm-fetch-item:hover { background: var(--bg-hover); }
 
-.llm-model-item { display: flex; align-items: center; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 8px; transition: all 0.15s; gap: 10px; }
-.llm-model-item:hover { border-color: var(--accent); }
+.llm-model-item { display: flex; align-items: center; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 8px; transition: all 0.15s; gap: 10px; cursor: pointer; }
+.llm-model-item:hover { border-color: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+.llm-model-item:active { transform: scale(0.997); }
 .llm-model-icon { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, var(--bg-hover), var(--bg-primary)); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: var(--text-secondary); flex-shrink: 0; }
 .llm-model-info { flex: 1; min-width: 0; }
 .llm-model-name { font-size: 13px; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -76,6 +77,53 @@
 
 /* LLM 禁用模型项低透明度 */
 
+/* ===== Toggle Switch（大号） ===== */
+.toggle-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    width: 38px;
+    height: 22px;
+    flex-shrink: 0;
+}
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+.toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: var(--border-color);
+    border-radius: 22px;
+    transition: background 0.25s, box-shadow 0.25s;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+}
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.25s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.toggle-switch input:checked + .toggle-slider {
+    background: var(--accent);
+    box-shadow: 0 0 0 2px rgba(var(--accent-rgb, 59,130,246), 0.15);
+}
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(16px);
+}
+.toggle-switch:hover .toggle-slider {
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.15), 0 0 0 1px rgba(var(--accent-rgb, 59,130,246), 0.2);
+}
+
 /* LLM 连接测试结果 */
 .llm-check-result { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5; }
 .llm-check-result.success { background: rgba(34,197,94,0.08); color: #16a34a; border: 1px solid rgba(34,197,94,0.2); }
@@ -100,8 +148,9 @@
 .mcp-type-btn { flex: 1; padding: 6px 16px; border: none; background: none; color: var(--text-secondary); font-size: 12px; cursor: pointer; transition: all 0.15s; }
 .mcp-type-btn.active { background: var(--accent); color: #fff; }
 
-.mcp-server-item { display: flex; align-items: center; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 8px; gap: 10px; transition: all 0.15s; }
-.mcp-server-item:hover { border-color: var(--accent); }
+.mcp-server-item { display: flex; align-items: center; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 8px; gap: 10px; transition: all 0.15s; cursor: pointer; }
+.mcp-server-item:hover { border-color: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+.mcp-server-item:active { transform: scale(0.997); }
 .mcp-server-icon { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, var(--bg-hover), var(--bg-primary)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
 .mcp-server-info { flex: 1; min-width: 0; }
 .mcp-server-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
@@ -262,4 +311,35 @@
     opacity: 0.85;
     transform: translateY(-1px);
     box-shadow: 0 2px 6px rgba(59,130,246,0.3);
+}
+
+/* ===== 表单头部操作按钮（复制/删除） ===== */
+.settings-form-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.settings-form-action-btn {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s;
+}
+.settings-form-action-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+.settings-form-action-btn.danger:hover {
+    background: rgba(239,68,68,0.08);
+    color: #ef4444;
+    border-color: #ef4444;
 }

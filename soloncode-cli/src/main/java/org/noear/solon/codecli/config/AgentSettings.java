@@ -31,6 +31,9 @@ import java.util.Map;
 public class AgentSettings implements Serializable {
     private static final Logger LOG = LoggerFactory.getLogger(AgentSettings.class);
 
+    //general 常规
+    private GeneralSettings general = new GeneralSettings();
+    //models
     private List<ChatConfig> models = new ArrayList<>();
     //mcp集
     private Map<String, McpServerParameters> mcpServers = new LinkedHashMap<>();
@@ -52,6 +55,32 @@ public class AgentSettings implements Serializable {
      * 如果 settings 为空，则从 props 补充到 settings。</p>
      */
     public void mergeFrom(HarnessProperties props) {
+        if(general.getSummaryWindowSize() != null){
+            props.setSummaryWindowSize(general.getSummaryWindowSize());
+        } else {
+            general.setSummaryWindowSize(props.getSummaryWindowSize());
+        }
+
+        if(general.getSummaryWindowToken() != null){
+            props.setSummaryWindowToken(general.getSummaryWindowToken());
+        } else {
+            general.setSummaryWindowToken(props.getSummaryWindowToken());
+        }
+
+        if(general.getSandboxMode() != null){
+            props.setSandboxMode(general.getSandboxMode());
+        } else {
+            general.setSandboxMode(props.isSandboxMode());
+        }
+
+        if(general.getBashAsyncEnabled() != null){
+            props.setBashAsyncEnabled(general.getBashAsyncEnabled());
+        } else {
+            general.setBashAsyncEnabled(props.isBashAsyncEnabled());
+        }
+
+        //-------------
+
         if (this.models.size() > 0) {
             props.getModels().clear();
             props.getModels().addAll(this.models);
@@ -114,6 +143,8 @@ public class AgentSettings implements Serializable {
      */
     public String toJson() {
         ONode oNode = new ONode(Options.of(Feature.Write_PrettyFormat));
+
+        oNode.getOrNew("general").fill(general);
 
         oNode.getOrNew("models").asArray().then(ary -> {
             for (ChatConfig entry : models) {

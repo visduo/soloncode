@@ -131,11 +131,11 @@
     // ==================== 视图切换 ====================
 
     function showLlmListView() { $llmFormView.hide(); $llmListView.addClass('slide-back').show(); setTimeout(function(){ $llmListView.removeClass('slide-back'); }, 260); }
-    function showLlmFormView(title) { $llmFormTitle.text(title || '添加模型'); $llmListView.hide(); $llmFormView.show(); }
+    function showLlmFormView(title, isEdit) { $llmFormTitle.text(title || '添加模型'); $llmListView.hide(); $llmFormView.show(); $('#llmFormActions').toggle(!!isEdit); }
     function showMcpListView() { $mcpFormView.hide(); $mcpListView.addClass('slide-back').show(); setTimeout(function(){ $mcpListView.removeClass('slide-back'); }, 260); }
-    function showMcpFormView(title) { $mcpFormTitle.text(title || '添加服务器'); $mcpListView.hide(); $mcpFormView.show(); }
+    function showMcpFormView(title, isEdit) { $mcpFormTitle.text(title || '添加服务器'); $mcpListView.hide(); $mcpFormView.show(); $('#mcpFormActions').toggle(!!isEdit); }
     function showOpenapiListView() { $openapiFormView.hide(); $openapiListView.addClass('slide-back').show(); setTimeout(function(){ $openapiListView.removeClass('slide-back'); }, 260); }
-    function showOpenapiFormView(title) { $openapiFormTitle.text(title || '添加服务器'); $openapiListView.hide(); $openapiFormView.show(); }
+    function showOpenapiFormView(title, isEdit) { $openapiFormTitle.text(title || '添加服务器'); $openapiListView.hide(); $openapiFormView.show(); $('#openapiFormActions').toggle(!!isEdit); }
     function showMountsListView() { $mountsFormView.hide(); $mountsSkillsView.hide(); $mountsListView.addClass('slide-back').show(); setTimeout(function(){ $mountsListView.removeClass('slide-back'); }, 260); }
     function showMountsFormView(title) { $mountsFormTitle.text(title || '添加挂载池'); $mountsListView.hide(); $mountsSkillsView.hide(); $mountsFormView.show(); }
     function showMountsSkillsView() { $mountsListView.hide(); $mountsFormView.hide(); $mountsSkillsView.show(); }
@@ -161,6 +161,7 @@
         showOpenapiListView();
         showMountsListView();
         $llmCheckResult.hide();
+        $('#llmFormActions, #mcpFormActions, #openapiFormActions').hide();
         if ($('#skillsSearchInput').length) {
             $('#skillsSearchInput').val('');
             $('#skillsSearchClear').hide();
@@ -258,12 +259,10 @@
                     + '<div class="llm-model-info"><div class="llm-model-name">' + escapeHtml(displayName) + '</div><div class="llm-model-meta">'
                     + '<span class="llm-api-hint">' + metaLine + '</span>'
                     + '</div></div><div class="llm-model-actions">'
-                    + '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:var(--text-secondary);">'
+                    + '<label class="toggle-switch" title="' + (enabled ? '停用' : '启用') + '">'
                     + '<input type="checkbox" ' + (enabled ? 'checked' : '') + ' data-name="' + escapeAttr(name) + '" class="llm-toggle"/>'
+                    + '<span class="toggle-slider"></span>'
                     + '</label>'
-                    + '<button class="llm-action-btn copy" data-model="' + escapeAttr(name) + '" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>'
-                    + '<button class="llm-action-btn edit" data-model="' + escapeAttr(name) + '" title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
-                    + '<button class="llm-action-btn delete" data-model="' + escapeAttr(name) + '" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>'
                     + '</div></div>';
             });
         }
@@ -274,23 +273,19 @@
     $llmModelList
         .on('click', '.llm-template-btn', function () {
             resetLlmForm();
-            showLlmFormView('添加模型');
+            showLlmFormView('添加模型', false);
             $('#llmApiUrl').val($(this).attr('data-api-url'));
             $('#llmProvider').val($(this).attr('data-provider'));
             $('#llmModel').focus();
         })
-        .on('change', '.llm-toggle', function () {
-            llmToggleModel($(this).attr('data-name'), this.checked);
-        })
-        .on('click', '.llm-action-btn.copy', function () {
-            llmCopyModel($(this).attr('data-model'));
-        })
-        .on('click', '.llm-action-btn.edit', function () {
-            llmEditModelFunc($(this).attr('data-model'));
-        })
-        .on('click', '.llm-action-btn.delete', function () {
+        .on('click', '.llm-model-item', function () {
             var model = $(this).attr('data-model');
-            if (confirm('确定删除模型 "' + model + '"？')) llmRemoveModel(model);
+            if (model) llmEditModelFunc(model);
+        })
+        .on('change', '.llm-toggle', function () {
+            var name = $(this).attr('data-name');
+            if (!name) name = $(this).closest('.llm-model-item').attr('data-model');
+            llmToggleModel(name, this.checked);
         });
 
     // ==================== LLM 表单 ====================
@@ -339,10 +334,10 @@
     }
 
     function llmEditModelFunc(model) {
-        llmEditModel = model;
-        showLlmFormView('编辑模型');
+        showLlmFormView('编辑模型', true);
         $llmSaveBtn.text('更新');
         resetLlmForm();
+        llmEditModel = model;
 
         $.get('/web/settings/llm/models/get?name=' + encodeURIComponent(model), function (resp) {
             if (resp.code === 200 && resp.data) {
@@ -355,7 +350,7 @@
 
     function llmCopyModel(model) {
         llmEditModel = null;
-        showLlmFormView('添加模型');
+        showLlmFormView('添加模型', false);
         $llmSaveBtn.text('保存');
         resetLlmForm();
 
@@ -380,13 +375,14 @@
         $.post('/web/settings/llm/models/remove?name=' + encodeURIComponent(model), function (resp) {
             if (resp.code === 200) {
                 if (typeof modelsLoaded !== 'undefined') modelsLoaded = false;
+                showLlmListView();
                 loadLlmList();
             } else { showToast('删除失败: ' + (resp.message || '未知错误'), 'error'); }
         });
     }
 
     // LLM 按钮事件
-    $('#llmAddBtn').on('click', function () { llmEditModel = null; resetLlmForm(); showLlmFormView('添加模型'); });
+    $('#llmAddBtn').on('click', function () { llmEditModel = null; resetLlmForm(); showLlmFormView('添加模型', false); });
     $('#llmBackBtn').on('click', function () { showLlmListView(); resetLlmForm(); });
 
     $llmSaveBtn.on('click', function () {
@@ -410,6 +406,22 @@
             .fail(function () { showToast('网络错误', 'error'); })
             .always(function () { $llmSaveBtn.prop('disabled', false); });
     });
+
+    // LLM 表单 - 复制按钮
+    $('#llmFormCopyBtn').on('click', function () {
+        var currentModel = llmEditModel;
+        if (!currentModel) return;
+        llmCopyModel(currentModel);
+    });
+    // LLM 表单 - 删除按钮
+    $('#llmFormDeleteBtn').on('click', function () {
+        var currentModel = llmEditModel;
+        if (!currentModel) return;
+        if (confirm('确定删除模型 "' + currentModel + '"？')) {
+            llmRemoveModel(currentModel);
+        }
+    });
+
 
     // LLM 测试连接（通过 ChatModel hello 检测）
     $('#llmTestBtn').on('click', function () {
@@ -474,18 +486,16 @@
                 var type = item.type || 'stdio';
                 var detail = type === 'stdio' ? (item.command || '') : (item.url || '');
                 var icon = iconMap[type] || 'M';
-                html += '<div class="mcp-server-item">'
+                html += '<div class="mcp-server-item" data-name="' + escapeAttr(name) + '">'
                     + '<div class="mcp-server-icon">' + escapeHtml(icon) + '</div>'
                     + '<div class="mcp-server-info">'
                     + '<div class="mcp-server-name">' + escapeHtml(name) + ' <span style="font-size:10px;color:var(--text-secondary);font-weight:400;">[' + escapeHtml(type) + ']</span></div>'
                     + (detail ? '<div class="mcp-server-detail">' + escapeHtml(detail) + '</div>' : '')
                     + '</div><div class="mcp-server-actions">'
-                    + '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:var(--text-secondary);">'
+                    + '<label class="toggle-switch" title="' + ((item.enabled !== false) ? '停用' : '启用') + '">'
                     + '<input type="checkbox" ' + (item.enabled !== false ? 'checked' : '') + ' data-name="' + escapeAttr(name) + '" class="mcp-toggle"/>'
+                    + '<span class="toggle-slider"></span>'
                     + '</label>'
-                    + '<button class="mcp-action-btn copy" data-name="' + escapeAttr(name) + '" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>'
-                    + '<button class="mcp-action-btn edit" data-name="' + escapeAttr(name) + '" title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
-                    + '<button class="mcp-action-btn delete" data-name="' + escapeAttr(name) + '" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>'
                     + '</div></div>';
             });
         }
@@ -494,18 +504,13 @@
 
     // MCP 列表事件委托
     $mcpServerList
+        .on('click', '.mcp-server-item', function (e) {
+            if ($(e.target).closest('.toggle-switch').length) return;
+            var name = $(this).attr('data-name');
+            if (name) mcpEditServer(name);
+        })
         .on('change', '.mcp-toggle', function () {
             mcpToggleServer($(this).attr('data-name'), this.checked);
-        })
-        .on('click', '.mcp-action-btn.copy', function () {
-            mcpCopyServer($(this).attr('data-name'));
-        })
-        .on('click', '.mcp-action-btn.edit', function () {
-            mcpEditServer($(this).attr('data-name'));
-        })
-        .on('click', '.mcp-action-btn.delete', function () {
-            var name = $(this).attr('data-name');
-            if (confirm('确定删除 MCP 服务器 "' + name + '"？')) mcpRemoveServer(name);
         });
 
     // ==================== MCP 表单 ====================
@@ -570,7 +575,7 @@
         var server = mcpCachedList.find(function (s) { return s.name === name; });
         if (!server) return;
         mcpEditName = name;
-        showMcpFormView('编辑服务器');
+        showMcpFormView('编辑服务器', true);
         $mcpSaveBtn.text('更新');
         $('#mcpName').val(server.name).prop('readOnly', true);
         fillMcpForm(server);
@@ -580,7 +585,7 @@
         var server = mcpCachedList.find(function (s) { return s.name === name; });
         if (!server) return;
         mcpEditName = null;
-        showMcpFormView('添加服务器');
+        showMcpFormView('添加服务器', false);
         $mcpSaveBtn.text('保存');
         $('#mcpName').val(server.name + '-copy').prop('readOnly', false);
         fillMcpForm(server);
@@ -588,7 +593,7 @@
 
     function mcpRemoveServer(name) {
         postJson('/web/settings/mcp/servers/remove', { name: name }, function (resp) {
-            if (resp.code === 200) loadMcpList();
+            if (resp.code === 200) { showMcpListView(); loadMcpList(); }
             else showToast('删除失败: ' + (resp.message || '未知错误'), 'error');
         });
     }
@@ -600,7 +605,7 @@
     }
 
     // MCP 按钮事件
-    $('#mcpAddBtn').on('click', function () { resetMcpForm(); showMcpFormView('添加服务器'); });
+    $('#mcpAddBtn').on('click', function () { resetMcpForm(); showMcpFormView('添加服务器', false); });
     $('#mcpBackBtn').on('click', function () { showMcpListView(); resetMcpForm(); });
 
     $mcpTypeBtns.on('click', function () { setMcpType($(this).attr('data-type')); });
@@ -621,6 +626,22 @@
             .fail(function () { showToast('网络错误', 'error'); })
             .always(function () { $mcpSaveBtn.prop('disabled', false); });
     });
+
+    // MCP 表单 - 复制按钮
+    $('#mcpFormCopyBtn').on('click', function () {
+        var name = mcpEditName;
+        if (!name) return;
+        mcpCopyServer(name);
+    });
+    // MCP 表单 - 删除按钮
+    $('#mcpFormDeleteBtn').on('click', function () {
+        var name = mcpEditName;
+        if (!name) return;
+        if (confirm('确定删除 MCP 服务器 "' + name + '"？')) {
+            mcpRemoveServer(name);
+        }
+    });
+
 
     // MCP 检测连接
     $('#mcpCheckBtn').on('click', function () {
@@ -674,19 +695,17 @@
                 var baseUrl = item.apiBaseUrl || '';
                 var docUrl = item.docUrl || '';
                 var enabled = item.enabled !== false;
-                html += '<div class="mcp-server-item">'
+                html += '<div class="mcp-server-item" data-name="' + escapeAttr(name) + '">'
                     + '<div class="mcp-server-icon">A</div>'
                     + '<div class="mcp-server-info">'
                     + '<div class="mcp-server-name">' + escapeHtml(name) + ' <span style="font-size:10px;color:var(--text-secondary);font-weight:400;">[openapi]</span></div>'
                     + (baseUrl ? '<div class="mcp-server-detail">' + escapeHtml(baseUrl) + '</div>' : '')
                     + (docUrl ? '<div class="mcp-server-detail" style="color:var(--accent);">' + escapeHtml(docUrl) + '</div>' : '')
                     + '</div><div class="mcp-server-actions">'
-                    + '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:var(--text-secondary);">'
+                    + '<label class="toggle-switch" title="' + (enabled ? '停用' : '启用') + '">'
                     + '<input type="checkbox" ' + (enabled ? 'checked' : '') + ' data-name="' + escapeAttr(name) + '" class="openapi-toggle"/>'
+                    + '<span class="toggle-slider"></span>'
                     + '</label>'
-                    + '<button class="mcp-action-btn copy" data-name="' + escapeAttr(name) + '" title="复制"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>'
-                    + '<button class="mcp-action-btn edit" data-name="' + escapeAttr(name) + '" title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
-                    + '<button class="mcp-action-btn delete" data-name="' + escapeAttr(name) + '" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>'
                     + '</div></div>';
             });
         }
@@ -695,18 +714,13 @@
 
     // OpenApi 列表事件委托
     $openapiServerList
+        .on('click', '.mcp-server-item', function (e) {
+            if ($(e.target).closest('.toggle-switch').length) return;
+            var name = $(this).attr('data-name');
+            if (name) openapiEditServer(name);
+        })
         .on('change', '.openapi-toggle', function () {
             openapiToggleServer($(this).attr('data-name'), this.checked);
-        })
-        .on('click', '.mcp-action-btn.copy', function () {
-            openapiCopyServer($(this).attr('data-name'));
-        })
-        .on('click', '.mcp-action-btn.edit', function () {
-            openapiEditServer($(this).attr('data-name'));
-        })
-        .on('click', '.mcp-action-btn.delete', function () {
-            var name = $(this).attr('data-name');
-            if (confirm('确定删除 OpenApi 服务器 "' + name + '"？')) openapiRemoveServer(name);
         });
 
     // ==================== OpenApi 表单 ====================
@@ -745,7 +759,7 @@
         var server = openapiCachedList.find(function (s) { return s.name === name; });
         if (!server) return;
         openapiEditName = name;
-        showOpenapiFormView('编辑服务器');
+        showOpenapiFormView('编辑服务器', true);
         $openapiSaveBtn.text('更新');
         $('#openapiName').val(server.name).prop('readOnly', true);
         fillOpenapiForm(server);
@@ -755,7 +769,7 @@
         var server = openapiCachedList.find(function (s) { return s.name === name; });
         if (!server) return;
         openapiEditName = null;
-        showOpenapiFormView('添加服务器');
+        showOpenapiFormView('添加服务器', false);
         $openapiSaveBtn.text('保存');
         $('#openapiName').val(server.name + '-copy').prop('readOnly', false);
         fillOpenapiForm(server);
@@ -763,7 +777,7 @@
 
     function openapiRemoveServer(name) {
         postJson('/web/settings/openapi/servers/remove', { name: name }, function (resp) {
-            if (resp.code === 200) loadOpenapiList();
+            if (resp.code === 200) { showOpenapiListView(); loadOpenapiList(); }
             else showToast('删除失败: ' + (resp.message || '未知错误'), 'error');
         });
     }
@@ -775,7 +789,7 @@
     }
 
     // OpenApi 按钮事件
-    $('#openapiAddBtn').on('click', function () { resetOpenapiForm(); showOpenapiFormView('添加服务器'); });
+    $('#openapiAddBtn').on('click', function () { resetOpenapiForm(); showOpenapiFormView('添加服务器', false); });
     $('#openapiBackBtn').on('click', function () { showOpenapiListView(); resetOpenapiForm(); });
 
     // OpenApi 测试连接
@@ -820,6 +834,22 @@
             .fail(function () { showToast('网络错误', 'error'); })
             .always(function () { $openapiSaveBtn.prop('disabled', false); });
     });
+
+    // OpenApi 表单 - 复制按钮
+    $('#openapiFormCopyBtn').on('click', function () {
+        var name = openapiEditName;
+        if (!name) return;
+        openapiCopyServer(name);
+    });
+    // OpenApi 表单 - 删除按钮
+    $('#openapiFormDeleteBtn').on('click', function () {
+        var name = openapiEditName;
+        if (!name) return;
+        if (confirm('确定删除 OpenApi 服务器 "' + name + '"？')) {
+            openapiRemoveServer(name);
+        }
+    });
+
 
     // ==================== 挂载池管理 ====================
 
