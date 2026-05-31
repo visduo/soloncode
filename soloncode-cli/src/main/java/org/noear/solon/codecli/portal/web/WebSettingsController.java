@@ -30,6 +30,7 @@ import org.noear.solon.annotation.*;
 import org.noear.solon.codecli.config.AgentProperties;
 import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.codecli.config.GeneralSettings;
+import org.noear.solon.codecli.config.entity.MountDo;
 import org.noear.solon.codecli.portal.web.market.Market;
 import org.noear.solon.codecli.portal.web.market.MarketManager;
 import org.noear.solon.core.handle.Context;
@@ -1374,7 +1375,7 @@ public class WebSettingsController {
         if (engine.getPoolManager().hasPool(alias)) return Result.failure("别名已存在");
 
         engine.getProps().getMountPools().put(alias, path);
-        settings.getMountPools().put(alias, path);
+        settings.getMountPools().put(alias, new MountDo(path, true));
         saveSettings();
         engine.getPoolManager().register(alias, path);
         return Result.succeed("添加成功");
