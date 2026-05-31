@@ -5,9 +5,9 @@ import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.annotation.*;
 import org.noear.solon.codecli.config.AgentFlags;
-import org.noear.solon.codecli.provider.ModelInfo;
-import org.noear.solon.codecli.provider.ModelProvider;
-import org.noear.solon.codecli.provider.ModelProviderFactory;
+import org.noear.solon.codecli.portal.desktop.provider.ModelInfo;
+import org.noear.solon.codecli.portal.desktop.provider.ModelProvider;
+import org.noear.solon.codecli.portal.desktop.provider.ModelProviderFactory;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Result;
 import org.noear.solon.core.util.Assert;
@@ -74,7 +74,7 @@ public class WsController {
             config.setApiUrl(apiUrl);
             config.setApiKey(apiKey);
             config.setModel(mi.getObject());
-            config.setUserAgent("Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; SolonCode/2.0; +https://solon.noear.org/)");
+            config.setUserAgent(engine.getProps().getUserAgent());
             engine.getProps().removeModel(mi.getObject());
             engine.getProps().addModel(config);
             list.add(item);
@@ -110,7 +110,7 @@ public class WsController {
         config.setApiUrl(apiUrl);
         config.setApiKey(apiKey);
         config.setModel(model);
-        config.setUserAgent("Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; SolonCode/2.0; +https://solon.noear.org/)");
+        config.setUserAgent(engine.getProps().getUserAgent());
 
         // timeout
         String timeout = root.get("timeout").getString();

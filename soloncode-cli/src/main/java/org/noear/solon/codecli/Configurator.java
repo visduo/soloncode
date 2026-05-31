@@ -5,11 +5,13 @@ import com.agentclientprotocol.sdk.agent.transport.WebSocketSolonAcpAgentTranspo
 import com.agentclientprotocol.sdk.spec.AcpAgentTransport;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import org.noear.solon.Solon;
+import org.noear.solon.Utils;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.AgentSessionProvider;
 import org.noear.solon.ai.agent.session.FileAgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
+import org.noear.solon.ai.skills.cli.PoolDir;
 import org.noear.solon.annotation.Bean;
 import org.noear.solon.annotation.Configuration;
 import org.noear.solon.annotation.Init;
@@ -19,7 +21,7 @@ import org.noear.solon.codecli.config.AgentFlags;
 import org.noear.solon.codecli.config.AgentProperties;
 import org.noear.solon.codecli.command.builtin.LoopScheduler;
 import org.noear.solon.codecli.channel.Channel;
-import org.noear.solon.codecli.channel.wechat.WeChatLink;
+import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.codecli.memory.MemoryFactory;
 import org.noear.solon.codecli.portal.*;
 import org.noear.solon.codecli.portal.acp.AcpLink;
@@ -28,17 +30,20 @@ import org.noear.solon.codecli.portal.desktop.WsController;
 import org.noear.solon.codecli.portal.desktop.WsGate;
 import org.noear.solon.codecli.portal.web.WebChannel;
 import org.noear.solon.codecli.portal.web.WebController;
+import org.noear.solon.codecli.portal.web.WebSettingsController;
 import org.noear.solon.codecli.portal.web.WebGate;
 import org.noear.solon.codecli.portal.web.WebStreamBuilder;
-import org.noear.solon.codecli.provider.ModelProviderFactory;
+import org.noear.solon.codecli.portal.desktop.provider.ModelProviderFactory;
 import org.noear.solon.core.AppContext;
 import org.noear.solon.core.BeanWrap;
 import org.noear.solon.core.util.JavaUtil;
+import org.noear.solon.core.util.ResourceUtil;
 import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.net.websocket.WebSocketRouter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
@@ -64,29 +69,23 @@ public class Configurator {
     AgentProperties agentProps;
 
     @Inject
+    AgentSettings agentSettings;
+
+    @Inject
     ModelProviderFactory modelProviderFactory;
 
     private LoopScheduler loopScheduler;
 
     @Bean
-    public HarnessEngine agentRuntime(AgentProperties props) {
-        props.getSkillPools().put("@global", Paths.get(props.getUserHome(), props.getHarnessSkills()).toString());
-        props.getSkillPools().put("@local", Paths.get(props.getWorkspace(), props.getHarnessSkills()).toString());
-
-
-        // https://skillhub.cn/
-        props.getSkillPools().put("@skills", Paths.get(props.getWorkspace(), "skills").toString());
-        props.getSkillPools().put("@skillhub", Paths.get(props.getUserHome(), ".skillhub/skills/").toString());
-
-        // https://skills.sh/
-        props.getSkillPools().put("@agents_skills", Paths.get(props.getUserHome(), ".agents/skills/").toString());
-
-        props.getSkillPools().put("@opencode_skills", Paths.get(props.getWorkspace(), props.OPENCODE_SKILLS).toString());
-        props.getSkillPools().put("@claude_skills", Paths.get(props.getWorkspace(), props.CLAUDE_SKILLS).toString());
+    public HarnessEngine agentRuntime(AgentProperties props) throws Exception {
+        //props.getMountPools().put("@global", Paths.get(props.getUserHome(), props.getHarnessSkills()).toString());
+        //props.getMountPools().put("@local", Paths.get(props.getWorkspace(), props.getHarnessSkills()).toString());
 
         props.getAgentPools().add(Paths.get(props.getUserHome(), props.getHarnessAgents()).toString()); //global
         props.getAgentPools().add(Paths.get(props.getWorkspace(), props.getHarnessAgents()).toString()); //local
 
+
+        //-----------------
 
         Map<String, AgentSession> sessionMap = new ConcurrentHashMap<>();
 
@@ -98,6 +97,9 @@ public class Configurator {
                 .sessionProvider(sessionProvider)
                 .memorySolution(new MemoryFactory(agentProps))
                 .build();
+
+        engine.getPoolManager().register(new PoolDir("@global-skills", true, "~/"+props.getHarnessSkills(), Paths.get(props.getUserHome(), props.getHarnessSkills())));
+        engine.getPoolManager().register(new PoolDir("@workspace-skills", true, "./"+props.getHarnessSkills(), Paths.get(props.getWorkspace(), props.getHarnessSkills())));
 
         engine.getCommandRegistry().load(Paths.get(AgentProperties.getUserHome(), props.getHarnessCommands()));
         engine.getCommandRegistry().load(Paths.get(agentProps.getWorkspace(), props.getHarnessCommands()));
@@ -112,6 +114,9 @@ public class Configurator {
         this.loopScheduler = new LoopScheduler();
         engine.getCommandRegistry().register(new LoopCommand(loopScheduler));
 
+
+
+
         return engine;
     }
 
@@ -119,7 +124,7 @@ public class Configurator {
     public void init() {
         //订阅容器扩展
         appContext.subBeansOfType(HarnessExtension.class, extension -> {
-            agentRuntime.extensionAdd(extension);
+            agentRuntime.addExtension(extension);
         });
 
 
@@ -213,6 +218,11 @@ public class Configurator {
         //web
         BeanWrap webController = Solon.context().wrapAndPut(WebController.class, new WebController(agentRuntime, webGate, loopScheduler));
         Solon.app().router().add(webController);
+
+        WebSettingsController settingsController = new WebSettingsController(agentRuntime, agentSettings);
+        BeanWrap webSettingsController = Solon.context().wrapAndPut(WebSettingsController.class, settingsController);
+        Solon.app().router().add(webSettingsController);
+
         BeanWrap webChannel = Solon.context().wrapAndPut(WebChannel.class, new WebChannel(agentRuntime, webGate));
         Solon.app().router().add(webChannel);
 

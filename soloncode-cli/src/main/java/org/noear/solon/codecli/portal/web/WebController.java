@@ -41,7 +41,6 @@ import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Web 门户控制器 —— SolonCode Web UI 的核心 HTTP 入口。
@@ -55,8 +54,8 @@ import java.util.concurrent.TimeUnit;
  *   <li><b>聊天会话管理</b>：会话列表加载、删除、重命名、消息历史、回退、中断</li>
  *   <li><b>模型管理</b>：可用模型列表查询、当前会话模型切换</li>
  *   <li><b>聊天输入</b>：接收用户消息与附件，路由到 WebGate 进行 AI 处理</li>
- *   <li><b>Git 集成</b>：仓库状态检测、初始化、Diff 查看、文件内容获取、提交</li>
- *   <li><b>文件树浏览</b>：工作区目录结构的层级化浏览</li>
+ *   <li><b>Git 集成</b>：仓库状态检测、初始化、Diff 查看、文件内容获取、提交（委派给 {@link GitService}）</li>
+ *   <li><b>文件浏览</b>：工作区目录结构浏览、文件搜索、文件内容读取（委派给 {@link FileService}）</li>
  * </ul>
  *
  * <h3>架构位置</h3>
@@ -66,7 +65,9 @@ import java.util.concurrent.TimeUnit;
  *
  * @author oisin 2026-3-13
  * @author noear 2026-4-18
- * @see WebGate WebSocket 推送网关
+ * @see WebGate    WebSocket 推送网关
+ * @see GitService  Git 业务逻辑服务
+ * @see FileService 文件浏览业务逻辑服务
  * @see HarnessEngine AI Agent 执行引擎
  */
 public class WebController {
@@ -82,14 +83,11 @@ public class WebController {
     /** 循环调度器，用于恢复和管理 Web 端的定时/循环 AI 任务 */
     private final LoopScheduler loopScheduler;
 
-    /**
-     * 文件树浏览时排除的目录名称集合。
-     * <p>包含各类构建产物、IDE 配置、版本控制等无需展示的目录，
-     * 如 .git、.idea、node_modules、target、__pycache__ 等。</p>
-     */
-    private static final Set<String> EXCLUDED_DIRS = new HashSet<>(Arrays.asList(
-            ".git", ".idea", ".soloncode", "node_modules", "target", "__pycache__", ".gradle", ".mvn", "build"
-    ));
+    /** Git 业务逻辑服务，封装工作区 Git 操作 */
+    private final GitService gitService;
+
+    /** 文件业务逻辑服务，封装工作区文件浏览、搜索、读取操作 */
+    private final FileService fileService;
 
     /**
      * 构造函数：初始化核心依赖并注册 Web 端 Loop 任务执行器。
@@ -102,6 +100,8 @@ public class WebController {
         this.engine = engine;
         this.webGate = webGate;
         this.loopScheduler = loopScheduler;
+        this.gitService = new GitService(engine.getProps().getWorkspace(), engine);
+        this.fileService = new FileService(engine.getProps().getWorkspace());
 
         // 注入 Web 端 Loop 任务执行器：异步执行 AI 任务，通过 WebGate WebSocket 推送到前端
         if (loopScheduler != null) {
@@ -134,7 +134,7 @@ public class WebController {
      * @throws Exception 读取配置异常
      */
     @Get
-    @Mapping("/chat/meta")
+    @Mapping("/web/chat/meta")
     public Result<Map> meta() {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("appTitle", Solon.cfg().appTitle());
@@ -168,7 +168,7 @@ public class WebController {
      * @throws Exception 文件读取异常
      */
     @Get
-    @Mapping("/chat/sessions")
+    @Mapping("/web/chat/sessions")
     public Result<List<Map>> sessions() throws Exception {
         Path sessionsPath = Paths.get(engine.getProps().getWorkspace(), ".soloncode", "sessions").toAbsolutePath().normalize();
         File sessionsDir = sessionsPath.toFile();
@@ -222,7 +222,7 @@ public class WebController {
      * @throws Exception 文件删除异常
      */
     @Post
-    @Mapping("/chat/sessions/delete")
+    @Mapping("/web/chat/sessions/delete")
     public Result deleteSession(@Param("sessionId") String sessionId) throws Exception {
         if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
             return Result.failure();
@@ -248,7 +248,7 @@ public class WebController {
      * @throws Exception 文件写入异常
      */
     @Post
-    @Mapping("/chat/sessions/rename")
+    @Mapping("/web/chat/sessions/rename")
     public Result renameSession(@Param("sessionId") String sessionId, @Param("label") String label) throws Exception {
         if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
             return Result.failure();
@@ -283,16 +283,19 @@ public class WebController {
      * @throws Exception 会话查询异常
      */
     @Get
-    @Mapping("/chat/models")
+    @Mapping("/web/chat/models")
     public Result<Map> models(@Param(value = "sessionId", required = false) String sessionId) throws Exception {
         Map<String, Object> data = new LinkedHashMap<>();
         List<Map> list = new ArrayList<>();
 
         for (ChatConfig config : engine.getProps().getModels()) {
-            Map<String, String> item = new LinkedHashMap<>();
-            item.put("model", config.getNameOrModel());
-            item.put("description", config.getDescriptionOrModel());
-            list.add(item);
+            if (config.isEnabled()) {
+                Map<String, String> item = new LinkedHashMap<>();
+                item.put("model", config.getModel());
+                item.put("name", config.getNameOrModel());
+                item.put("description", config.getDescriptionOrModel());
+                list.add(item);
+            }
         }
         data.put("list", list);
 
@@ -319,7 +322,7 @@ public class WebController {
      * @throws Exception 会话操作异常
      */
     @Post
-    @Mapping("/chat/models/select")
+    @Mapping("/web/chat/models/select")
     public Result models_select(@Param("sessionId") String sessionId, @Param("modelName") String modelName) throws Exception {
         AgentSession session = engine.getSession(sessionId);
 
@@ -330,7 +333,6 @@ public class WebController {
         return Result.succeed();
     }
 
-
     /**
      * 获取指定会话的消息历史记录。
      * <p>从 ndjson 消息文件中逐行读取，解析每条消息的 role、content、createdAt 字段。</p>
@@ -340,7 +342,7 @@ public class WebController {
      * @throws Exception 文件读取异常
      */
     @Get
-    @Mapping("/chat/messages")
+    @Mapping("/web/chat/messages")
     public Result<List<Map>> messages(@Param("sessionId") String sessionId) throws Exception {
         List<Map> data = new ArrayList<>();
         Path sessionsPath = Paths.get(engine.getProps().getWorkspace(), ".soloncode", "sessions", sessionId).toAbsolutePath().normalize();
@@ -379,7 +381,7 @@ public class WebController {
      * @return 操作结果
      */
     @Post
-    @Mapping("/chat/interrupt")
+    @Mapping("/web/chat/interrupt")
     public Result interruptSession(@Param("sessionId") String sessionId) {
         if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
             return Result.failure();
@@ -401,7 +403,7 @@ public class WebController {
      * @throws Exception 文件读写异常
      */
     @Post
-    @Mapping("/chat/rewind")
+    @Mapping("/web/chat/rewind")
     public Result rewindSession(@Param("sessionId") String sessionId, @Param(value = "count", required = false) Integer count) throws Exception {
         if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
             return Result.failure();
@@ -453,7 +455,7 @@ public class WebController {
      * @return 命令/子代理列表，每项包含 name、description、type（command 或 subagent）
      */
     @Get
-    @Mapping("/chat/hints")
+    @Mapping("/web/chat/hints")
     public Result<List<Map>> hints() {
         List<Map> data = new ArrayList<>();
         for (Command cmd : engine.getCommandRegistry().all()) {
@@ -475,7 +477,14 @@ public class WebController {
             data.add(item);
         }
 
-        for (SkillDir skill : engine.getPoolManager().getSkillMap().values()) {
+        Set<String> added = new HashSet<>();
+        for (SkillDir skill : engine.getPoolManager().getSkills()) {
+            if (added.contains(skill.getName())) {
+                continue;
+            } else {
+                added.add(skill.getName());
+            }
+
             String desc = skill.getDescription();
             if (desc != null) {
                 // 取第一行，并限制最大长度
@@ -491,6 +500,7 @@ public class WebController {
             Map<String, String> item = new LinkedHashMap<>();
             item.put("name", skill.getName());
             item.put("description", desc);
+            item.put("poolAlias", skill.getPoolAlias());
             item.put("type", "skill");
             data.add(item);
         }
@@ -512,7 +522,7 @@ public class WebController {
      * @param sessionId       会话 ID，若为空则从请求头 X-Session-Id 获取
      * @return 操作结果（AI 结果通过 WebSocket 推送）
      */
-    @Mapping("/chat/input")
+    @Mapping("/web/chat/input")
     public Result chat_input(Context ctx, String input, UploadedFile[] attachments, String attachmentTypes[], String model, String sessionId) {
         try {
             if (sessionId == null || sessionId.isEmpty()) {
@@ -549,74 +559,7 @@ public class WebController {
 
 
 
-    // ==================== Git 集成 ====================
-
-    /**
-     * 进程执行结果封装，用于承载 Git 命令的标准输出、标准错误和退出码。
-     */
-    private static class ProcessResult {
-        /** 进程退出码，0 表示成功 */
-        int exitCode;
-        /** 标准输出内容 */
-        String stdout;
-        /** 标准错误内容 */
-        String stderr;
-    }
-
-    /**
-     * 在指定工作目录下执行 Git 命令。
-     * <p>禁用 Git 终端提示（GIT_TERMINAL_PROMPT=0），设置 10 秒超时保护，
-     * 超时后强制终止进程并返回退出码 -1。</p>
-     *
-     * @param workDir 命令执行的工作目录
-     * @param command 完整的命令及参数（如 "git", "status", "--porcelain=v1"）
-     * @return 进程执行结果
-     * @throws Exception 进程启动或流读取异常
-     */
-    private ProcessResult runGitCommand(File workDir, String... command) throws Exception {
-        ProcessBuilder pb = new ProcessBuilder(command);
-        pb.directory(workDir);
-        pb.redirectErrorStream(false);
-        pb.environment().put("GIT_TERMINAL_PROMPT", "0");
-
-        Process proc = pb.start();
-        String stdout = readGitStream(proc.getInputStream());
-        String stderr = readGitStream(proc.getErrorStream());
-
-        boolean finished = proc.waitFor(10, TimeUnit.SECONDS);
-        if (!finished) {
-            proc.destroyForcibly();
-            ProcessResult result = new ProcessResult();
-            result.exitCode = -1;
-            result.stdout = "";
-            result.stderr = "Command timed out after 10 seconds";
-            return result;
-        }
-
-        ProcessResult result = new ProcessResult();
-        result.exitCode = proc.exitValue();
-        result.stdout = stdout;
-        result.stderr = stderr;
-        return result;
-    }
-
-    /**
-     * 读取输入流的所有行并拼接为字符串。
-     *
-     * @param is 输入流
-     * @return 拼接后的字符串内容
-     * @throws Exception 流读取异常
-     */
-    private String readGitStream(java.io.InputStream is) throws Exception {
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(is, "UTF-8"))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                sb.append(line).append("\n");
-            }
-        }
-        return sb.toString();
-    }
+    // ==================== Git 集成（委派给 GitService） ====================
 
     /**
      * Git 状态检测：返回 Git 可用性、仓库初始化状态、当前分支名及变更文件列表。
@@ -632,69 +575,9 @@ public class WebController {
      * @throws Exception Git 命令执行异常
      */
     @Get
-    @Mapping("/chat/git/status")
+    @Mapping("/web/chat/git/status")
     public Result<Map> gitStatus() throws Exception {
-        Map<String, Object> data = new LinkedHashMap<>();
-        File workspaceDir = new File(engine.getProps().getWorkspace());
-
-        // 1. 检测 git 是否可用
-        try {
-            ProcessResult checkGit = runGitCommand(workspaceDir, "git", "--version");
-            if (checkGit.exitCode != 0) {
-                data.put("gitAvailable", false);
-                data.put("initialized", false);
-                return Result.succeed(data);
-            }
-        } catch (Exception e) {
-            data.put("gitAvailable", false);
-            data.put("initialized", false);
-            return Result.succeed(data);
-        }
-        data.put("gitAvailable", true);
-
-        // 2. 检测是否是 git 仓库
-        ProcessResult checkRepo = runGitCommand(workspaceDir, "git", "rev-parse", "--is-inside-work-tree");
-        if (checkRepo.exitCode != 0) {
-            data.put("initialized", false);
-            data.put("workspacePath", workspaceDir.getAbsolutePath());
-            return Result.succeed(data);
-        }
-        data.put("initialized", true);
-
-        // 3. 获取分支名
-        ProcessResult branchResult = runGitCommand(workspaceDir, "git", "branch", "--show-current");
-        String branch = branchResult.stdout.trim();
-        data.put("branch", branch.isEmpty() ? "master" : branch);
-
-        // 4. 解析 git status --porcelain=v1
-        ProcessResult statusResult = runGitCommand(workspaceDir, "git", "status", "--porcelain=v1");
-        List<String> changed = new ArrayList<>();
-        List<String> staged = new ArrayList<>();
-        List<String> untracked = new ArrayList<>();
-
-        for (String line : statusResult.stdout.split("\n")) {
-            if (line.length() < 4) continue;
-            String x = line.substring(0, 1);
-            String y = line.substring(1, 2);
-            String filePath = line.substring(3);
-
-            // 规范化：去除尾部斜杠（git porcelain 对未跟踪目录可能输出 "?? dir/"）
-            if (filePath.endsWith("/")) {
-                filePath = filePath.substring(0, filePath.length() - 1);
-            }
-
-            if ("?".equals(x) && "?".equals(y)) {
-                untracked.add(filePath);
-            } else {
-                if (!" ".equals(x) && "?".equals(x) == false) staged.add(filePath);
-                if (!" ".equals(y) && "?".equals(y) == false) changed.add(filePath);
-            }
-        }
-        data.put("changed", changed);
-        data.put("staged", staged);
-        data.put("untracked", untracked);
-
-        return Result.succeed(data);
+        return gitService.status();
     }
 
     /**
@@ -707,275 +590,41 @@ public class WebController {
      * @throws Exception Git 命令执行异常
      */
     @Post
-    @Mapping("/chat/git/init")
+    @Mapping("/web/chat/git/init")
     public Result<Map> gitInit(@Param(value = "initialCommit", required = false) Boolean initialCommit) throws Exception {
-        File workspaceDir = new File(engine.getProps().getWorkspace());
-
-        // 安全校验：确认不是已有仓库
-        ProcessResult check = runGitCommand(workspaceDir, "git", "rev-parse", "--is-inside-work-tree");
-        if (check.exitCode == 0) {
-            return Result.failure(400, "Already a git repository");
-        }
-
-        // 执行 git init
-        ProcessResult initResult = runGitCommand(workspaceDir, "git", "init");
-        if (initResult.exitCode != 0) {
-            return Result.failure(500, "git init failed: " + initResult.stderr);
-        }
-
-        // 自动生成 .gitignore（仅当文件不存在时）
-        File gitignore = new File(workspaceDir, ".gitignore");
-        if (!gitignore.exists()) {
-            String content = String.join("\n",
-                    "# Auto-generated by SolonCode",
-                    ".git/",
-                    ".idea/",
-                    ".soloncode/",
-                    ".gradle/",
-                    ".mvn/",
-                    "node_modules/",
-                    "target/",
-                    "build/",
-                    "__pycache__/",
-                    "*.class",
-                    "*.jar",
-                    "*.log"
-            );
-            java.nio.file.Files.write(gitignore.toPath(), content.getBytes("UTF-8"));
-        }
-
-        // 可选：执行 initial commit
-        if (Boolean.TRUE.equals(initialCommit)) {
-            runGitCommand(workspaceDir, "git", "add", "-A");
-            runGitCommand(workspaceDir, "git", "-c", "user.name=SolonCode",
-                    "-c", "user.email=soloncode@noear.org",
-                    "commit", "-m", "Initial commit");
-        }
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("initialized", true);
-
-        ProcessResult branchResult = runGitCommand(workspaceDir, "git", "branch", "--show-current");
-        String branch = branchResult.stdout.trim();
-        data.put("branch", branch.isEmpty() ? "master" : branch);
-
-        return Result.succeed(data);
+        return gitService.init(initialCommit);
     }
 
-    /**
-     * 获取 Git Diff 内容。
-     * <p>分别执行未暂存变更（git diff）和已暂存变更（git diff --cached）的 diff 查询，
-     * 合并输出结果。单文件 diff 超过 2000 行时自动截断。同时返回 diff --stat 摘要信息。</p>
-     *
-     * @param path 可选的文件路径，用于查看指定文件的 diff；为空时查看全部变更
-     * @return 包含 diff（完整差异内容）和 stat（变更统计摘要）的结果对象
-     * @throws Exception Git 命令执行异常
-     */
     @Get
-    @Mapping("/chat/git/diff")
+    @Mapping("/web/chat/git/diff")
     public Result<Map> gitDiff(@Param(value = "path", required = false) String path) throws Exception {
-        File workspaceDir = new File(engine.getProps().getWorkspace());
-
-        // 安全校验：防止路径穿越
-        if (path != null && (path.contains("..") || path.startsWith("/"))) {
-            return Result.failure(400, "Invalid path");
-        }
-
-        boolean hasPath = path != null && !path.trim().isEmpty();
-
-        // 未暂存的变更
-        List<String> unstagedCmd = new ArrayList<>(Arrays.asList("git", "diff"));
-        if (hasPath) { unstagedCmd.add("--"); unstagedCmd.add(path); }
-        ProcessResult unstagedResult = runGitCommand(workspaceDir, unstagedCmd.toArray(new String[0]));
-
-        // 已暂存的变更
-        List<String> stagedCmd = new ArrayList<>(Arrays.asList("git", "diff", "--cached"));
-        if (hasPath) { stagedCmd.add("--"); stagedCmd.add(path); }
-        ProcessResult stagedResult = runGitCommand(workspaceDir, stagedCmd.toArray(new String[0]));
-
-        // 合并 diff 输出
-        String fullDiff = unstagedResult.stdout;
-        if (!stagedResult.stdout.isEmpty()) {
-            fullDiff += "\n" + stagedResult.stdout;
-        }
-
-        // 截断保护：单文件 diff 限制 2000 行
-        if (hasPath) {
-            String[] lines = fullDiff.split("\n");
-            if (lines.length > 2000) {
-                fullDiff = String.join("\n", Arrays.copyOf(lines, 2000))
-                        + "\n\n... (差异过大，仅显示前 2000 行，请在终端查看完整 diff)";
-            }
-        }
-
-        // stat 摘要
-        List<String> statCmd = new ArrayList<>(Arrays.asList("git", "diff", "--stat"));
-        if (hasPath) { statCmd.add("--"); statCmd.add(path); }
-        ProcessResult statResult = runGitCommand(workspaceDir, statCmd.toArray(new String[0]));
-
-        List<String> statCachedCmd = new ArrayList<>(Arrays.asList("git", "diff", "--cached", "--stat"));
-        if (hasPath) { statCachedCmd.add("--"); statCachedCmd.add(path); }
-        ProcessResult statCachedResult = runGitCommand(workspaceDir, statCachedCmd.toArray(new String[0]));
-
-        String stat = statResult.stdout;
-        if (!statCachedResult.stdout.isEmpty()) {
-            stat += (stat.isEmpty() ? "" : "\n") + statCachedResult.stdout;
-        }
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("diff", fullDiff);
-        data.put("stat", stat);
-
-        return Result.succeed(data);
+        return gitService.diff(path);
     }
 
-    /**
-     * 将指定文件添加到 Git 暂存区（git add）。
-     *
-     * @param body JSON: { "path": "src/App.java" }
-     * @return 包含 path 的结果对象
-     * @throws Exception Git 命令执行异常
-     */
     @Post
-    @Mapping("/chat/git/stage")
+    @Mapping("/web/chat/git/stage")
     public Result<Map> gitStage(@Body String body) throws Exception {
-        File workspaceDir = new File(engine.getProps().getWorkspace());
-        ProcessResult check = runGitCommand(workspaceDir, "git", "rev-parse", "--is-inside-work-tree");
-        if (check.exitCode != 0) {
-            return Result.failure(400, "Not a git repository");
-        }
-
-        String path = null;
-        if (body != null && !body.trim().isEmpty()) {
-            try {
-                ONode json = ONode.ofJson(body);
-                if (json != null && json.isObject()) {
-                    ONode pathNode = json.get("path");
-                    if (pathNode != null && pathNode.isString()) {
-                        path = pathNode.getString();
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-        }
-
-        if (path == null || path.trim().isEmpty()) {
-            return Result.failure(400, "Path is required");
-        }
-        if (path.contains("..") || path.startsWith("/")) {
-            return Result.failure(400, "Invalid path");
-        }
-
-        ProcessResult addResult = runGitCommand(workspaceDir, "git", "add", "--", path);
-        if (addResult.exitCode != 0) {
-            return Result.failure(500, "git add failed: " + addResult.stderr);
-        }
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("path", path);
-        return Result.succeed(data);
+        String path = parseJsonPath(body);
+        return gitService.stage(path);
     }
 
-    /**
-     * 将指定文件移出 Git 暂存区（git reset HEAD -- path）。
-     *
-     * @param body JSON: { "path": "src/App.java" }
-     * @return 包含 path 的结果对象
-     * @throws Exception Git 命令执行异常
-     */
     @Post
-    @Mapping("/chat/git/unstage")
+    @Mapping("/web/chat/git/unstage")
     public Result<Map> gitUnstage(@Body String body) throws Exception {
-        File workspaceDir = new File(engine.getProps().getWorkspace());
-        ProcessResult check = runGitCommand(workspaceDir, "git", "rev-parse", "--is-inside-work-tree");
-        if (check.exitCode != 0) {
-            return Result.failure(400, "Not a git repository");
-        }
-
-        String path = null;
-        if (body != null && !body.trim().isEmpty()) {
-            try {
-                ONode json = ONode.ofJson(body);
-                if (json != null && json.isObject()) {
-                    ONode pathNode = json.get("path");
-                    if (pathNode != null && pathNode.isString()) {
-                        path = pathNode.getString();
-                    }
-                }
-            } catch (Exception ignored) {
-            }
-        }
-
-        if (path == null || path.trim().isEmpty()) {
-            return Result.failure(400, "Path is required");
-        }
-        if (path.contains("..") || path.startsWith("/")) {
-            return Result.failure(400, "Invalid path");
-        }
-
-        ProcessResult resetResult = runGitCommand(workspaceDir, "git", "reset", "HEAD", "--", path);
-        if (resetResult.exitCode != 0) {
-            return Result.failure(500, "git reset failed: " + resetResult.stderr);
-        }
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("path", path);
-        return Result.succeed(data);
+        String path = parseJsonPath(body);
+        return gitService.unstage(path);
     }
 
-    /**
-     * 获取 Git 仓库中指定版本的文件内容。
-     * <p>通过 git show ref:path 获取文件内容，默认 ref 为 HEAD。</p>
-     *
-     * @param path 文件路径（相对于仓库根目录）
-     * @param ref  Git 引用（分支名、标签、提交哈希等），默认为 HEAD
-     * @return 包含 content（文件内容文本）的结果对象
-     * @throws Exception Git 命令执行异常
-     */
     @Get
-    @Mapping("/chat/git/file-content")
+    @Mapping("/web/chat/git/file-content")
     public Result<Map> gitFileContent(@Param("path") String path,
                                       @Param(value = "ref", required = false) String ref) throws Exception {
-        File workspaceDir = new File(engine.getProps().getWorkspace());
-
-        if (path == null || path.contains("..") || path.startsWith("/")) {
-            return Result.failure(400, "Invalid path");
-        }
-        if (ref == null || ref.isEmpty()) ref = "HEAD";
-
-        ProcessResult result = runGitCommand(workspaceDir, "git", "show", ref + ":" + path);
-
-        if (result.exitCode != 0) {
-            return Result.failure(404, "File not found: " + result.stderr);
-        }
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("content", result.stdout);
-        return Result.succeed(data);
+        return gitService.fileContent(path, ref);
     }
 
-    /**
-     * Git 提交：支持精确文件列表或全量 add -A。
-     * <p>请求体为 JSON 格式：{@code { "message": "提交信息", "files": ["a.java", "b.css"] }}。
-     * 当 files 为空或缺失时退化为 git add -A（兼容旧调用方式）。
-     * 提交时自动使用 SolonCode 作为提交者信息。</p>
-     *
-     * @param body JSON 格式的请求体，包含 message（提交信息）和 files（文件列表，可选）
-     * @return 包含 stdout（Git 提交输出）的结果对象
-     * @throws Exception Git 命令执行异常或 JSON 解析异常
-     */
     @Post
-    @Mapping("/chat/git/commit")
+    @Mapping("/web/chat/git/commit")
     public Result<Map> gitCommit(@Body String body) throws Exception {
-        File workspaceDir = new File(engine.getProps().getWorkspace());
-
-        // 安全校验：确认是 git 仓库
-        ProcessResult check = runGitCommand(workspaceDir, "git", "rev-parse", "--is-inside-work-tree");
-        if (check.exitCode != 0) {
-            return Result.failure(400, "Not a git repository");
-        }
-
-        // 解析 JSON body
         String message = null;
         List<String> files = null;
         if (body != null && !body.trim().isEmpty()) {
@@ -995,52 +644,67 @@ public class WebController {
                     }
                 }
             } catch (Exception ignored) {
-                // 非 JSON，忽略
+            }
+        }
+        return gitService.commit(message, files);
+    }
+
+    @Post
+    @Mapping("/web/chat/git/summary")
+    public Result<Map> gitSummary(@Param("sessionId") String sessionId,
+                                  @Param("paths") String paths) {
+        if (sessionId == null || sessionId.isEmpty()) {
+            return Result.failure(400, "sessionId is required");
+        }
+        if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+            return Result.failure(400, "Invalid sessionId");
+        }
+
+        // 解析文件路径列表
+        List<String> files = new ArrayList<>();
+        if (paths != null && !paths.trim().isEmpty()) {
+            try {
+                ONode json = ONode.ofJson(paths);
+                if (json != null && json.isArray()) {
+                    for (ONode f : json.getArray()) {
+                        String p = f.getString();
+                        if (p != null && !p.isEmpty()) {
+                            files.add(p);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                return Result.failure(400, "Invalid paths format, expected JSON array");
             }
         }
 
-        // 校验提交信息
-        if (message == null || message.trim().isEmpty()) {
-            return Result.failure(400, "Commit message is required");
-        }
-
-        // git add：有指定文件时精确暂存，否则 add -A
-        ProcessResult addResult;
-        if (files != null && !files.isEmpty()) {
-            // 先清空暂存区，避免之前已暂存的非选中文件被一起提交
-            runGitCommand(workspaceDir, "git", "reset", "HEAD", "--");
-
-            List<String> addCmd = new ArrayList<>();
-            addCmd.add("git");
-            addCmd.add("add");
-            addCmd.add("--");
-            addCmd.addAll(files);
-            addResult = runGitCommand(workspaceDir, addCmd.toArray(new String[0]));
-        } else {
-            addResult = runGitCommand(workspaceDir, "git", "add", "-A");
-        }
-        if (addResult.exitCode != 0) {
-            return Result.failure(500, "git add failed: " + addResult.stderr);
-        }
-
-        // git commit
-        ProcessResult commitResult = runGitCommand(workspaceDir, "git",
-                "-c", "user.name=SolonCode",
-                "-c", "user.email=soloncode@noear.org",
-                "commit", "-m", message.trim());
-        if (commitResult.exitCode != 0) {
-            // 可能是 nothing to commit
-            String err = commitResult.stderr.trim();
-            if (err.isEmpty()) err = commitResult.stdout.trim();
-            return Result.failure(500, "git commit failed: " + err);
-        }
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("stdout", commitResult.stdout.trim());
-        return Result.succeed(data);
+        return gitService.summary(sessionId, files);
     }
 
-    // ==================== 工具方法与文件树浏览 ====================
+    /**
+     * 从 JSON 请求体中解析 path 字段。
+     *
+     * @param body JSON 字符串，如 { "path": "src/App.java" }
+     * @return path 值，解析失败返回 null
+     */
+    private String parseJsonPath(String body) {
+        if (body != null && !body.trim().isEmpty()) {
+            try {
+                ONode json = ONode.ofJson(body);
+                if (json != null && json.isObject()) {
+                    ONode pathNode = json.get("path");
+                    if (pathNode != null && pathNode.isString()) {
+                        return pathNode.getString();
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+
+    // ==================== 工具方法 ====================
 
     /**
      * 递归删除目录及其所有子文件和子目录。
@@ -1087,208 +751,39 @@ public class WebController {
         return null;
     }
 
+    // ==================== 文件浏览（委派给 FileService） ====================
+
     /**
      * 工作区文件树浏览接口。
-     * <p>以工作区根目录为基准，按指定路径和深度返回目录结构。
-     * 排除以点号开头的隐藏文件和 {@link #EXCLUDED_DIRS} 中的目录。</p>
      *
-     * @param path  相对路径，基于工作区根目录；为空时从根目录开始
-     * @param depth 展开深度，默认为 1（仅展开第一层）
-     * @return 文件树列表，每项包含 name、path、type、expanded、children
-     * @throws Exception 文件系统访问异常
+     * @see FileService#tree(String, Integer)
      */
     @Get
-    @Mapping("/chat/filer/tree")
+    @Mapping("/web/chat/filer/tree")
     public Result<List<Map>> fileTree(@Param(value = "path", required = false) String path,
                                       @Param(value = "depth", required = false) Integer depth) throws Exception {
-        if (depth == null || depth < 1) depth = 1;
-        if (path == null) path = "";
-        if (path.contains("..")) {
-            return Result.failure(400, "Invalid path");
-        }
-
-        java.nio.file.Path workspace = java.nio.file.Paths.get(engine.getProps().getWorkspace()).toAbsolutePath().normalize();
-        java.nio.file.Path target = workspace.resolve(path).toAbsolutePath().normalize();
-
-        if (!target.startsWith(workspace)) {
-            return Result.failure(403, "Access denied");
-        }
-        if (!target.toFile().exists() || !target.toFile().isDirectory()) {
-            return Result.failure(404, "Directory not found");
-        }
-
-        List<Map> tree = buildTree(target, workspace, depth, 1);
-        return Result.succeed(tree);
+        return fileService.tree(path, depth);
     }
 
     /**
-     * 工作区文件搜索。
-     * <p>递归扫描整个工作区，返回路径中包含关键词的文件列表。
-     * 排除规则与文件树接口一致：隐藏文件和 EXCLUDED_DIRS 中的目录。</p>
+     * 工作区文件搜索接口。
      *
-     * @param keyword 搜索关键词，匹配文件路径（大小写不敏感）
-     * @return 匹配的文件列表，每项包含 name、path、type
-     * @throws Exception 文件系统访问异常
+     * @see FileService#search(String)
      */
     @Get
-    @Mapping("/chat/filer/search")
+    @Mapping("/web/chat/filer/search")
     public Result<List<Map>> fileSearch(@Param("keyword") String keyword) throws Exception {
-        if (keyword == null || keyword.trim().isEmpty()) {
-            return Result.failure(400, "Keyword is required");
-        }
-        if (keyword.contains("..")) {
-            return Result.failure(400, "Invalid keyword");
-        }
-
-        java.nio.file.Path workspace = java.nio.file.Paths.get(engine.getProps().getWorkspace()).toAbsolutePath().normalize();
-        String kw = keyword.trim().toLowerCase();
-
-        List<Map> results = new ArrayList<>();
-        searchFiles(workspace.toFile(), workspace, kw, results, 0);
-
-        if (results.size() > 200) {
-            results = results.subList(0, 200);
-        }
-
-        return Result.succeed(results);
+        return fileService.search(keyword);
     }
 
     /**
-     * 读取工作区文件内容。
-     * <p>以工作区根目录为基准，读取指定路径的文件文本内容。
-     * 支持安全路径校验和文件大小限制。</p>
+     * 读取工作区文件内容接口。
      *
-     * @param path 相对路径，基于工作区根目录
-     * @return 文件信息，包含 content、path、name、size
-     * @throws Exception 文件系统访问异常
+     * @see FileService#read(String)
      */
     @Get
-    @Mapping("/chat/filer/read")
+    @Mapping("/web/chat/filer/read")
     public Result<Map> fileRead(@Param("path") String path) throws Exception {
-        if (path == null || path.trim().isEmpty()) {
-            return Result.failure(400, "Path is required");
-        }
-        if (path.contains("..")) {
-            return Result.failure(400, "Invalid path");
-        }
-
-        java.nio.file.Path workspace = java.nio.file.Paths.get(engine.getProps().getWorkspace()).toAbsolutePath().normalize();
-        java.nio.file.Path target = workspace.resolve(path).toAbsolutePath().normalize();
-
-        if (!target.startsWith(workspace)) {
-            return Result.failure(403, "Access denied");
-        }
-        if (!target.toFile().exists() || target.toFile().isDirectory()) {
-            return Result.failure(404, "File not found");
-        }
-
-        File file = target.toFile();
-        // 限制文件大小：2MB
-        if (file.length() > 2 * 1024 * 1024) {
-            return Result.failure(413, "File too large (max 2MB)");
-        }
-
-        // 读取文件内容（尝试 UTF-8，失败回退系统默认编码）
-        String content;
-        try {
-            content = new String(java.nio.file.Files.readAllBytes(target), "UTF-8");
-        } catch (Exception e) {
-            BufferedReader reader = null;
-            try {
-                reader = new BufferedReader(new InputStreamReader(new FileInputStream(file)));
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    sb.append(line).append("\n");
-                }
-                content = sb.toString();
-            } finally {
-                if (reader != null) reader.close();
-            }
-        }
-
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("content", content);
-        data.put("path", path);
-        data.put("name", file.getName());
-        data.put("size", file.length());
-
-        return Result.succeed(data);
-    }
-
-    /**
-     * 递归构建文件树结构。
-     * <p>对指定目录进行扫描，目录排在前面、文件排在后面，均按名称字典序排列。
-     * 跳过以点号开头的隐藏文件和 {@link #EXCLUDED_DIRS} 中定义的目录。
-     * 当达到最大深度时，目录节点不再展开（children 为 null）。</p>
-     *
-     * @param dir          当前扫描的目录路径
-     * @param workspace    工作区根路径，用于计算相对路径
-     * @param maxDepth     最大展开深度
-     * @param currentDepth 当前递归深度
-     * @return 当前层级的文件/目录信息列表
-     */
-    private List<Map> buildTree(java.nio.file.Path dir, java.nio.file.Path workspace, int maxDepth, int currentDepth) {
-        File[] files = dir.toFile().listFiles();
-        if (files == null) return Collections.emptyList();
-
-        Arrays.sort(files, (a, b) -> {
-            if (a.isDirectory() && !b.isDirectory()) return -1;
-            if (!a.isDirectory() && b.isDirectory()) return 1;
-            return a.getName().compareToIgnoreCase(b.getName());
-        });
-
-        List<Map> result = new ArrayList<>();
-        for (File f : files) {
-            if (f.getName().startsWith(".") || EXCLUDED_DIRS.contains(f.getName())) continue;
-
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("name", f.getName());
-            item.put("path", workspace.relativize(f.toPath().toAbsolutePath().normalize()).toString().replace('\\', '/'));
-            item.put("type", f.isDirectory() ? "directory" : "file");
-
-            if (f.isDirectory() && currentDepth < maxDepth) {
-                item.put("expanded", true);
-                item.put("children", buildTree(f.toPath(), workspace, maxDepth, currentDepth + 1));
-            } else if (f.isDirectory()) {
-                item.put("expanded", false);
-                item.put("children", null);
-            }
-            result.add(item);
-        }
-        return result;
-    }
-
-    /**
-     * 递归搜索匹配关键词的文件。
-     *
-     * @param dir       当前扫描的目录
-     * @param workspace 工作区根路径，用于计算相对路径
-     * @param keyword   小写化后的搜索关键词
-     * @param results   收集结果的列表
-     * @param depth     当前递归深度，超过 20 层停止
-     */
-    private void searchFiles(File dir, java.nio.file.Path workspace, String keyword, List<Map> results, int depth) {
-        if (depth > 20) return;
-        File[] files = dir.listFiles();
-        if (files == null) return;
-
-        for (File f : files) {
-            if (f.getName().startsWith(".") || (f.isDirectory() && EXCLUDED_DIRS.contains(f.getName()))) continue;
-
-            String relativePath = workspace.relativize(f.toPath().toAbsolutePath().normalize()).toString().replace('\\', '/');
-
-            if (relativePath.toLowerCase().contains(keyword)) {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("name", f.getName());
-                item.put("path", relativePath);
-                item.put("type", f.isDirectory() ? "directory" : "file");
-                results.add(item);
-            }
-
-            if (f.isDirectory()) {
-                searchFiles(f, workspace, keyword, results, depth + 1);
-            }
-        }
+        return fileService.read(path);
     }
 }

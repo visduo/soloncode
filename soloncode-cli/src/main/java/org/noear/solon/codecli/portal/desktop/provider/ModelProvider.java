@@ -1,4 +1,4 @@
-package org.noear.solon.codecli.provider;
+package org.noear.solon.codecli.portal.desktop.provider;
 
 import java.util.List;
 import java.util.Map;

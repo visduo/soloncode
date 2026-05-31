@@ -77,7 +77,7 @@
 
     // ---- 加载 Git 状态 ----
     function loadGitStatus() {
-        fetch('/chat/git/status')
+        fetch('/web/chat/git/status')
             .then(function(r) { return r.json(); })
             .then(function(res) {
                 var data = (res && res.data) ? res.data : {};
@@ -116,6 +116,15 @@
     // ---- 渲染文件列表（带 checkbox）----
     function renderFileList(data) {
         if (!gitDiffFileList) return;
+
+        // 在清空列表前，记录当前已勾选的文件路径
+        var prevChecked = {};
+        var hasPrevState = false;
+        gitDiffFileList.querySelectorAll('.git-file-checkbox').forEach(function(cb) {
+            hasPrevState = true;
+            if (cb.checked) prevChecked[cb.getAttribute('data-path')] = true;
+        });
+
         gitDiffFileList.innerHTML = '';
 
         var files = [];
@@ -143,18 +152,15 @@
         gitDiffFileList.style.display = '';
         if (gitCommitBar) gitCommitBar.style.display = '';
 
-        // 全选默认勾选
-        if (gitSelectAll) gitSelectAll.checked = true;
-
         files.forEach(function(file) {
             var item = document.createElement('div');
             item.className = 'git-file-item';
 
-            // checkbox
+            // checkbox：如果之前有选中状态则恢复，否则默认全选
             var cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.className = 'git-file-checkbox';
-            cb.checked = true;
+            cb.checked = hasPrevState ? !!prevChecked[file.path] : true;
             cb.setAttribute('data-path', file.path);
             cb.addEventListener('click', function(e) {
                 e.stopPropagation(); // 防止触发外层 click 打开 diff
@@ -286,7 +292,7 @@
 
         if (gitViewerContent) gitViewerContent.innerHTML = '<div style="padding:20px;color:var(--text-secondary)">加载中...</div>';
 
-        fetch('/chat/filer/read?path=' + encodeURIComponent(path))
+        fetch('/web/chat/filer/read?path=' + encodeURIComponent(path))
             .then(function(r) { return r.json(); })
             .then(function(res) {
                 var d = (res && res.data) ? res.data : {};
@@ -432,7 +438,7 @@
 
         if (gitViewerContent) gitViewerContent.innerHTML = '<div style="padding:20px;color:var(--text-secondary)">加载中...</div>';
 
-        fetch('/chat/git/diff?path=' + encodeURIComponent(path))
+        fetch('/web/chat/git/diff?path=' + encodeURIComponent(path))
             .then(function(r) { return r.json(); })
             .then(function(res) {
                 var d = (res && res.data) ? res.data : {};
@@ -472,7 +478,7 @@
             addBtn.addEventListener('click', function() {
                 addBtn.disabled = true;
                 addBtn.textContent = '添加中...';
-                fetch('/chat/git/stage', {
+                fetch('/web/chat/git/stage', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ path: path })
@@ -505,7 +511,7 @@
             unstageBtn.addEventListener('click', function() {
                 unstageBtn.disabled = true;
                 unstageBtn.textContent = '移出中...';
-                fetch('/chat/git/unstage', {
+                fetch('/web/chat/git/unstage', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ path: path })
@@ -630,6 +636,66 @@
         }
     });
 
+    // ---- AI 生成变更摘要（专用 HTTP 接口）----
+    var gitSummaryBtn = document.getElementById('gitSummaryBtn');
+    var isGeneratingSummary = false;
+
+    if (gitSummaryBtn) {
+        gitSummaryBtn.addEventListener('click', function() {
+            if (isGeneratingSummary) return;
+
+            var files = getSelectedFiles();
+            if (files.length === 0) {
+                if (typeof showToast === 'function') showToast('请至少勾选一个文件', 'error');
+                else alert('请至少勾选一个文件');
+                return;
+            }
+
+            isGeneratingSummary = true;
+            gitSummaryBtn.disabled = true;
+            gitSummaryBtn.classList.add('loading');
+            gitSummaryBtn.innerHTML = '生成中...';
+            if (gitCommitMsg) gitCommitMsg.value = '';
+
+            // 获取当前会话的 sessionId
+            var currentSessionId = (typeof activeSessionId !== 'undefined') ? activeSessionId : '';
+
+            fetch('/web/chat/git/summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'sessionId=' + encodeURIComponent(currentSessionId)
+                    + '&paths=' + encodeURIComponent(JSON.stringify(files))
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+                if (res && res.code === 200 && res.data) {
+                    var summary = res.data.summary || '';
+                    if (gitCommitMsg) {
+                        gitCommitMsg.value = summary;
+                        gitCommitMsg.style.height = 'auto';
+                        gitCommitMsg.style.height = Math.min(gitCommitMsg.scrollHeight, 80) + 'px';
+                    }
+                } else {
+                    var errMsg = (res && res.description) || '未知错误';
+                    if (typeof showToast === 'function') showToast('生成摘要失败: ' + errMsg, 'error');
+                    else alert('生成摘要失败: ' + errMsg);
+                }
+            })
+            .catch(function(e) {
+                if (typeof showToast === 'function') showToast('生成摘要失败: ' + e.message, 'error');
+                else alert('生成摘要失败: ' + e.message);
+            })
+            .finally(function() {
+                isGeneratingSummary = false;
+                if (gitSummaryBtn) {
+                    gitSummaryBtn.disabled = false;
+                    gitSummaryBtn.classList.remove('loading');
+                    gitSummaryBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8L19 13"/><path d="M15 9h.01"/><path d="M17.8 6.2L19 5"/><path d="m3 21 9-9"/><path d="M12.2 6.2L11 5"/></svg> 生成摘要';
+                }
+            });
+        });
+    }
+
     // ---- Git 提交（精确文件列表）----
     var isCommitting = false;
     if (gitCommitBtn) {
@@ -638,11 +704,18 @@
             var msg = (gitCommitMsg && gitCommitMsg.value.trim()) || '';
             if (!msg) {
                 gitCommitMsg && gitCommitMsg.focus();
+                gitCommitMsg && gitCommitMsg.classList.add('shake');
+                var origPH = gitCommitMsg.placeholder;
+                gitCommitMsg.placeholder = '请输入提交信息';
+                setTimeout(function() {
+                    gitCommitMsg && gitCommitMsg.classList.remove('shake');
+                    gitCommitMsg.placeholder = origPH;
+                }, 1200);
                 return;
             }
             var files = getSelectedFiles();
             if (files.length === 0) {
-                alert('请至少勾选一个文件');
+                if (typeof showToast === 'function') showToast('请至少勾选一个文件', 'error');
                 return;
             }
 
@@ -650,7 +723,7 @@
             gitCommitBtn.disabled = true;
             gitCommitBtn.innerHTML = '<span style="opacity:0.7">提交中...</span>';
 
-            fetch('/chat/git/commit', {
+            fetch('/web/chat/git/commit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: msg, files: files })
@@ -658,8 +731,12 @@
                 .then(function(r) { return r.json(); })
                 .then(function(res) {
                     if (res && res.code === 200) {
-                        if (gitCommitMsg) gitCommitMsg.value = '';
+                        if (gitCommitMsg) {
+                            gitCommitMsg.value = '';
+                            gitCommitMsg.style.height = '30px';
+                        }
                         loadGitStatus();
+                        // 提交成功，不显示提示
                     } else {
                         alert('提交失败：' + ((res && res.data && res.data.message) || '未知错误'));
                     }
@@ -677,10 +754,15 @@
         // Enter 键提交
         if (gitCommitMsg) {
             gitCommitMsg.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' && !e.isComposing) {
+                if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
                     e.preventDefault();
                     gitCommitBtn.click();
                 }
+            });
+            // textarea 自动增高（最多4行）
+            gitCommitMsg.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 80) + 'px';
             });
         }
     }
@@ -694,7 +776,7 @@
             gitInitBtn.textContent = '初始化中...';
 
             var doCommit = gitInitCommit && gitInitCommit.checked;
-            fetch('/chat/git/init?initialCommit=' + (doCommit ? 'true' : 'false'), { method: 'POST' })
+            fetch('/web/chat/git/init?initialCommit=' + (doCommit ? 'true' : 'false'), { method: 'POST' })
                 .then(function(r) { return r.json(); })
                 .then(function(res) {
                     if (res && res.code === 200) {

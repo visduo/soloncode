@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="/layui/css/layui.css"/>
     <link rel="stylesheet" href="/css/theme.css"/>
     <link rel="stylesheet" href="/css/app.css"/>
+    <link rel="stylesheet" href="/css/settings.css"/>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github.min.css" media="(prefers-color-scheme: light)" id="hljs-light-theme"/>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css" media="(prefers-color-scheme: dark)" id="hljs-dark-theme" disabled/>
 </head>
@@ -25,8 +26,13 @@
     <div class="sidebar-title">最近对话</div>
     <div class="sidebar-list" id="historyList"></div>
     <div class="sidebar-footer">
-        <i class="layui-icon layui-icon-about" style="font-size:15px;color:var(--text-secondary)"></i>
-        <span id="appVersionLabel" style="font-size:12px;color:var(--text-secondary)">AI</span>
+        <button class="settings-btn" id="settingsBtn" title="设置">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span style="margin-left:6px;font-size:12px;">设置</span>
+        </button>
     </div>
 </div>
 <button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="收起侧边栏">‹</button>
@@ -59,10 +65,9 @@
 
     <!-- Welcome View -->
     <div class="welcome-view" id="welcomeView">
-        <div class="welcome-avatar">
-            <div class="blob blob-outer"></div>
-            <div class="blob-core"></div>
-        </div>
+        <a class="welcome-avatar" href="https://solon.noear.org/article/soloncode" target="_blank" rel="noopener noreferrer" title="了解更多关于 SolonCode">
+            <img src="/img/favicon.png" alt="SolonCode" />
+        </a>
         <div class="welcome-title" id="welcomeTitle">你好，我是 SolonCode ！</div>
         <div class="welcome-sub">需要什么帮助吗?</div>
         <div class="welcome-input-box" id="welcomeDropZone">
@@ -158,6 +163,9 @@
                         <button class="attach-btn" id="chatSkillBtn" title="技能">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><text x="4" y="18" font-size="18" font-weight="bold" font-family="monospace" fill="currentColor" stroke="none">$</text></svg>
                         </button>
+                        <button class="attach-btn" id="chatHistoryBtn" title="历史消息">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        </button>
                         <button class="attach-btn" id="chatAgentBtn" title="子代理">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="19" y1="2" x2="19" y2="6"/><line x1="17" y1="4" x2="21" y2="4"/></svg>
                         </button>
@@ -189,12 +197,13 @@
         </div>
         <pre class="git-viewer-content" id="gitViewerContent"></pre>
     </div>
+
 </div>
 
-    <!-- File Tree Panel (Right Side) -->
-    <button class="filer-panel-toggle-btn" id="filerToggleBtn" title="收起文件树">›</button>
+<!-- File Tree Panel (Right Side) -->
+    <button class="filer-panel-toggle-btn collapsed" id="filerToggleBtn" title="展开文件树">‹</button>
     <div class="filer-resize-handle" id="filerResizeHandle"></div>
-    <div class="filer-panel" id="filerPanel">
+    <div class="filer-panel collapsed" id="filerPanel">
         <div class="filer-tabs">
             <button class="filer-tab active" data-tab="files">文件</button>
             <button class="filer-tab" data-tab="gitdiff">
@@ -269,11 +278,17 @@
                 </div>
                 <div class="git-diff-file-list" id="gitDiffFileList"></div>
                 <div class="git-commit-bar" id="gitCommitBar">
-                    <input type="text" class="git-commit-input" id="gitCommitMsg" placeholder="提交信息..." />
-                    <button class="git-commit-btn" id="gitCommitBtn">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                        提交
-                    </button>
+                    <textarea class="git-commit-input" id="gitCommitMsg" placeholder="审查摘要..." rows="1"></textarea>
+                    <div class="git-commit-actions">
+                        <button class="git-summary-btn" id="gitSummaryBtn" title="AI 生成变更摘要">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8L19 13"/><path d="M15 9h.01"/><path d="M17.8 6.2L19 5"/><path d="m3 21 9-9"/><path d="M12.2 6.2L11 5"/></svg>
+                            生成摘要
+                        </button>
+                        <button class="git-commit-btn" id="gitCommitBtn">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            提交
+                        </button>
+                    </div>
                 </div>
                 <div class="git-diff-empty" id="gitDiffEmpty" style="display:none">
                     <div class="git-empty-desc">没有未提交的变更</div>
@@ -282,15 +297,453 @@
         </div>
     </div>
 
+<!-- Settings Overlay (放在 body 最外层，确保 position:fixed 覆盖全屏) -->
+<div class="settings-overlay" id="settingsOverlay" style="display:none">
+    <div class="settings-panel">
+        <div class="settings-content">
+            <div class="settings-tabs">
+                <div class="sidebar-title" style="padding:16px 16px 8px;font-size:11px;color:var(--text-secondary);font-weight:600;letter-spacing:1px;text-transform:uppercase;">设置</div>
+                <button class="settings-tab active" data-tab="general"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> 通用</button>
+                <button class="settings-tab" data-tab="llm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1.27a7 7 0 0 1-12.46 0H6a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73A2 2 0 0 1 12 2z"/><circle cx="8" cy="14" r="1"/><circle cx="16" cy="14" r="1"/></svg> 大语言模型</button>
+                <button class="settings-tab" data-tab="mounts"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> 挂载池</button>
+                <button class="settings-tab" data-tab="skills"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> 技能市场</button>
+                <button class="settings-tab" data-tab="mcp"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> MCP 服务器</button>
+                <button class="settings-tab" data-tab="openapi"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> OpenApi 服务器</button>
+                <div class="settings-tabs-footer">
+                    <div class="settings-product-name">SolonCode</div>
+                    <span id="appVersionLabel" class="settings-version"></span>
+                </div>
+            </div>
+            <div class="settings-body">
+                <!-- General Tab -->
+                <div class="settings-tab-content active" id="settingsTabGeneral">
+                    <div class="settings-section">
+                        <div class="settings-section-header">
+                            <div>
+                                <span class="settings-section-title">通用</span>
+                                <div class="settings-section-desc">全局运行参数，影响所有会话与工具行为</div>
+                            </div>
+                        </div>
+
+                        <div class="general-card-group">
+                            <!-- 上下文压缩策略 -->
+                            <div class="general-card">
+                                <div class="general-card-header">
+                                        <div class="general-card-text">
+                                        <div class="general-card-title">上下文压缩策略</div>
+                                    </div>
+                                </div>
+                                <div class="general-card-body">
+                                    <div class="general-field-row">
+                                        <div class="general-field">
+                                            <label class="general-field-label">触发消息数</label>
+                                            <input type="number" class="general-input" id="generalSummaryWindowSize" placeholder="默认"/>
+                                        </div>
+                                        <div class="general-field">
+                                            <label class="general-field-label">触发词元数</label>
+                                            <input type="number" class="general-input" id="generalSummaryWindowToken" placeholder="默认"/>
+                                        </div>
+                                    </div>
+                                    <div class="general-toggle-desc" style="margin-top:8px;">控制对话上下文的压缩策略，防止超出模型窗口限制</div>
+                                </div>
+                            </div>
+
+                            <!-- 安全策略 -->
+                            <div class="general-card">
+                                <div class="general-card-header">
+                                        <div class="general-card-text">
+                                        <div class="general-card-title">安全策略</div>
+                                    </div>
+                                </div>
+                                <div class="general-card-body">
+                                    <div class="general-toggle-row">
+                                        <div class="general-toggle-info">
+                                            <span class="general-toggle-name">沙盒模式</span>
+                                            <span class="general-toggle-desc">开启后，AI 执行的命令将在受限沙盒环境中运行（只能读写工作区内的文件）</span>
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="generalSandboxMode"/>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions" style="justify-content:flex-end; margin-top:20px;">
+                            <button class="btn-primary" id="generalSaveBtn">保存</button>
+                        </div>
+                    </div>
+                </div>
+                <!-- LLM Tab -->
+                <div class="settings-tab-content" id="settingsTabLlm">
+                    <!-- List View -->
+                    <div class="settings-view settings-view-list" id="llmListView">
+                        <div class="settings-section">
+                            <div class="settings-section-header">
+                                <div>
+                                    <span class="settings-section-title">大语言模型</span>
+                                    <div class="settings-section-desc">配置 AI 模型的连接参数与默认设定</div>
+                                </div>
+                                <div class="llm-header-actions">
+                                    <button class="settings-add-btn" id="llmAddBtn">+ 添加模型</button>
+                                </div>
+                            </div>
+                            <div class="llm-model-list" id="llmModelList"></div>
+                        </div>
+                    </div>
+                    <!-- Form View -->
+                    <div class="settings-view settings-view-form" id="llmFormView" style="display:none">
+                        <div class="settings-section">
+                            <div class="settings-section-header">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <button class="settings-back-btn" id="llmBackBtn" title="返回">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                    </button>
+                                    <span class="settings-section-title" id="llmFormTitle">添加模型</span>
+                                </div>
+                                <div class="settings-form-actions" id="llmFormActions" style="display:none">
+                                    <button class="settings-form-action-btn" id="llmFormCopyBtn" title="复制">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        复制
+                                    </button>
+                                    <button class="settings-form-action-btn danger" id="llmFormDeleteBtn" title="删除">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                        删除
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="llm-add-form" id="llmAddForm">
+                                <div class="form-group">
+                                    <label>接口地址规范</label>
+                                    <select id="llmProvider">
+                                        <option value="">自动检测（须填写完整地址）</option>
+                                        <option value="openai">OpenAI BaseUrl / 兼容接口</option>
+                                        <option value="anthropic">Anthropic BaseUrl / 兼容接口</option>
+                                        <option value="ollama">Ollama BaseUrl / 兼容接口</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>接口地址 <span class="required">*</span></label>
+                                    <input type="text" id="llmApiUrl" placeholder="https://api.openai.com/v1"/>
+                                </div>
+                                <div class="form-group">
+                                    <label>接口密钥</label>
+                                    <div class="password-input-group">
+                                        <input type="password" id="llmApiKey"/>
+                                        <button class="password-toggle" id="llmApiKeyToggle" title="显示/隐藏">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="form-row-2col">
+                                    <div class="form-group">
+                                        <label>模型 <span class="required">*</span></label>
+                                        <input type="text" id="llmModel" />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>显示名称（可选）</label>
+                                        <input type="text" id="llmName" placeholder="给模型起个别名（确保唯一）"/>
+                                    </div>
+                                </div>
+                                <div class="form-row-2col">
+                                    <div class="form-group">
+                                        <label>超时时间（可选）</label>
+                                        <input type="text" id="llmTimeout" placeholder="120s（默认 120 秒）"/>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>上下文长度（可选）</label>
+                                        <input type="number" id="llmContextLength" placeholder="1_000_000（模型上下文长度）"/>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>默认选项（可选，JSON 格式）</label>
+                                    <textarea id="llmDefaultOptions" rows="4" placeholder='{"temperature":0.2,"top_p":0.5,"enable_thinking":false}'></textarea>
+                                </div>
+                                <div class="form-actions" style="justify-content:flex-end;">
+                                    <div style="display:flex;gap:8px;">
+                                        <button class="btn-secondary" id="llmTestBtn">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                            测试连接
+                                        </button>
+                                        <button class="btn-primary" id="llmSaveBtn">保存</button>
+                                    </div>
+                                </div>
+                                <div class="llm-check-result" id="llmCheckResult" style="display:none;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <!-- Skills Tab -->
+                <div class="settings-tab-content" id="settingsTabSkills">
+                    <div class="settings-section">
+                        <div class="settings-section-header">
+                            <div>
+                                <span class="settings-section-title">技能市场</span>
+                                <div class="settings-section-desc">浏览和安装技能包，扩展 AI 的能力边界</div>
+                            </div>
+                        </div>
+                        <div class="skills-search-bar">
+                            <div class="skills-market-wrap">
+                                <svg class="skills-market-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                                <select id="skillsMarketSelect" class="skills-market-select" title="选择技能市场"></select>
+                            </div>
+
+                            <div class="skills-search-input-wrap">
+                                <svg class="skills-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                <input type="text" id="skillsSearchInput" placeholder="搜索技能..." autocomplete="off"/>
+                                <button class="skills-search-clear" id="skillsSearchClear" style="display:none" title="清除">&times;</button>
+                            </div>
+                        </div>
+                        <div class="skills-status" id="skillsStatus" style="display:none">
+                            <div class="skills-loading" id="skillsLoading" style="display:none">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                                <span>加载中...</span>
+                            </div>
+                            <div class="skills-error" id="skillsError" style="display:none"></div>
+                        </div>
+                        <div class="skills-list" id="skillsList"></div>
+                    </div>
+                </div>
+                <!-- MountPools Tab -->
+                <div class="settings-tab-content" id="settingsTabMounts">
+                    <!-- Pool List View -->
+                    <div class="settings-view settings-view-list" id="mountsListView">
+                        <div class="settings-section">
+                            <div class="settings-section-header">
+                                <div>
+                                    <span class="settings-section-title">挂载池</span>
+                                    <div class="settings-section-desc">管理本地目录映射，为 AI 提供技能与资源的加载路径</div>
+                                </div>
+                                <button class="settings-add-btn" id="mountsAddBtn">+ 添加挂载池</button>
+                            </div>
+                            <div class="mounts-list" id="mountsList"></div>
+                        </div>
+                    </div>
+                    <!-- Pool Add Form View -->
+                    <div class="settings-view settings-view-form" id="mountsFormView" style="display:none">
+                        <div class="settings-section">
+                            <div class="settings-section-header">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <button class="settings-back-btn" id="mountsBackBtn" title="返回"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+                                    <span class="settings-section-title" id="mountsFormTitle">添加挂载池</span>
+                                </div>
+                            </div>
+                            <div class="mounts-add-form">
+                                <div class="form-group">
+                                    <label>别名 <span class="required">*</span></label>
+                                    <input type="text" id="mountsAlias" placeholder="@my_mount"/>
+                                    <div class="form-hint">必须以 @ 开头，例如 @my_skills</div>
+                                </div>
+                                <div class="form-group">
+                                    <label>路径 <span class="required">*</span></label>
+                                    <input type="text" id="mountsPath" placeholder="~/.myapp/skills/"/>
+                                    <div class="form-hint">技能文件所在的本地目录路径</div>
+                                </div>
+                                <div class="form-actions" style="justify-content:flex-end;">
+                                    <button class="btn-primary" id="mountsSaveBtn">保存</button>
+                                </div>
+                                <div class="mounts-divider"></div>
+                                <div class="mounts-presets">
+                                    <div class="mounts-presets-label">常见挂载池</div>
+                                    <div class="mounts-presets-btns">
+                                        <button type="button" class="mounts-preset-btn" data-alias="@skills" data-path="./skills/">@skills  ./skills/</button>
+                                        <button type="button" class="mounts-preset-btn" data-alias="@skillhub" data-path="~/.skillhub/skills/">@skillhub  ~/.skillhub/skills/</button>
+                                        <button type="button" class="mounts-preset-btn" data-alias="@agents_skills" data-path="~/.agents/skills/">@agents_skills  ~/.agents/skills/</button>
+                                        <button type="button" class="mounts-preset-btn" data-alias="@opencode_skills" data-path="~/.opencode/skills/">@opencode_skills  ~/.opencode/skills/</button>
+                                        <button type="button" class="mounts-preset-btn" data-alias="@claude_skills" data-path="~/.claude/skills/">@claude_skills  ~/.claude/skills/</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Pool Skills Detail View -->
+                    <div class="settings-view settings-view-form" id="mountsSkillsView" style="display:none">
+                        <div class="settings-section">
+                            <div class="settings-section-header">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <button class="settings-back-btn" id="mountsSkillsBackBtn" title="返回"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+                                    <span class="settings-section-title" id="mountsSkillsTitle">技能包列表</span>
+                                </div>
+                            </div>
+                            <div class="mounts-skills-list" id="mountsSkillsList"></div>
+                        </div>
+                    </div>
+                </div>
+                <!-- MCP Tab -->
+                <div class="settings-tab-content" id="settingsTabMcp">
+                    <!-- List View -->
+                    <div class="settings-view settings-view-list" id="mcpListView">
+                        <div class="settings-section">
+                            <div class="settings-section-header">
+                                <span class="settings-section-title">MCP 服务器</span>
+                                <div class="mcp-header-actions">
+                                    <button class="settings-add-btn" id="mcpAddBtn">+ 添加服务器</button>
+                                </div>
+                            </div>
+                            <div class="mcp-server-list" id="mcpServerList"></div>
+                        </div>
+                    </div>
+                    <!-- Form View -->
+                    <div class="settings-view settings-view-form" id="mcpFormView" style="display:none">
+                        <div class="settings-section">
+                            <div class="settings-section-header">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <button class="settings-back-btn" id="mcpBackBtn" title="返回">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                    </button>
+                                    <span class="settings-section-title" id="mcpFormTitle">添加服务器</span>
+                                </div>
+                                <div class="settings-form-actions" id="mcpFormActions" style="display:none">
+                                    <button class="settings-form-action-btn" id="mcpFormCopyBtn" title="复制">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        复制
+                                    </button>
+                                    <button class="settings-form-action-btn danger" id="mcpFormDeleteBtn" title="删除">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                        删除
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="mcp-add-form" id="mcpAddForm">
+                                <div class="form-group">
+                                    <label>名称 <span class="required">*</span></label>
+                                    <input type="text" id="mcpName" placeholder="my-mcp-server"/>
+                                </div>
+                                <div class="form-group">
+                                    <label>类型</label>
+                                    <div class="mcp-type-toggle">
+                                        <button class="mcp-type-btn active" data-type="stdio">stdio</button>
+                                        <button class="mcp-type-btn" data-type="sse">http sse</button>
+                                        <button class="mcp-type-btn" data-type="streamable">http streamable</button>
+                                    </div>
+                                </div>
+                                <div class="mcp-config-stdio" id="mcpConfigStdio">
+                                    <div class="form-group">
+                                        <label>命令 <span class="required">*</span></label>
+                                        <input type="text" id="mcpCommand" placeholder="npx -y @modelcontextprotocol/server-filesystem /path"/>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>参数（每行一个）</label>
+                                        <textarea id="mcpArgs" rows="3" placeholder="/path/to/dir&#10;--option value"></textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>环境变量（KEY=VALUE，每行一个）</label>
+                                        <textarea id="mcpEnv" rows="3" placeholder="API_KEY=xxx"></textarea>
+                                    </div>
+                                </div>
+                                <div class="mcp-config-remote" id="mcpConfigRemote" style="display:none">
+                                    <div class="form-group">
+                                        <label>URL <span class="required">*</span></label>
+                                        <input type="text" id="mcpRemoteUrl" placeholder="http://localhost:3001/sse"/>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>请求头（KEY=VALUE，每行一个）</label>
+                                        <textarea id="mcpHeaders" rows="3" placeholder="Authorization=Bearer xxx&#10;X-Custom-Header=value"></textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>超时时间</label>
+                                        <input type="text" id="mcpTimeout" placeholder="30s" style="width:120px;"/>
+                                    </div>
+                                </div>
+                                <div class="form-actions" style="justify-content:flex-end;">
+                                    <div style="display:flex;gap:8px;">
+                                        <button class="btn-secondary" id="mcpCheckBtn" style="display:flex;align-items:center;gap:4px;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                            检测连接
+                                        </button>
+                                        <button class="btn-primary" id="mcpSaveBtn">保存</button>
+                                    </div>
+                                </div>
+                                <div class="mcp-check-result" id="mcpCheckResult" style="display:none;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <!-- OpenApi Tab -->
+                <div class="settings-tab-content" id="settingsTabOpenapi">
+                    <!-- List View -->
+                    <div class="settings-view settings-view-list" id="openapiListView">
+                        <div class="settings-section">
+                            <div class="settings-section-header">
+                                <span class="settings-section-title">OpenApi 服务器</span>
+                                <div class="openapi-header-actions">
+                                    <button class="settings-add-btn" id="openapiAddBtn">+ 添加服务器</button>
+                                </div>
+                            </div>
+                            <div class="openapi-server-list" id="openapiServerList"></div>
+                        </div>
+                    </div>
+                    <!-- Form View -->
+                    <div class="settings-view settings-view-form" id="openapiFormView" style="display:none">
+                        <div class="settings-section">
+                            <div class="settings-section-header">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <button class="settings-back-btn" id="openapiBackBtn" title="返回">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                    </button>
+                                    <span class="settings-section-title" id="openapiFormTitle">添加服务器</span>
+                                </div>
+                                <div class="settings-form-actions" id="openapiFormActions" style="display:none">
+                                    <button class="settings-form-action-btn" id="openapiFormCopyBtn" title="复制">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                        复制
+                                    </button>
+                                    <button class="settings-form-action-btn danger" id="openapiFormDeleteBtn" title="删除">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                        删除
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="openapi-add-form" id="openapiAddForm">
+                                <div class="form-group">
+                                    <label>名称 <span class="required">*</span></label>
+                                    <input type="text" id="openapiName" placeholder="my-api-server"/>
+                                </div>
+                                <div class="form-group">
+                                    <label>API 基地址 <span class="required">*</span></label>
+                                    <input type="text" id="openapiBaseUrl" placeholder="https://api.example.com/app"/>
+                                </div>
+                                <div class="form-group">
+                                    <label>文档地址（OpenApi 规范） <span class="required">*</span></label>
+                                    <input type="text" id="openapiDocUrl" placeholder="https://api.example.com/swagger/v2?group=app"/>
+                                </div>
+                                <div class="form-group">
+                                    <label>请求头（KEY=VALUE，每行一个）</label>
+                                    <textarea id="openapiHeaders" rows="3" placeholder="API_KEY=xxx&#10;Authorization=Bearer xxx"></textarea>
+                                </div>
+                                <div class="form-actions" style="justify-content:flex-end;">
+                                    <div style="display:flex;gap:8px;">
+                                        <button class="btn-secondary" id="openapiTestBtn" style="display:flex;align-items:center;gap:4px;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                            测试连接
+                                        </button>
+                                        <button class="btn-primary" id="openapiSaveBtn">保存</button>
+                                    </div>
+                                </div>
+                                <div class="llm-check-result" id="openapiCheckResult" style="display:none;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div><!-- /.settings-body -->
+        </div><!-- /.settings-content -->
+    </div>
+</div>
+
 <script src="/layui/layui.js"></script>
+<script>window.$ = layui.$;</script>
 <script src="/js/marked.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
 <script src="/js/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
 
 <script>
-    var SSE_ENDPOINT = "/chat/input";
+    var SSE_ENDPOINT = "/web/chat/input";
     // 启动时拉取页面元信息（appTitle / appVersion / workspace / workname），回填标题/侧栏
-    fetch('/chat/meta').then(function (r) { return r.json(); }).then(function (res) {
+    fetch('/web/chat/meta').then(function (r) { return r.json(); }).then(function (res) {
         var meta = (res && res.data) ? res.data : res;
         if (!meta) return;
         if (meta.workname || meta.workspace) {
@@ -303,14 +756,14 @@
     }).catch(function () { /* ignore */ });
 </script>
 
-<script src="js/app-base.js"></script>
-<script src="js/app-ui.js"></script>
-<script src="js/app-history.js"></script>
-<script src="js/app-message.js"></script>
-<script src="js/app-streaming.js"></script>
-
-
-    <script src="js/app-filer.js"></script>
-    <script src="js/app-gitdiff.js"></script>
+<script src="/js/app-base.js"></script>
+<script src="/js/app-ui.js"></script>
+<script src="/js/app-history.js"></script>
+<script src="/js/app-message.js"></script>
+<script src="/js/app-streaming.js"></script>
+<script src="/js/app-filer.js"></script>
+<script src="/js/app-gitdiff.js"></script>
+<script src="/js/app-settings.js"></script>
+<script src="/js/app-settings-skill.js"></script>
 </body>
 </html>

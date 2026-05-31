@@ -4,21 +4,16 @@
 
 /* ===== History ===== */
 function loadSessionHistory() {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', '/chat/sessions', true);
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-            try {
-                var list = JSON.parse(xhr.responseText).data;
-                chatHistory = [];
-                for (var i = 0; i < list.length; i++) {
-                    chatHistory.push({ label: list[i].label, sessionId: list[i].sessionId });
-                }
-                updateHistoryUI();
-            } catch (e) {}
-        }
-    };
-    xhr.send();
+    $.get('/web/chat/sessions', function(resp) {
+        try {
+            var list = resp.data;
+            chatHistory = [];
+            for (var i = 0; i < list.length; i++) {
+                chatHistory.push({ label: list[i].label, sessionId: list[i].sessionId });
+            }
+            updateHistoryUI();
+        } catch (e) {}
+    });
 }
 
 function saveChatToHistory(firstMsg) {
@@ -37,106 +32,89 @@ function saveChatToHistory(firstMsg) {
 }
 
 /* Sidebar event delegation — single listener instead of per-item binding */
-historyList.addEventListener('click', function(e) {
-    var delBtn = e.target.closest('.sidebar-item-del');
-    if (delBtn) {
+$(historyList).on('click', function(e) {
+    var $target = $(e.target);
+    var $delBtn = $target.closest('.sidebar-item-del');
+    if ($delBtn.length) {
         e.stopPropagation();
-        var idx = parseInt(delBtn.closest('.sidebar-item').getAttribute('data-idx'));
+        var idx = parseInt($delBtn.closest('.sidebar-item').attr('data-idx'));
         if (!isNaN(idx)) deleteSession(idx);
         return;
     }
-    var renameBtn = e.target.closest('.sidebar-item-rename');
-    if (renameBtn) {
+    var $renameBtn = $target.closest('.sidebar-item-rename');
+    if ($renameBtn.length) {
         e.stopPropagation();
-        var idx = parseInt(renameBtn.closest('.sidebar-item').getAttribute('data-idx'));
+        var idx = parseInt($renameBtn.closest('.sidebar-item').attr('data-idx'));
         if (!isNaN(idx)) startRename(idx);
         return;
     }
-    var item = e.target.closest('.sidebar-item');
-    if (item) {
-        var idx = parseInt(item.getAttribute('data-idx'));
+    var $item = $target.closest('.sidebar-item');
+    if ($item.length) {
+        var idx = parseInt($item.attr('data-idx'));
         if (!isNaN(idx)) selectSession(idx);
     }
 });
 
 function updateHistoryUI() {
-    var frag = document.createDocumentFragment();
+    var html = '';
     for (var i = 0; i < chatHistory.length; i++) {
-        var item = document.createElement('div');
         var sess = sessionMap[chatHistory[i].sessionId];
         var streaming = sess && sess.isStreaming;
-        item.className = 'sidebar-item' + (i === currentChatIndex ? ' active' : '') + (streaming ? ' streaming' : '');
-        item.setAttribute('data-idx', i);
+        var cls = 'sidebar-item' + (i === currentChatIndex ? ' active' : '') + (streaming ? ' streaming' : '');
 
-        var label = document.createElement('span');
-        label.className = 'sidebar-item-label';
-        label.textContent = chatHistory[i].label;
-
-        var delBtn = document.createElement('button');
-        delBtn.className = 'sidebar-item-del';
-        delBtn.title = '删除对话';
-        delBtn.innerHTML = '<i class="layui-icon layui-icon-close"></i>';
-
-        item.appendChild(label);
+        html += '<div class="' + cls + '" data-idx="' + i + '">'
+            + '<span class="sidebar-item-label">' + escapeHtml(chatHistory[i].label) + '</span>';
         if (streaming) {
-            var spinner = document.createElement('span');
-            spinner.className = 'sidebar-item-spinner';
-            spinner.title = '对话进行中...';
-            item.appendChild(spinner);
+            html += '<span class="sidebar-item-spinner" title="对话进行中..."></span>';
         }
-        var renameBtn = document.createElement('button');
-        renameBtn.className = 'sidebar-item-rename';
-        renameBtn.title = '重命名';
-        renameBtn.innerHTML = '<i class="layui-icon layui-icon-edit"></i>';
-        item.appendChild(renameBtn);
-        item.appendChild(delBtn);
-        frag.appendChild(item);
+        html += '<button class="sidebar-item-rename" title="重命名"><i class="layui-icon layui-icon-edit"></i></button>'
+            + '<button class="sidebar-item-del" title="删除对话"><i class="layui-icon layui-icon-close"></i></button>'
+            + '</div>';
     }
-    historyList.innerHTML = '';
-    historyList.appendChild(frag);
+    $(historyList).html(html);
 }
 
 function startRename(idx) {
-    var item = historyList.querySelector('.sidebar-item[data-idx="' + idx + '"]');
-    if (!item) return;
-    var labelEl = item.querySelector('.sidebar-item-label');
-    if (!labelEl) return;
+    var $item = $(historyList).find('.sidebar-item[data-idx="' + idx + '"]');
+    if (!$item.length) return;
+    var $labelEl = $item.find('.sidebar-item-label');
+    if (!$labelEl.length) return;
 
     var currentLabel = chatHistory[idx].label.replace(/\.\.\.$/, '');
-    var input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'sidebar-rename-input';
-    input.value = currentLabel;
-    input.maxLength = 50;
+    var $input = $('<input>', {
+        type: 'text',
+        'class': 'sidebar-rename-input',
+        maxlength: 50,
+        val: currentLabel
+    });
 
-    labelEl.style.display = 'none';
-    item.querySelector('.sidebar-item-rename').style.display = 'none';
-    item.insertBefore(input, labelEl);
-    input.focus();
-    input.select();
+    $labelEl.hide();
+    $item.find('.sidebar-item-rename').hide();
+    $labelEl.before($input);
+    $input[0].focus();
+    $input[0].select();
 
     function finishRename() {
-        var newLabel = input.value.trim();
+        var newLabel = $input.val().trim();
         if (newLabel && newLabel !== currentLabel) {
             newLabel = newLabel.length > 30 ? newLabel.substring(0, 30) + '...' : newLabel;
             chatHistory[idx].label = newLabel;
 
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', '/chat/sessions/rename', true);
-            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-            xhr.send('sessionId=' + encodeURIComponent(chatHistory[idx].sessionId) + '&label=' + encodeURIComponent(newLabel));
+            $.post('/web/chat/sessions/rename', {
+                sessionId: chatHistory[idx].sessionId,
+                label: newLabel
+            });
         }
-        input.remove();
-        labelEl.style.display = '';
-        var renameBtn = item.querySelector('.sidebar-item-rename');
-        if (renameBtn) renameBtn.style.display = '';
+        $input.remove();
+        $labelEl.show();
+        $item.find('.sidebar-item-rename').show();
         updateHistoryUI();
     }
 
-    input.addEventListener('blur', finishRename);
-    input.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-        if (e.key === 'Escape') { input.value = currentLabel; input.blur(); }
+    $input.on('blur', finishRename);
+    $input.on('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); $input[0].blur(); }
+        if (e.key === 'Escape') { $input.val(currentLabel); $input[0].blur(); }
     });
 }
 
@@ -144,34 +122,29 @@ function deleteSession(idx) {
     var entry = chatHistory[idx];
     if (!entry) return;
 
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '/chat/sessions/delete?sessionId=' + encodeURIComponent(entry.sessionId), true);
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4) {
-            /* Clean up session state after server confirms */
-            var sess = sessionMap[entry.sessionId];
-            if (sess) {
-                if (sess.eventSource) sess.eventSource.close();
-                if (sess.silenceTimer) clearTimeout(sess.silenceTimer);
-                if (sess.contentRafId) cancelAnimationFrame(sess.contentRafId);
-                if (sess.reasonRafId) cancelAnimationFrame(sess.reasonRafId);
-                if (sess.container.parentNode) sess.container.parentNode.removeChild(sess.container);
-                delete sessionMap[entry.sessionId];
-            }
-
-            chatHistory.splice(idx, 1);
-
-            if (idx === currentChatIndex) {
-                currentChatIndex = -1;
-                switchToWelcomeMode();
-            } else if (idx < currentChatIndex) {
-                currentChatIndex--;
-            }
-
-            updateHistoryUI();
+    $.post('/web/chat/sessions/delete?sessionId=' + encodeURIComponent(entry.sessionId), function() {
+        /* Clean up session state after server confirms */
+        var sess = sessionMap[entry.sessionId];
+        if (sess) {
+            if (sess.eventSource) sess.eventSource.close();
+            if (sess.silenceTimer) clearTimeout(sess.silenceTimer);
+            if (sess.contentRafId) cancelAnimationFrame(sess.contentRafId);
+            if (sess.reasonRafId) cancelAnimationFrame(sess.reasonRafId);
+            $(sess.container).remove();
+            delete sessionMap[entry.sessionId];
         }
-    };
-    xhr.send();
+
+        chatHistory.splice(idx, 1);
+
+        if (idx === currentChatIndex) {
+            currentChatIndex = -1;
+            switchToWelcomeMode();
+        } else if (idx < currentChatIndex) {
+            currentChatIndex--;
+        }
+
+        updateHistoryUI();
+    });
 }
 
 function selectSession(idx) {
@@ -195,35 +168,30 @@ function selectSession(idx) {
 }
 
 function loadMessages(sess) {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', '/chat/messages?sessionId=' + encodeURIComponent(sess.sessionId), true);
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-            try {
-                var msgs = JSON.parse(xhr.responseText).data;
-                sess.container.innerHTML = '';
-                resetStreamState(sess);
-                for (var i = 0; i < msgs.length; i++) {
-                    var m = msgs[i];
-                    if (m.role === 'USER') {
-                        resetStreamState(sess);
-                        appendUserMessage(sess, m.content, null, null, m.createdAt);
-                    } else if (m.role === 'ASSISTANT') {
-                        var isConsecutive = (i > 0 && msgs[i - 1].role === 'ASSISTANT');
-                        if (!isConsecutive) resetStreamState(sess);
-                        var el = ensureAssistantBubble(sess);
-                        sess.reasonBuffer = isConsecutive ? sess.reasonBuffer + '\n\n' + m.content : m.content;
-                        el.innerHTML = renderMd(sess.reasonBuffer);
-                        // 显示时间戳（连续助手消息取最后一条的时间）
-                        setAssistantTime(sess, m.createdAt);
-                    }
+    $.get('/web/chat/messages?sessionId=' + encodeURIComponent(sess.sessionId), function(resp) {
+        try {
+            var msgs = resp.data;
+            $(sess.container).html('');
+            resetStreamState(sess);
+            for (var i = 0; i < msgs.length; i++) {
+                var m = msgs[i];
+                if (m.role === 'USER') {
+                    resetStreamState(sess);
+                    appendUserMessage(sess, m.content, null, null, m.createdAt);
+                } else if (m.role === 'ASSISTANT') {
+                    var isConsecutive = (i > 0 && msgs[i - 1].role === 'ASSISTANT');
+                    if (!isConsecutive) resetStreamState(sess);
+                    var el = ensureAssistantBubble(sess);
+                    sess.reasonBuffer = isConsecutive ? sess.reasonBuffer + '\n\n' + m.content : m.content;
+                    $(el).html(renderMd(sess.reasonBuffer));
+                    // 显示时间戳（连续助手消息取最后一条的时间）
+                    setAssistantTime(sess, m.createdAt);
                 }
-                resetStreamState(sess);
-                if (sess.sessionId === activeSessionId) scrollToBottom(true);
-            } catch (e) {}
-        }
-    };
-    xhr.send();
+            }
+            resetStreamState(sess);
+            if (sess.sessionId === activeSessionId) scrollToBottom(true);
+        } catch (e) {}
+    });
 }
 
 /* Load on startup */
@@ -235,29 +203,23 @@ var commandsLoaded = false;
 var cmdTrigger = null; // '/' for commands, '@' for subagents, '$' for skills
 
 function loadCommands() {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', '/chat/hints', true);
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-            try {
-                var resp = JSON.parse(xhr.responseText);
-                commandList = resp.data || [];
-                commandsLoaded = true;
-            } catch (e) {}
-        }
-    };
-    xhr.send();
+    $.get('/web/chat/hints', function(resp) {
+        try {
+            commandList = resp.data || [];
+            commandsLoaded = true;
+        } catch (e) {}
+    });
 }
 
 loadCommands();
 
-var welcomeCmdComplete = document.getElementById('welcomeCmdComplete');
-var chatCmdComplete = document.getElementById('chatCmdComplete');
+var $welcomeCmdComplete = $('#welcomeCmdComplete');
+var $chatCmdComplete = $('#chatCmdComplete');
 var cmdActiveIndex = -1;
 var cmdVisibleItems = [];
 
 function getActiveCmdComplete() {
-    return inChatMode ? chatCmdComplete : welcomeCmdComplete;
+    return inChatMode ? $chatCmdComplete[0] : $welcomeCmdComplete[0];
 }
 
 function showCmdComplete(inputEl, completeEl, prefix) {
@@ -290,13 +252,12 @@ function showCmdComplete(inputEl, completeEl, prefix) {
 
     cmdTrigger = trigger;
     cmdActiveIndex = -1;
-    completeEl.innerHTML = html;
-    completeEl.classList.add('show');
+    $(completeEl).html(html).addClass('show');
 }
 
 function hideCmdComplete() {
-    welcomeCmdComplete.classList.remove('show');
-    chatCmdComplete.classList.remove('show');
+    $welcomeCmdComplete.removeClass('show');
+    $chatCmdComplete.removeClass('show');
     cmdActiveIndex = -1;
     cmdVisibleItems = [];
     cmdTrigger = null;
@@ -316,28 +277,29 @@ function applyCmdSelection(inputEl, completeEl) {
 }
 
 function navigateCmdComplete(e, inputEl, completeEl) {
-    if (!completeEl.classList.contains('show')) return false;
+    var $completeEl = $(completeEl);
+    if (!$completeEl.hasClass('show')) return false;
     // 输入法组合中，不处理命令补全的回车
     if (e.isComposing) return false;
 
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
-        var items = completeEl.querySelectorAll('.cmd-complete-item');
-        if (items.length === 0) return true;
+        var $items = $completeEl.find('.cmd-complete-item');
+        if ($items.length === 0) return true;
 
         // Remove old active
-        if (cmdActiveIndex >= 0 && items[cmdActiveIndex]) {
-            items[cmdActiveIndex].classList.remove('active');
+        if (cmdActiveIndex >= 0 && $items[cmdActiveIndex]) {
+            $items.eq(cmdActiveIndex).removeClass('active');
         }
 
         if (e.key === 'ArrowDown') {
-            cmdActiveIndex = (cmdActiveIndex + 1) % items.length;
+            cmdActiveIndex = (cmdActiveIndex + 1) % $items.length;
         } else {
-            cmdActiveIndex = cmdActiveIndex <= 0 ? items.length - 1 : cmdActiveIndex - 1;
+            cmdActiveIndex = cmdActiveIndex <= 0 ? $items.length - 1 : cmdActiveIndex - 1;
         }
 
-        items[cmdActiveIndex].classList.add('active');
-        items[cmdActiveIndex].scrollIntoView({ block: 'nearest' });
+        $items.eq(cmdActiveIndex).addClass('active');
+        $items[cmdActiveIndex].scrollIntoView({ block: 'nearest' });
         return true;
     }
 
@@ -357,7 +319,7 @@ function navigateCmdComplete(e, inputEl, completeEl) {
 
 function handleInputForCommands(e) {
     var inputEl = e.target;
-    var completeEl = (inputEl === welcomeInput) ? welcomeCmdComplete : chatCmdComplete;
+    var completeEl = (inputEl === welcomeInput) ? $welcomeCmdComplete[0] : $chatCmdComplete[0];
     var val = inputEl.value;
 
     if (val.indexOf('/') === 0 || val.indexOf('@') === 0 || val.indexOf('$') === 0) {
@@ -372,11 +334,21 @@ function handleInputForCommands(e) {
         }
     } else {
         hideCmdComplete();
-        if (chatHistoryPanel.classList.contains('show')) {
+        if ($chatHistoryPanel.hasClass('show')) {
             hideHistoryPanel();
         }
     }
 }
+
+// History button handler (toolbar)
+$('#chatHistoryBtn').on('click', function(e) {
+    e.stopPropagation();
+    if ($chatHistoryPanel.hasClass('show')) {
+        hideHistoryPanel();
+    } else {
+        showHistoryPanel();
+    }
+});
 
 // Command & Agent button handlers
 function triggerCmdComplete(inputEl, completeEl, prefix) {
@@ -384,41 +356,41 @@ function triggerCmdComplete(inputEl, completeEl, prefix) {
     inputEl.focus();
     showCmdComplete(inputEl, completeEl, prefix);
 }
-document.getElementById('welcomeCmdBtn').addEventListener('click', function() {
-    triggerCmdComplete(welcomeInput, welcomeCmdComplete, '/');
+$('#welcomeCmdBtn').on('click', function() {
+    triggerCmdComplete(welcomeInput, $welcomeCmdComplete[0], '/');
 });
-document.getElementById('chatCmdBtn').addEventListener('click', function() {
-    triggerCmdComplete(chatInput, chatCmdComplete, '/');
+$('#chatCmdBtn').on('click', function() {
+    triggerCmdComplete(chatInput, $chatCmdComplete[0], '/');
 });
-document.getElementById('welcomeAgentBtn').addEventListener('click', function() {
-    triggerCmdComplete(welcomeInput, welcomeCmdComplete, '@');
+$('#welcomeAgentBtn').on('click', function() {
+    triggerCmdComplete(welcomeInput, $welcomeCmdComplete[0], '@');
 });
-document.getElementById('chatAgentBtn').addEventListener('click', function() {
-    triggerCmdComplete(chatInput, chatCmdComplete, '@');
+$('#chatAgentBtn').on('click', function() {
+    triggerCmdComplete(chatInput, $chatCmdComplete[0], '@');
 });
-document.getElementById('welcomeSkillBtn').addEventListener('click', function() {
-    triggerCmdComplete(welcomeInput, welcomeCmdComplete, '$');
+$('#welcomeSkillBtn').on('click', function() {
+    triggerCmdComplete(welcomeInput, $welcomeCmdComplete[0], '$');
 });
-document.getElementById('chatSkillBtn').addEventListener('click', function() {
-    triggerCmdComplete(chatInput, chatCmdComplete, '$');
+$('#chatSkillBtn').on('click', function() {
+    triggerCmdComplete(chatInput, $chatCmdComplete[0], '$');
 });
 
-welcomeInput.addEventListener('input', handleInputForCommands);
-chatInput.addEventListener('input', handleInputForCommands);
+$(welcomeInput).on('input', handleInputForCommands);
+$(chatInput).on('input', handleInputForCommands);
 
 // Keyboard navigation for command completion
-welcomeInput.addEventListener('keydown', function(e) {
+$(welcomeInput).on('keydown', function(e) {
     // 输入法正在组合中（如拼音选词），不触发发送
     if (e.isComposing) return;
-    var handled = navigateCmdComplete(e, welcomeInput, welcomeCmdComplete);
+    var handled = navigateCmdComplete(e, welcomeInput, $welcomeCmdComplete[0]);
     if (handled) return;
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
-chatInput.addEventListener('keydown', function(e) {
+$(chatInput).on('keydown', function(e) {
     // 输入法正在组合中（如拼音选词），不触发发送
     if (e.isComposing) return;
     // 优先级1：命令补全导航
-    var handled = navigateCmdComplete(e, chatInput, chatCmdComplete);
+    var handled = navigateCmdComplete(e, chatInput, $chatCmdComplete[0]);
     if (handled) return;
     // 优先级2：历史面板导航（面板已打开时）
     handled = navigateHistory(e);
@@ -433,116 +405,183 @@ chatInput.addEventListener('keydown', function(e) {
 });
 
 // Click on completion item
-welcomeCmdComplete.addEventListener('click', function(e) {
-    var item = e.target.closest('.cmd-complete-item');
-    if (item) {
-        cmdActiveIndex = parseInt(item.getAttribute('data-index'));
-        applyCmdSelection(welcomeInput, welcomeCmdComplete);
+$welcomeCmdComplete.on('click', function(e) {
+    var $item = $(e.target).closest('.cmd-complete-item');
+    if ($item.length) {
+        cmdActiveIndex = parseInt($item.attr('data-index'));
+        applyCmdSelection(welcomeInput, $welcomeCmdComplete[0]);
         welcomeInput.focus();
     }
 });
-chatCmdComplete.addEventListener('click', function(e) {
-    var item = e.target.closest('.cmd-complete-item');
-    if (item) {
-        cmdActiveIndex = parseInt(item.getAttribute('data-index'));
-        applyCmdSelection(chatInput, chatCmdComplete);
+$chatCmdComplete.on('click', function(e) {
+    var $item = $(e.target).closest('.cmd-complete-item');
+    if ($item.length) {
+        cmdActiveIndex = parseInt($item.attr('data-index'));
+        applyCmdSelection(chatInput, $chatCmdComplete[0]);
         chatInput.focus();
     }
 });
 
 // Hide on outside click
-document.addEventListener('click', function(e) {
-    if (!e.target.closest('.cmd-complete') && !e.target.closest('.history-panel') && !e.target.closest('textarea') && !e.target.closest('#welcomeCmdBtn') && !e.target.closest('#welcomeAgentBtn') && !e.target.closest('#chatCmdBtn') && !e.target.closest('#chatAgentBtn') && !e.target.closest('#welcomeSkillBtn') && !e.target.closest('#chatSkillBtn')) {
+$(document).on('click', function(e) {
+    var $target = $(e.target);
+    if (!$target.closest('.cmd-complete').length && !$target.closest('.history-panel').length && !$target.closest('textarea').length && !$target.closest('#welcomeCmdBtn').length && !$target.closest('#welcomeAgentBtn').length && !$target.closest('#chatCmdBtn').length && !$target.closest('#chatAgentBtn').length && !$target.closest('#welcomeSkillBtn').length && !$target.closest('#chatSkillBtn').length && !$target.closest('#chatHistoryBtn').length) {
         hideCmdComplete();
         hideHistoryPanel();
     }
 });
 
 /* ===== Input History Panel (chatInput only) ===== */
-var chatHistoryPanel = document.getElementById('chatHistoryPanel');
+var $chatHistoryPanel = $('#chatHistoryPanel');
 var historyActiveIndex = -1;
 
 /**
  * 从当前会话 DOM 中提取用户发送过的文本，倒序返回（最新在前）
+ * 返回 [{text, idx, time}]
  */
 function extractUserMessages() {
     var sess = activeSessionId ? sessionMap[activeSessionId] : null;
     if (!sess) return [];
-    var rows = sess.container.querySelectorAll('.msg-row.user');
-    var texts = [];
-    for (var i = rows.length - 1; i >= 0; i--) {
-        var bubble = rows[i].querySelector('.msg-bubble');
-        if (!bubble) continue;
-        // 用户文本在 .msg-bubble 内的 .user-msg-text 中
-        var lastSpan = bubble.querySelector('.user-msg-text');
-        var text = lastSpan ? lastSpan.textContent.trim() : '';
-        if (text && texts.indexOf(text) === -1) {
-            texts.push(text);
+    var $rows = $(sess.container).find('.msg-row.user');
+    var items = [];
+    for (var i = $rows.length - 1; i >= 0; i--) {
+        var $row = $($rows[i]);
+        var $bubble = $row.find('.msg-bubble');
+        if (!$bubble.length) continue;
+        var $lastSpan = $bubble.find('.user-msg-text');
+        var text = $lastSpan.length ? $lastSpan.text().trim() : '';
+        if (!text) continue;
+        // 去重
+        var dup = false;
+        for (var j = 0; j < items.length; j++) {
+            if (items[j].text === text) { dup = true; break; }
         }
+        if (dup) continue;
+        var idx = parseInt($row.attr('data-user-msg-idx'));
+        var time = $bubble.find('.msg-time').text() || '';
+        items.push({ text: text, idx: isNaN(idx) ? -1 : idx, time: time });
     }
-    return texts;
+    return items;
 }
 
 function showHistoryPanel() {
     var messages = extractUserMessages();
     if (messages.length === 0) {
-        chatHistoryPanel.innerHTML = '<div class="history-panel-empty">暂无输入历史</div>';
+        $chatHistoryPanel.html('<div class="history-panel-empty">暂无输入历史</div>');
     } else {
-        var html = '';
+        var html = '<div class="history-panel-search">'
+            + '<input type="text" class="history-search-input" placeholder="搜索历史消息..." />'
+            + '</div>';
+        html += '<div class="history-panel-list">';
         for (var i = 0; i < messages.length; i++) {
-            var display = messages[i].length > 80
-                ? messages[i].substring(0, 80) + '...'
-                : messages[i];
-            html += '<div class="history-panel-item" data-index="' + i + '">'
-                + escapeHtml(display)
+            var display = messages[i].text.length > 80
+                ? messages[i].text.substring(0, 80) + '...'
+                : messages[i].text;
+            var timeStr = messages[i].time ? '<span class="history-item-time">' + escapeHtml(messages[i].time) + '</span>' : '';
+            html += '<div class="history-panel-item" data-index="' + i + '" data-msg-idx="' + messages[i].idx + '">'
+                + '<span class="history-item-text">' + escapeHtml(display) + '</span>'
+                + '<span class="history-item-actions">'
+                + timeStr
+                + '<button class="history-locate-btn" title="定位到该消息">◎</button>'
+                + '</span>'
                 + '</div>';
         }
-        chatHistoryPanel.innerHTML = html;
+        html += '</div>';
+        $chatHistoryPanel.html(html);
+
+        // 绑定搜索过滤
+        var $searchInput = $chatHistoryPanel.find('.history-search-input');
+        $searchInput.on('input', function() {
+            var query = this.value.trim().toLowerCase();
+            var $items = $chatHistoryPanel.find('.history-panel-item');
+            for (var k = 0; k < $items.length; k++) {
+                var txt = $($items[k]).find('.history-item-text').text().toLowerCase();
+                if (!query || txt.indexOf(query) >= 0) {
+                    $($items[k]).show();
+                } else {
+                    $($items[k]).hide();
+                }
+            }
+        });
+
+        // 阻止搜索框按键冒泡，避免干扰历史面板导航
+        $searchInput.on('keydown', function(e) {
+            if (e.key === 'Escape') {
+                hideHistoryPanel();
+                chatInput.focus();
+                e.stopPropagation();
+                return;
+            }
+            e.stopPropagation();
+        });
     }
     // 确保互斥：关闭命令补全
     hideCmdComplete();
     historyActiveIndex = -1;
-    chatHistoryPanel.classList.add('show');
+    $chatHistoryPanel.addClass('show');
 }
 
 function hideHistoryPanel() {
-    chatHistoryPanel.classList.remove('show');
+    $chatHistoryPanel.removeClass('show');
     historyActiveIndex = -1;
 }
 
 function applyHistorySelection() {
     var messages = extractUserMessages();
     if (historyActiveIndex >= 0 && historyActiveIndex < messages.length) {
-        chatInput.value = messages[historyActiveIndex];
+        chatInput.value = messages[historyActiveIndex].text;
         autoResize(chatInput);
     }
     hideHistoryPanel();
 }
 
 /**
+ * 定位到指定 idx 的用户消息，平滑滚动并高亮闪烁
+ */
+function locateUserMessage(msgIdx) {
+    if (isNaN(msgIdx) || msgIdx < 0) return;
+    var sess = activeSessionId ? sessionMap[activeSessionId] : null;
+    if (!sess) return;
+    var $target = $(sess.container).find('.msg-row.user[data-user-msg-idx="' + msgIdx + '"]');
+    if (!$target.length) return;
+
+    // 先关闭历史面板
+    hideHistoryPanel();
+
+    // 滚动到目标消息
+    $target[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    // 高亮闪烁
+    $target.addClass('msg-highlight');
+    setTimeout(function() {
+        $target.removeClass('msg-highlight');
+    }, 1800);
+}
+
+/**
  * 处理历史面板内的键盘导航，返回 true 表示已消费事件
  */
 function navigateHistory(e) {
-    if (!chatHistoryPanel.classList.contains('show')) return false;
+    if (!$chatHistoryPanel.hasClass('show')) return false;
     if (e.isComposing) return false;
 
-    var items = chatHistoryPanel.querySelectorAll('.history-panel-item');
+    var $items = $chatHistoryPanel.find('.history-panel-item');
 
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.preventDefault();
-        if (items.length === 0) return true;
-        if (historyActiveIndex >= 0 && items[historyActiveIndex]) {
-            items[historyActiveIndex].classList.remove('active');
+        if ($items.length === 0) return true;
+        if (historyActiveIndex >= 0 && $items[historyActiveIndex]) {
+            $items.eq(historyActiveIndex).removeClass('active');
         }
         if (e.key === 'ArrowDown') {
-            historyActiveIndex = (historyActiveIndex + 1) % items.length;
+            historyActiveIndex = (historyActiveIndex + 1) % $items.length;
         } else {
             historyActiveIndex = historyActiveIndex <= 0
-                ? items.length - 1
+                ? $items.length - 1
                 : historyActiveIndex - 1;
         }
-        items[historyActiveIndex].classList.add('active');
-        items[historyActiveIndex].scrollIntoView({ block: 'nearest' });
+        $items.eq(historyActiveIndex).addClass('active');
+        $items[historyActiveIndex].scrollIntoView({ block: 'nearest' });
         return true;
     }
 
@@ -561,11 +600,18 @@ function navigateHistory(e) {
     return false;
 }
 
-// Click on history item
-chatHistoryPanel.addEventListener('click', function(e) {
-    var item = e.target.closest('.history-panel-item');
-    if (item) {
-        historyActiveIndex = parseInt(item.getAttribute('data-index'));
+// Click on history item — text area fills input, locate button jumps to message
+$chatHistoryPanel.on('click', function(e) {
+    var $locateBtn = $(e.target).closest('.history-locate-btn');
+    if ($locateBtn.length) {
+        var $item = $locateBtn.closest('.history-panel-item');
+        var msgIdx = parseInt($item.attr('data-msg-idx'));
+        if (!isNaN(msgIdx)) locateUserMessage(msgIdx);
+        return;
+    }
+    var $item = $(e.target).closest('.history-panel-item');
+    if ($item.length) {
+        historyActiveIndex = parseInt($item.attr('data-index'));
         applyHistorySelection();
         chatInput.focus();
     }
@@ -586,42 +632,37 @@ function getSelectedModel() {
 
 // Load model list (once) + selected model for given session
 function loadModels(sessionId, callback) {
-    var url = '/chat/models';
+    var url = '/web/chat/models';
     if (sessionId) url += '?sessionId=' + encodeURIComponent(sessionId);
 
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', url, true);
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-            try {
-                var resp = JSON.parse(xhr.responseText).data;
-                var selected = resp.selected || '';
+    $.get(url, function(resp) {
+        try {
+            var data = resp.data;
+            var selected = data.selected || '';
 
-                // Store selected model per session
-                if (sessionId) {
-                    sessionModelMap[sessionId] = selected;
-                } else {
-                    sessionModelMap['_default'] = selected;
-                }
-
-                // Only parse list once (it's the same for all sessions)
-                if (!modelsLoaded) {
-                    modelList = [];
-                    var list = resp.list || [];
-                    for (var i = 0; i < list.length; i++) {
-                        modelList.push({ name: list[i].model, desc: list[i].description });
-                    }
-                    modelsLoaded = true;
-                }
-
-                renderModelUI();
-                if (callback) callback();
-            } catch (e) {
-                console.error('Failed to parse models:', e);
+            // Store selected model per session
+            if (sessionId) {
+                sessionModelMap[sessionId] = selected;
+            } else {
+                sessionModelMap['_default'] = selected;
             }
+
+            // Only parse list once (it's the same for all sessions)
+            if (!modelsLoaded) {
+                modelList = [];
+                var list = data.list || [];
+                for (var i = 0; i < list.length; i++) {
+                    modelList.push({ name: list[i].name || list[i].model, desc: list[i].description });
+                }
+                modelsLoaded = true;
+            }
+
+            renderModelUI();
+            if (callback) callback();
+        } catch (e) {
+            console.error('Failed to parse models:', e);
         }
-    };
-    xhr.send();
+    });
 }
 
 // Refresh model UI for a specific session using local cache (no network request)
@@ -629,19 +670,14 @@ function refreshSessionModel(sessionId) {
     if (!sessionId) return;
     // If we haven't seen this session's model yet, fetch it from backend
     if (!sessionModelMap[sessionId]) {
-        var url = '/chat/models?sessionId=' + encodeURIComponent(sessionId);
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', url, true);
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === 4 && xhr.status === 200) {
-                try {
-                    var resp = JSON.parse(xhr.responseText).data;
-                    sessionModelMap[sessionId] = resp.selected || '';
-                    renderModelUI();
-                } catch (e) {}
-            }
-        };
-        xhr.send();
+        var url = '/web/chat/models?sessionId=' + encodeURIComponent(sessionId);
+        $.get(url, function(resp) {
+            try {
+                var data = resp.data;
+                sessionModelMap[sessionId] = data.selected || '';
+                renderModelUI();
+            } catch (e) {}
+        });
     } else {
         // Already cached — just re-render UI
         renderModelUI();
@@ -649,15 +685,15 @@ function refreshSessionModel(sessionId) {
 }
 
 function renderModelUI() {
-    var chatName = document.getElementById('chatModelName');
-    var welcomeName = document.getElementById('welcomeModelName');
-    var chatDropdown = document.getElementById('chatModelDropdown');
-    var welcomeDropdown = document.getElementById('welcomeModelDropdown');
+    var $chatName = $('#chatModelName');
+    var $welcomeName = $('#welcomeModelName');
+    var $chatDropdown = $('#chatModelDropdown');
+    var $welcomeDropdown = $('#welcomeModelDropdown');
 
     var currentModel = getSelectedModel();
     var displayName = currentModel.length > 24 ? currentModel.substring(0, 24) + '...' : currentModel;
-    if (chatName) chatName.textContent = displayName || '默认模型';
-    if (welcomeName) welcomeName.textContent = displayName || '默认模型';
+    $chatName.text(displayName || '默认模型');
+    $welcomeName.text(displayName || '默认模型');
 
     var html = '';
     for (var i = 0; i < modelList.length; i++) {
@@ -668,8 +704,8 @@ function renderModelUI() {
             + (m.desc ? '<span class="model-item-desc">' + escapeHtml(m.desc) + '</span>' : '')
             + '</div>';
     }
-    if (chatDropdown) chatDropdown.innerHTML = html;
-    if (welcomeDropdown) welcomeDropdown.innerHTML = html;
+    $chatDropdown.html(html);
+    $welcomeDropdown.html(html);
 }
 
 function selectModel(modelName) {
@@ -680,37 +716,35 @@ function selectModel(modelName) {
 
 // Toggle dropdown open/close
 function initModelSelector(selectorId, currentId, dropdownId) {
-    var selector = document.getElementById(selectorId);
-    var current = document.getElementById(currentId);
-    var dropdown = document.getElementById(dropdownId);
-    if (!selector || !current || !dropdown) return;
+    var $selector = $('#' + selectorId);
+    var $current = $('#' + currentId);
+    var $dropdown = $('#' + dropdownId);
+    if (!$selector.length || !$current.length || !$dropdown.length) return;
 
-    current.addEventListener('click', function(e) {
+    $current.on('click', function(e) {
         e.stopPropagation();
         // Close all other selectors
-        document.querySelectorAll('.model-selector.open').forEach(function(el) {
-            if (el.id !== selectorId) el.classList.remove('open');
+        $('.model-selector.open').each(function() {
+            if (this.id !== selectorId) $(this).removeClass('open');
         });
-        selector.classList.toggle('open');
+        $selector.toggleClass('open');
     });
 
-    dropdown.addEventListener('click', function(e) {
-        var item = e.target.closest('.model-dropdown-item');
-        if (!item) return;
+    $dropdown.on('click', function(e) {
+        var $item = $(e.target).closest('.model-dropdown-item');
+        if (!$item.length) return;
         e.stopPropagation();
-        var modelName = item.getAttribute('data-model');
+        var modelName = $item.attr('data-model');
         if (modelName && modelName !== getSelectedModel()) {
             selectModel(modelName);
         }
-        selector.classList.remove('open');
+        $selector.removeClass('open');
     });
 }
 
 // Close all dropdowns on outside click
-document.addEventListener('click', function() {
-    document.querySelectorAll('.model-selector.open').forEach(function(el) {
-        el.classList.remove('open');
-    });
+$(document).on('click', function() {
+    $('.model-selector.open').removeClass('open');
 });
 
 initModelSelector('chatModelSelector', 'chatModelCurrent', 'chatModelDropdown');

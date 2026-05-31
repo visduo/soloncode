@@ -28,7 +28,6 @@ import java.util.List;
  *
  * <pre>
  * /loop 5m check if deployment finished    → fixed interval (5m)
- * /loop 30s check ci status               → fixed interval (30s)
  * /loop check ci status                   → auto interval (5m default)
  * /loop cron:'0 *&#47;5 * * * ?' check status  → cron expression
  * /loop ls                                → list active tasks
