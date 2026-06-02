@@ -19,4 +19,10 @@ public class GeneralSettings implements Serializable {
     private Integer summaryWindowToken;
     //启用消盒模式
     private Boolean sandboxMode;
+    //api 重试次数
+    private Integer apiRetries;
+    //Mcp 重试次数
+    private Integer mcpRetries;
+    //模型重试次数
+    private Integer modelRetries;
 }

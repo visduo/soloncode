@@ -73,6 +73,24 @@ public class AgentSettings implements Serializable {
             general.setSandboxMode(props.isSandboxMode());
         }
 
+        if (general.getApiRetries() != null) {
+            props.setApiRetries(general.getApiRetries());
+        } else {
+            general.setApiRetries(props.getApiRetries());
+        }
+
+        if (general.getMcpRetries() != null) {
+            props.setMcpRetries(general.getMcpRetries());
+        } else {
+            general.setMcpRetries(props.getMcpRetries());
+        }
+
+        if (general.getModelRetries() != null) {
+            props.setModelRetries(general.getModelRetries());
+        } else {
+            general.setModelRetries(props.getModelRetries());
+        }
+
         //-------------
 
         if (this.models.size() > 0) {

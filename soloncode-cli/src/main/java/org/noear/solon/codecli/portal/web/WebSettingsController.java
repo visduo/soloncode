@@ -151,6 +151,10 @@ public class WebSettingsController {
             engine.setCompressionThreshold(tmp.getSummaryWindowSize(), tmp.getSummaryWindowToken());
             engine.setSandboxMode(tmp.getSandboxMode());
 
+            engine.setModelRetries(tmp.getModelRetries());
+            engine.setMcpRetries(tmp.getMcpRetries());
+            engine.setApiRetries(tmp.getApiRetries());
+
         }
 
         saveSettings();

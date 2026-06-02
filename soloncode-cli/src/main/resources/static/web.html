@@ -368,6 +368,32 @@
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- 重试策略 -->
+                            <div class="general-card">
+                                <div class="general-card-header">
+                                    <div class="general-card-text">
+                                        <div class="general-card-title">重试策略</div>
+                                    </div>
+                                </div>
+                                <div class="general-card-body">
+                                    <div class="general-field-row">
+                                        <div class="general-field">
+                                            <label class="general-field-label">模型重试次数</label>
+                                            <input type="number" class="general-input" id="generalModelRetries" placeholder="默认 3" min="0" max="10"/>
+                                        </div>
+                                        <div class="general-field">
+                                            <label class="general-field-label">MCP 重试次数</label>
+                                            <input type="number" class="general-input" id="generalMcpRetries" placeholder="默认 3" min="0" max="10"/>
+                                        </div>
+                                        <div class="general-field">
+                                            <label class="general-field-label">API 重试次数</label>
+                                            <input type="number" class="general-input" id="generalApiRetries" placeholder="默认 3" min="0" max="10"/>
+                                        </div>
+                                    </div>
+                                    <div class="general-toggle-desc" style="margin-top:8px;">控制各类请求失败后的自动重试次数，重启会话后生效</div>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="form-actions" style="justify-content:flex-end; margin-top:20px;">
