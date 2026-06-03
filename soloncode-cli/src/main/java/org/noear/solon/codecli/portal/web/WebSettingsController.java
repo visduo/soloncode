@@ -43,6 +43,8 @@ import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.awt.*;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -50,6 +52,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.*;
+import java.util.List;
 
 /**
  * Web 设置控制器 —— SolonCode Web UI 的设置管理 HTTP 入口。
@@ -147,9 +150,8 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/general/save")
-    public Result generalSave(Context ctx) throws Exception {
-        String body = ctx.body();
-        GeneralSettings tmp = ONode.ofJson(body).toBean(GeneralSettings.class);
+    public Result generalSave(@Body String json) throws Exception {
+        GeneralSettings tmp = ONode.ofJson(json).toBean(GeneralSettings.class);
         if (tmp != null) {
             settings.setGeneral(tmp);
 
@@ -261,8 +263,8 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/llm/models/add")
-    public Result llmModelsAdd(Context ctx) throws Exception {
-        ONode root = ONode.ofJson(ctx.body());
+    public Result llmModelsAdd(@Body String json) throws Exception {
+        ONode root = ONode.ofJson(json);
 
         String apiUrl = root.get("apiUrl").getString();
         String apiKey = root.get("apiKey").getString();
@@ -330,8 +332,8 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/llm/models/update")
-    public Result llmModelsUpdate(Context ctx) throws Exception {
-        ONode root = ONode.ofJson(ctx.body());
+    public Result llmModelsUpdate(@Body String json) throws Exception {
+        ONode root = ONode.ofJson(json);
 
         String originalModel = root.get("originalModel").getString();
         if (Assert.isEmpty(originalModel)) {
@@ -440,8 +442,8 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/llm/models/import")
-    public Result llmModelsImport(Context ctx) throws Exception {
-        ONode root = ONode.ofJson(ctx.body());
+    public Result llmModelsImport(@Body String json) throws Exception {
+        ONode root = ONode.ofJson(json);
         ONode models = root.get("models");
         if (models == null || !models.isArray()) {
             return Result.failure("Invalid format: expected {models:[...]}");
@@ -531,8 +533,8 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/mcp/servers/add")
-    public Result mcpServersAdd(Context ctx) throws Exception {
-        ONode root = ONode.ofJson(ctx.body());
+    public Result mcpServersAdd(@Body String json) throws Exception {
+        ONode root = ONode.ofJson(json);
         String name = root.get("name").getString();
         String type = root.get("type").getString();
 
@@ -598,8 +600,8 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/mcp/servers/remove")
-    public Result mcpServersRemove(Context ctx) throws Exception {
-        ONode root = ONode.ofJson(ctx.body());
+    public Result mcpServersRemove(@Body String json) throws Exception {
+        ONode root = ONode.ofJson(json);
         String name = root.get("name").getString();
 
         if (Assert.isEmpty(name)) {
@@ -618,8 +620,8 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/mcp/servers/update")
-    public Result mcpServersUpdate(Context ctx) throws Exception {
-        ONode root = ONode.ofJson(ctx.body());
+    public Result mcpServersUpdate(@Body String json) throws Exception {
+        ONode root = ONode.ofJson(json);
         String name = root.get("name").getString();
         String originalName = root.get("originalName").getString();
 
@@ -706,8 +708,8 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/mcp/servers/toggle")
-    public Result mcpServersToggle(Context ctx) throws Exception {
-        ONode root = ONode.ofJson(ctx.body());
+    public Result mcpServersToggle(@Body String json) throws Exception {
+        ONode root = ONode.ofJson(json);
         String name = root.get("name").getString();
         boolean enabled = root.get("enabled").getBoolean();
 
@@ -968,29 +970,29 @@ public class WebSettingsController {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("serverName", name);
         data.put("connected", true);
-        data.put("allowedTools", serverParameters.getAllowedTools());
+        data.put("disallowedTools", serverParameters.getDisallowedTools());
         data.put("tools", toolList);
         return Result.succeed(data);
     }
 
     /**
-     * 更新指定 MCP 服务器的工具权限（allowedTools/disallowedTools）
+     * 更新指定 MCP 服务器的工具权限（disallowedTools）
      * <p>通过 engine.refreshMcpServer 影子交换策略热重载，无需重启。</p>
      */
     @Post
     @Mapping("/web/settings/mcp/servers/tools/save")
-    public Result mcpServerToolsSave(@Param("serverName") String serverName, @Param("allowedTools") String[] allowedTools) throws IOException {
+    public Result mcpServerToolsSave(@Param("serverName") String serverName, @Param("disallowedTools") String[] disallowedTools) throws IOException {
         McpServerParameters serverParameters = settings.getMcpServers().get(serverName);
         if (serverParameters == null) {
             return Result.failure("Server not found: " + serverName);
         }
 
-        serverParameters.setAllowedTools(Arrays.asList(allowedTools));
+        serverParameters.setDisallowedTools(Arrays.asList(disallowedTools));
 
         // 同步到引擎 provider 并热重载
         McpClientProvider provider = engine.getMcpServer(serverName);
         if (provider != null) {
-            provider.setAllowedTools(serverParameters.getAllowedTools());
+            provider.setDisallowedTools(serverParameters.getDisallowedTools());
             engine.refreshMcpServer(serverName);
         }
 
@@ -1322,12 +1324,12 @@ public class WebSettingsController {
             item.put("method", tool.getMethod());
             item.put("path", tool.getPath());
             item.put("description", tool.getDescription());
-            item.put("status", computeToolStatus(tool.getName(), source.getAllowedTools(), source.getDisallowedTools()));
             apiList.add(item);
         }
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("serverName", name);
+        data.put("disallowedTools", source.getDisallowedTools());
         data.put("connected", true);
         data.put("apis", apiList);
         return Result.succeed(data);
@@ -1339,19 +1341,18 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/openapi/servers/apis/save")
-    public Result openapiServerApisSave(@Param("serverName") String serverName, @Param("allowedTools") String[] allowedTools) {
+    public Result openapiServerApisSave(@Param("serverName") String serverName, @Param("disallowedTools") String[] disallowedTools) {
         ApiSource source = settings.getApiServers().get(serverName);
         if (source == null) {
             return Result.failure("Server not found: " + serverName);
         }
 
-        // allowedTools
-        source.setAllowedTools(Arrays.asList(allowedTools));
+        // disallowedTools
+        source.setDisallowedTools(Arrays.asList(disallowedTools));
 
         // 同步到引擎 client 并热重载
         ApiSourceClient client = engine.getApiServer(source.getDocUrl());
         if (client != null) {
-            client.setAllowedTools(source.getAllowedTools());
             client.setDisallowedTools(source.getDisallowedTools());
             engine.refreshApiServer(source.getDocUrl());
         }
@@ -1522,11 +1523,44 @@ public class WebSettingsController {
     }
 
     /**
+     * 切换挂载池启用/停用
+     */
+    @Post
+    @Mapping("/web/settings/mounts/toggle")
+    public Result mountsToggle(@Body String json) {
+        ONode root = ONode.ofJson(json);
+        String alias = root.get("alias").getString();
+        boolean enabled = root.get("enabled").getBoolean();
+
+        if (Assert.isEmpty(alias)) {
+            return Result.failure("alias is required");
+        }
+
+        MountDir mountDir = engine.getMount(alias);
+        if (mountDir == null) {
+            return Result.failure("挂载池不存在: " + alias);
+        }
+
+        // 更新配置
+        MountDo mountDo = settings.getMountPools().get(alias);
+        if (mountDo != null) {
+            mountDo.setEnabled(enabled);
+        }
+
+        // 更新运行时
+        mountDir.setEnabled(enabled);
+
+        saveSettings();
+        LOG.info("[Settings] Mount toggled: {} -> {}", alias, enabled);
+        return Result.succeed();
+    }
+
+    /**
      * 移除挂载池
      */
     @Post
     @Mapping("/web/settings/mounts/remove")
-    public Result mountsRemove(Context ctx, @Param("alias") String alias) {
+    public Result mountsRemove(@Param("alias") String alias) {
         MountDir mountDir = engine.getMount(alias);
         if (mountDir == null) {
             return Result.failure("挂载池不存在");
@@ -1547,7 +1581,7 @@ public class WebSettingsController {
      */
     @Get
     @Mapping("/web/settings/mounts/content")
-    public Result mountsContent(Context ctx, @Param("alias") String alias, @Param("type") String type) {
+    public Result mountsContent(@Param("alias") String alias, @Param("type") String type) {
         if (engine.hasMount(alias) == false) {
             return Result.failure("挂载池不存在: " + alias);
         }
@@ -1595,16 +1629,16 @@ public class WebSettingsController {
      */
     @Get
     @Mapping("/web/settings/mounts/open")
-    public Result mountsOpen(Context ctx, @Param("path") String path) {
+    public Result mountsOpen(@Param("path") String path) {
         if (Assert.isEmpty(path)) return Result.failure("路径为空");
         try {
-            java.io.File dir = new java.io.File(path);
+            File dir = new File(path);
             if (!dir.exists()) return Result.failure("目录不存在: " + path);
 
             // 优先尝试 Desktop.open，失败时 fallback 到系统命令
             try {
-                if (java.awt.Desktop.isDesktopSupported()) {
-                    java.awt.Desktop.getDesktop().open(dir);
+                if (Desktop.isDesktopSupported()) {
+                    Desktop.getDesktop().open(dir);
                     return Result.succeed("已打开");
                 }
             } catch (Exception ignored) {
@@ -1633,7 +1667,7 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/mounts/skills/remove")
-    public Result mountsSkillsRemove(Context ctx, @Param("alias") String alias, @Param("skillName") String skillName) {
+    public Result mountsSkillsRemove(@Param("alias") String alias, @Param("skillName") String skillName) {
         MountDir mountDir = engine.getMount(alias);
         if (mountDir == null) return Result.failure("挂载池不存在: " + alias);
 

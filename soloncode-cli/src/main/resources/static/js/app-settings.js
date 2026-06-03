@@ -596,21 +596,21 @@
             return;
         }
 
-        // 获取已允许的工具列表
-        var allowedTools = data.allowedTools || [];
-        var allowedMap = {};
-        allowedTools.forEach(function (t) { allowedMap[t] = true; });
+        // 获取已禁用的工具列表
+        var disallowedTools = data.disallowedTools || [];
+        var disallowedMap = {};
+        disallowedTools.forEach(function (t) { disallowedMap[t] = true; });
 
         // 显示工具栏
         $toolbar.show();
-        var checkedCount = tools.filter(function (t) { return allowedMap[t.name]; }).length;
+        var checkedCount = tools.filter(function (t) { return !disallowedMap[t.name]; }).length;
         $('#mcpToolsCount').text(checkedCount + ' / ' + tools.length + ' 已启用');
         $('#mcpToolsSelectAll').prop('checked', checkedCount === tools.length);
 
         var html = '';
         tools.forEach(function (tool) {
             var toolName = tool.name || '';
-            var isEnabled = !!allowedMap[toolName];
+            var isEnabled = !disallowedMap[toolName];
             html += '<div class="mcp-server-item mcp-tool-item" style="cursor:default" data-tool="' + escapeAttr(toolName) + '">'
                 + '<label class="mcp-tool-checkbox" title="' + (isEnabled ? '禁用' : '启用') + '">'
                 + '<input type="checkbox" ' + (isEnabled ? 'checked' : '') + ' data-tool="' + escapeAttr(toolName) + '" class="mcp-tool-toggle"/>'
@@ -644,17 +644,17 @@
         updateMcpToolsToolbar();
     });
 
-    // 保存工具权限
+    // 保存工具权限（提交未勾选的作为 disallowedTools）
     $('#mcpToolsSaveBtn').on('click', function () {
         if (!mcpToolsServerName) return;
-        var allowedTools = [];
-        $mcpToolsList.find('.mcp-tool-toggle:checked').each(function () {
-            allowedTools.push($(this).attr('data-tool'));
+        var disallowedTools = [];
+        $mcpToolsList.find('.mcp-tool-toggle:not(:checked)').each(function () {
+            disallowedTools.push($(this).attr('data-tool'));
         });
         var $btn = $(this);
         $btn.prop('disabled', true);
         postJson('/web/settings/mcp/servers/tools/save',
-            { serverName: mcpToolsServerName, allowedTools: allowedTools },
+            { serverName: mcpToolsServerName, disallowedTools: disallowedTools },
             function (resp) {
                 if (resp.code === 200) showToast('工具权限已保存');
                 else showToast('保存失败: ' + (resp.message || '未知错误'), 'error');
@@ -924,21 +924,21 @@
                 + '<div class="mcp-empty-title">暂无 API</div>'
                 + '<div class="mcp-empty-desc">该服务器未解析到任何 API 接口</div></div>';
         } else {
-            // 获取已允许的 API 列表
-            var allowedTools = data.allowedTools || [];
-            var allowedMap = {};
-            allowedTools.forEach(function (t) { allowedMap[t] = true; });
+            // 获取已禁用的 API 列表
+            var disallowedTools = data.disallowedTools || [];
+            var disallowedMap = {};
+            disallowedTools.forEach(function (t) { disallowedMap[t] = true; });
 
             // 显示工具栏
             $toolbar.show();
-            var checkedCount = apis.filter(function (api) { return allowedMap[api.name]; }).length;
+            var checkedCount = apis.filter(function (api) { return !disallowedMap[api.name]; }).length;
             $('#openapiApisCount').text(checkedCount + ' / ' + apis.length + ' 已启用');
             $('#openapiApisSelectAll').prop('checked', checkedCount === apis.length);
 
             apis.forEach(function (api) {
                 var method = (api.method || 'GET').toUpperCase();
                 var apiName = api.name || '';
-                var isEnabled = !!allowedMap[apiName];
+                var isEnabled = !disallowedMap[apiName];
                 html += '<div class="openapi-api-item" data-name="' + escapeAttr(apiName) + '">'
                     + '<div class="openapi-api-checkbox">'
                     + '<input type="checkbox" ' + (isEnabled ? 'checked' : '') + ' data-api="' + escapeAttr(apiName) + '" class="openapi-api-toggle" title="' + (isEnabled ? '禁用' : '启用') + '"/>'
@@ -1036,17 +1036,17 @@
         updateOpenapiApisToolbar();
     });
 
-    // OpenAPI API 保存权限
+    // OpenAPI API 保存权限（提交未勾选的作为 disallowedTools）
     $('#openapiApisSaveBtn').on('click', function () {
         if (!openapiApisCurrentName) return;
-        var allowedTools = [];
-        $openapiApisList.find('.openapi-api-toggle:checked').each(function () {
-            allowedTools.push($(this).attr('data-api'));
+        var disallowedTools = [];
+        $openapiApisList.find('.openapi-api-toggle:not(:checked)').each(function () {
+            disallowedTools.push($(this).attr('data-api'));
         });
         var $btn = $(this);
         $btn.prop('disabled', true);
         postJson('/web/settings/openapi/servers/apis/save',
-            { serverName: openapiApisCurrentName, allowedTools: allowedTools },
+            { serverName: openapiApisCurrentName, disallowedTools: disallowedTools },
             function (resp) {
                 if (resp.code === 200) showToast('API 权限已保存');
                 else showToast('保存失败: ' + (resp.message || '未知错误'), 'error');
@@ -1156,6 +1156,10 @@
                     + (path ? '<div class="mcp-server-detail">' + escapeHtml(path) + '</div>' : '')
                     + '</div><div class="mcp-server-actions">'
                     + '<button class="mcp-action-btn edit mounts-edit-btn" data-alias="' + escapeAttr(alias) + '" title="编辑"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
+                    + '<label class="toggle-switch" title="' + ((item.enabled !== false) ? '停用' : '启用') + '">'
+                    + '<input type="checkbox" ' + (item.enabled !== false ? 'checked' : '') + ' data-alias="' + escapeAttr(alias) + '" class="mounts-toggle"/> '
+                    + '<span class="toggle-slider"></span>'
+                    + '</label>'
                     + '</div></div>';
             });
         }
@@ -1204,9 +1208,30 @@
             mountsEditPool(alias);
         })
         .on('click', '.mounts-pool-item', function (e) {
+            if ($(e.target).closest('.toggle-switch').length) return;
             if ($(e.target).closest('.mcp-action-btn').length) return;
             var alias = $(this).attr('data-alias');
             loadMountsContent(alias, getMountType(alias));
+        })
+        .on('change', '.mounts-toggle', function () {
+            var alias = $(this).attr('data-alias');
+            var enabled = this.checked;
+            $.ajax({
+                url: '/web/settings/mounts/toggle',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ alias: alias, enabled: enabled }),
+                success: function (resp) {
+                    if (resp.code === 200) {
+                        layer.msg(enabled ? '已启用' : '已停用', { icon: 1, time: 1500, offset: '120px' });
+                    } else {
+                        layer.msg(resp.message || '操作失败', { icon: 2, time: 3000, offset: '120px' });
+                    }
+                },
+                error: function () {
+                    layer.msg('操作失败，请检查网络', { icon: 2, time: 3000, offset: '120px' });
+                }
+            });
         });
 
     // 池内容加载与渲染（按类型分发）
