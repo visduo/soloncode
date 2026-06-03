@@ -48,7 +48,7 @@
 .llm-fetch-item { padding: 8px 12px; font-size: 13px; cursor: pointer; color: var(--text-primary); transition: background 0.15s; }
 .llm-fetch-item:hover { background: var(--bg-hover); }
 
-.llm-model-item { display: flex; align-items: center; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 8px; transition: all 0.15s; gap: 10px; cursor: pointer; }
+.llm-model-item { display: flex; align-items: center; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 8px; transition: all 0.15s; gap: 10px; }
 .llm-model-item:hover { border-color: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
 .llm-model-item:active { transform: scale(0.997); }
 .llm-model-icon { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg, var(--bg-hover), var(--bg-primary)); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: var(--text-secondary); flex-shrink: 0; }
@@ -73,6 +73,7 @@
 
 /* LLM 操作按钮悬停色 */
 .llm-action-btn.edit:hover { background: rgba(59,130,246,0.08); color: #3b82f6; }
+.llm-edit-btn { height: 22px; display: flex; align-items: center; justify-content: center; }
 .llm-action-btn.copy:hover { background: rgba(16,185,129,0.08); color: #10b981; }
 
 /* LLM 禁用模型项低透明度 */
@@ -85,8 +86,8 @@
     display: inline-flex;
     align-items: center;
     cursor: pointer;
-    width: 38px;
-    height: 22px;
+    width: 32px;
+    height: 18px;
     flex-shrink: 0;
 }
 .toggle-switch input {
@@ -99,7 +100,7 @@
     position: absolute;
     inset: 0;
     background: var(--border-color);
-    border-radius: 22px;
+    border-radius: 18px;
     transition: background 0.25s, box-shadow 0.25s;
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
 }
@@ -108,8 +109,8 @@
     position: absolute;
     left: 2px;
     top: 2px;
-    width: 18px;
-    height: 18px;
+    width: 14px;
+    height: 14px;
     background: #fff;
     border-radius: 50%;
     transition: transform 0.25s;
@@ -120,7 +121,7 @@
     box-shadow: 0 0 0 2px rgba(var(--accent-rgb, 59,130,246), 0.15);
 }
 .toggle-switch input:checked + .toggle-slider::before {
-    transform: translateX(16px);
+    transform: translateX(14px);
 }
 .toggle-switch:hover .toggle-slider {
     box-shadow: inset 0 1px 3px rgba(0,0,0,0.15), 0 0 0 1px rgba(var(--accent-rgb, 59,130,246), 0.2);

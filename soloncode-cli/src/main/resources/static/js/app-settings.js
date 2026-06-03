@@ -277,6 +277,7 @@
                     + '<div class="llm-model-info"><div class="llm-model-name">' + escapeHtml(displayName) + '</div><div class="llm-model-meta">'
                     + '<span class="llm-api-hint">' + metaLine + '</span>'
                     + '</div></div><div class="llm-model-actions">'
+                    + '<button class="llm-action-btn edit llm-edit-btn" title="编辑"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
                     + '<label class="toggle-switch" title="' + (enabled ? '停用' : '启用') + '">'
                     + '<input type="checkbox" ' + (enabled ? 'checked' : '') + ' data-name="' + escapeAttr(name) + '" class="llm-toggle"/>'
                     + '<span class="toggle-slider"></span>'
@@ -296,8 +297,9 @@
             $('#llmProvider').val($(this).attr('data-provider'));
             $('#llmModel').focus();
         })
-        .on('click', '.llm-model-item', function () {
-            var model = $(this).attr('data-model');
+        .on('click', '.llm-edit-btn', function (e) {
+            e.stopPropagation();
+            var model = $(this).closest('.llm-model-item').attr('data-model');
             if (model) llmEditModelFunc(model);
         })
         .on('change', '.llm-toggle', function () {
@@ -1153,7 +1155,7 @@
                     + (item.description ? '<div class="mcp-server-detail" style="color:#999">' + escapeHtml(item.description) + '</div>' : '')
                     + (path ? '<div class="mcp-server-detail">' + escapeHtml(path) + '</div>' : '')
                     + '</div><div class="mcp-server-actions">'
-                    + '<button class="mcp-action-btn browse" data-alias="' + escapeAttr(alias) + '" title="查看内容"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>'
+                    + '<button class="mcp-action-btn edit mounts-edit-btn" data-alias="' + escapeAttr(alias) + '" title="编辑"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
                     + '</div></div>';
             });
         }
@@ -1196,15 +1198,15 @@
 
     // 池列表事件委托
     $mountsList
-        .on('click', '.mcp-action-btn.browse', function (e) {
+        .on('click', '.mcp-action-btn.edit.mounts-edit-btn', function (e) {
             e.stopPropagation();
             var alias = $(this).attr('data-alias');
-            loadMountsContent(alias, getMountType(alias));
+            mountsEditPool(alias);
         })
         .on('click', '.mounts-pool-item', function (e) {
             if ($(e.target).closest('.mcp-action-btn').length) return;
             var alias = $(this).attr('data-alias');
-            mountsEditPool(alias);
+            loadMountsContent(alias, getMountType(alias));
         });
 
     // 池内容加载与渲染（按类型分发）
