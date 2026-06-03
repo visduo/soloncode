@@ -825,7 +825,7 @@
         showOpenapiApisView(name + ' - API 列表');
         $openapiApisList.html('<div class="mcp-empty-state"><div class="skills-loading" style="display:block"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg><span>加载中...</span></div></div>');
 
-        $.get('/web/settings/openapi/servers/' + encodeURIComponent(name) + '/apis', function (resp) {
+        $.get('/web/settings/openapi/servers/apis?name=' + encodeURIComponent(name), function (resp) {
             if (resp.code === 200 && resp.data) renderOpenapiApis(resp.data);
             else {
                 $openapiApisList.html('<div class="mcp-empty-state"><div class="mcp-empty-title">' + escapeHtml(resp.message || '加载失败') + '</div></div>');

@@ -1297,9 +1297,8 @@ public class WebSettingsController {
      * 获取指定 OpenApi 服务器的 API 列表及权限状态
      */
     @Get
-    @Mapping("/web/settings/openapi/servers/{name}/apis")
-    public Result openapiServerApis(Context ctx) {
-        String name = ctx.param("name");
+    @Mapping("/web/settings/openapi/servers/apis")
+    public Result openapiServerApis(@Param("name") String name) {
         ApiSource source = settings.getApiServers().get(name);
         if (source == null) {
             return Result.failure("Server not found: " + name);
@@ -1335,44 +1334,19 @@ public class WebSettingsController {
     }
 
     /**
-     * 更新指定 OpenApi 服务器的 API 权限（allowedTools/disallowedTools）
+     * 更新指定 OpenApi 服务器的 API 权限（allowedTools）
      * <p>通过 engine.refreshApiServer 影子交换策略热重载，无需重启。</p>
      */
     @Post
-    @Mapping("/web/settings/openapi/servers/{name}/apis/permissions")
-    public Result openapiServerApisPermissions(@Param("name") String name, @Body String json) {
+    @Mapping("/web/settings/openapi/servers/apis/save")
+    public Result openapiServerApisSave(@Param("name") String name, @Param("allowedTools") String[] allowedTools) {
         ApiSource source = settings.getApiServers().get(name);
         if (source == null) {
             return Result.failure("Server not found: " + name);
         }
 
-        ONode root = ONode.ofJson(json);
-
         // allowedTools
-        if (root.hasKey("allowedTools")) {
-            List<String> allowedTools = new ArrayList<>();
-            ONode arr = root.get("allowedTools");
-            if (arr.isArray()) {
-                for (ONode n : arr.getArray()) {
-                    String v = n.getString();
-                    if (v != null && !v.isEmpty()) allowedTools.add(v);
-                }
-            }
-            source.setAllowedTools(allowedTools);
-        }
-
-        // disallowedTools
-        if (root.hasKey("disallowedTools")) {
-            List<String> disallowedTools = new ArrayList<>();
-            ONode arr = root.get("disallowedTools");
-            if (arr.isArray()) {
-                for (ONode n : arr.getArray()) {
-                    String v = n.getString();
-                    if (v != null && !v.isEmpty()) disallowedTools.add(v);
-                }
-            }
-            source.setDisallowedTools(disallowedTools);
-        }
+        source.setAllowedTools(Arrays.asList(allowedTools));
 
         // 同步到引擎 client 并热重载
         ApiSourceClient client = engine.getApiServer(source.getDocUrl());
