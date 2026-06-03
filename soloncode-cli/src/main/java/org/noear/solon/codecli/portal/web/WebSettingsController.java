@@ -305,63 +305,21 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/llm/models/update")
-    public Result llmModelsUpdate(@Body String json) throws Exception {
-        ONode root = ONode.ofJson(json);
-
-        String originalName = root.get("originalName").getString();
+    public Result llmModelsUpdate(@Param("originalName") String originalName, @Body ChatConfig config) throws Exception {
         if (Assert.isEmpty(originalName)) {
             return Result.failure("originalName is required");
         }
 
         // 先移除旧配置
         engine.removeModel(originalName);
-
-        // 复用 add 逻辑构建新配置
-        String apiUrl = root.get("apiUrl").getString();
-        String apiKey = root.get("apiKey").getString();
-        String model = root.get("model").getString();
-
-        if (Assert.isEmpty(apiUrl) || Assert.isEmpty(model)) {
-            return Result.failure("apiUrl and model are required");
-        }
-
-        String name = root.get("name").getString();
-        if (Assert.isEmpty(name)) {
-            name = model;
-        }
-
-        ChatConfig config = new ChatConfig();
-        config.setName(name);
-        config.setApiUrl(apiUrl);
-        config.setApiKey(apiKey);
-        config.setModel(model);
-
-        String provider = root.get("provider").getString();
-        if (Assert.isNotEmpty(provider)) {
-            config.setProvider(provider);
-        }
-
-        String timeout = root.get("timeout").getString();
-        if (Assert.isNotEmpty(timeout)) {
-            config.setTimeout(java.time.Duration.parse(timeout));
-        }
-        String userAgent = root.get("userAgent").getString();
-        if (Assert.isNotEmpty(userAgent)) {
-            config.setUserAgent(userAgent);
-        }
-        Integer contextLength = root.get("contextLength").getInt();
-        if (contextLength != null && contextLength > 0) {
-            config.setContextLength(contextLength);
-        }
-
         engine.addModel(config);
 
         settings.getModels().removeIf(c -> originalName.equals(c.getNameOrModel()));
         settings.getModels().add(config);
         saveSettings();
 
-        LOG.info("[Settings] Model updated: {} -> {}", originalName, name);
-        return Result.succeed(name);
+        LOG.info("[Settings] Model updated: {} -> {}", originalName, config.getNameOrModel());
+        return Result.succeed(config.getNameOrModel());
     }
 
     /**
