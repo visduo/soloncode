@@ -1186,10 +1186,10 @@
         $('#mountsWriteable').prop('checked', !!item.writeable).prop('disabled', isSystem);
         $('#mountsDescription').val(item.description || '').prop('readOnly', isSystem);
 
-        // 系统挂载：隐藏保存按钮、预设区；非系统：显示删除按钮
+        // 编辑模式：隐藏保存按钮（系统挂载）、预设区；非系统：显示删除按钮
         $mountsSaveBtn.toggle(!isSystem);
         $('#mountsFormActions').toggle(!isSystem);
-        $('#mountsPresetsDivider, .mounts-presets').toggle(!isSystem);
+        $('#mountsPresetsDivider, .mounts-presets').hide(); // 编辑时始终隐藏预设区
 
         // 只读输入控件浅灰底色
         $('#mountsAlias, #mountsPath').addClass('readonly-gray');
@@ -1460,8 +1460,9 @@
             .always(function () { $mountsSaveBtn.prop('disabled', false); });
     });
 
-    // 常见挂载预设按钮 - 点击填充表单（静默，不出浮层）
-    $(document).on('click', '.mounts-preset-btn', function () {
+    // 常见挂载预设按钮 - 仅在添加模式下可用，编辑模式下禁止点击
+    $(document).on('click', '.mounts-preset-btn', function (e) {
+        if (mountsEditAlias) { e.preventDefault(); return; }
         var alias = $(this).data('alias');
         var path = $(this).data('path');
         $('#mountsAlias').val(alias);
