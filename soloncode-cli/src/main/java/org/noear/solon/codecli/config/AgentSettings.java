@@ -6,10 +6,9 @@ import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.snack4.Options;
 import org.noear.solon.ai.chat.ChatConfig;
-import org.noear.solon.ai.harness.HarnessProperties;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
-import org.noear.solon.ai.skills.openapi.ApiSource;
-import org.noear.solon.codecli.config.entity.MountDo;
+import org.noear.solon.ai.talents.mount.MountType;
+import org.noear.solon.ai.talents.openapi.ApiSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,7 +39,7 @@ public class AgentSettings implements Serializable {
     private Map<String, McpServerParameters> mcpServers = new LinkedHashMap<>();
     //api集
     private Map<String, ApiSource> apiServers = new LinkedHashMap<>();
-    //挂载池
+    //挂载
     private Map<String, MountDo> mountPools = new LinkedHashMap<>();
 
     /**
@@ -55,7 +54,13 @@ public class AgentSettings implements Serializable {
      * <p>如果 settings 有数据，以 settings 为准同步到 props；
      * 如果 settings 为空，则从 props 补充到 settings。</p>
      */
-    public void mergeFrom(HarnessProperties props) {
+    public void mergeFrom(AgentProperties props) {
+        if (general.getSessionWindowSize() != null) {
+            props.setSessionWindowSize(general.getSessionWindowSize());
+        } else {
+            general.setSessionWindowSize(props.getSessionWindowSize());
+        }
+
         if (general.getSummaryWindowSize() != null) {
             props.setSummaryWindowSize(general.getSummaryWindowSize());
         } else {
@@ -72,6 +77,24 @@ public class AgentSettings implements Serializable {
             props.setSandboxMode(general.getSandboxMode());
         } else {
             general.setSandboxMode(props.isSandboxMode());
+        }
+
+        if (general.getApiRetries() != null) {
+            props.setApiRetries(general.getApiRetries());
+        } else {
+            general.setApiRetries(props.getApiRetries());
+        }
+
+        if (general.getMcpRetries() != null) {
+            props.setMcpRetries(general.getMcpRetries());
+        } else {
+            general.setMcpRetries(props.getMcpRetries());
+        }
+
+        if (general.getModelRetries() != null) {
+            props.setModelRetries(general.getModelRetries());
+        } else {
+            general.setModelRetries(props.getModelRetries());
         }
 
         //-------------
@@ -98,13 +121,13 @@ public class AgentSettings implements Serializable {
         }
 
         if (this.mountPools.size() > 0) {
-            props.getMountPools().clear();
+            props.getSkillPools().clear();
             for (Map.Entry<String, MountDo> entry : this.mountPools.entrySet()) {
-                props.getMountPools().put(entry.getKey(), entry.getValue().getPath());
+                props.getSkillPools().put(entry.getKey(), entry.getValue().getPath());
             }
         } else {
-            for (Map.Entry<String, String> entry : props.getMountPools().entrySet()) {
-                this.mountPools.put(entry.getKey(), new MountDo(entry.getValue(), true));
+            for (Map.Entry<String, String> entry : props.getSkillPools().entrySet()) {
+                this.mountPools.put(entry.getKey(), new MountDo("", MountType.SKILLS, entry.getValue(), false, true, false));
             }
         }
     }
