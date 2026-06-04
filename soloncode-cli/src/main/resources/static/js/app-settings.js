@@ -1139,6 +1139,7 @@
                     + '<div class="mcp-server-info">'
                     + '<div class="mcp-server-name">' + escapeHtml(alias)
                     + (isSystem ? ' <span class="mounts-system-badge">系统</span>' : '')
+                    + (item.scope === 'workspace' ? ' <span class="mounts-scope-badge scope-workspace">工作区</span>' : ' <span class="mounts-scope-badge scope-user">用户</span>')
                     + (item.writeable ? ' <span class="mounts-writeable-badge">可写</span>' : '')
                     + '</div>'
                     + (item.description ? '<div class="mcp-server-detail" style="color:#999">' + escapeHtml(item.description) + '</div>' : '')
@@ -1172,6 +1173,7 @@
         $('#mountsAlias').val(item.alias || '').prop('readOnly', true);
         $('#mountsPath').val(item.path || '').prop('readOnly', true);
         $('#mountsType').val(item.type || 'SKILLS').prop('disabled', true).addClass('readonly-gray');
+        $('#mountsScope').val(item.scope || 'user').prop('disabled', true).addClass('readonly-gray');
         $('#mountsWriteable').prop('checked', !!item.writeable).prop('disabled', isSystem);
         $('#mountsDescription').val(item.description || '').prop('readOnly', isSystem);
 
@@ -1414,6 +1416,7 @@
         $('#mountsType').val('SKILLS').prop('disabled', false).removeClass('readonly-gray');
         $('#mountsWriteable').prop('checked', false).prop('disabled', false);
         $('#mountsDescription').val('').prop('readOnly', false).removeClass('readonly-gray');
+        $('#mountsScope').val('user').prop('disabled', false).removeClass('readonly-gray');
         $('#mountsFormActions').hide();
         $('#mountsPresetsDivider, .mounts-presets').show();
         $mountsSaveBtn.text('保存').show();
@@ -1437,7 +1440,7 @@
         var url = isEdit ? '/web/settings/mounts/update' : '/web/settings/mounts/add';
         var actionText = isEdit ? '更新' : '添加';
 
-        var bodyObj = { alias: alias, path: path, type: type, writeable: writeable, description: description };
+        var bodyObj = { alias: alias, path: path, type: type, writeable: writeable, description: description, scope: $('#mountsScope').val() || 'user' };
 
         $mountsSaveBtn.prop('disabled', true);
         $.ajax({ url: url, method: 'POST', data: JSON.stringify(bodyObj), contentType: 'application/json', dataType: 'json' })

@@ -1302,6 +1302,15 @@ public class WebSettingsController {
             item.put("writeable", entry.isWriteable());
             item.put("realPath", entry.getRealPath() != null ? entry.getRealPath().toString() : "");
             item.put("description", entry.getDescription());
+
+
+            MountDo mountDo = settings.getMountPools().get(entry.getAlias());
+            if (mountDo == null) {
+                item.put("scope", AgentFlags.SCOPE_GLOBAL);
+            } else {
+                item.put("scope", mountDo.getScope());
+            }
+
             list.add(item);
         }
         return Result.succeed(list);
@@ -1312,7 +1321,7 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/mounts/add")
-    public Result mountsAdd(Context ctx, @Param("description") String description, @Param("alias") String alias, @Param("path") String path, @Param("type") MountType type, @Param("writeable") boolean writeable) {
+    public Result mountsAdd(Context ctx, @Param("description") String description, @Param("alias") String alias, @Param("path") String path, @Param("type") MountType type, @Param("writeable") boolean writeable, @Param("scope") String scope) {
         if (Assert.isEmpty(alias) || Assert.isEmpty(path)) return Result.failure("参数不完整");
         if (!alias.startsWith("@")) return Result.failure("别名必须以 @ 开头");
         if (engine.hasMount(alias)) return Result.failure("别名已存在");
@@ -1321,8 +1330,12 @@ public class WebSettingsController {
             type = MountType.SKILLS;
         }
 
+        if (Assert.isEmpty(scope) || (!AgentFlags.SCOPE_LOCAL.equals(scope))) {
+            scope = AgentFlags.SCOPE_GLOBAL;
+        }
+
         MountDo mountDo = new MountDo(
-                AgentFlags.SCOPE_GLOBAL,
+                scope,
                 description,
                 type,
                 path,
