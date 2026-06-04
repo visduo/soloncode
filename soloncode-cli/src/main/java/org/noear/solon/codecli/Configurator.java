@@ -49,7 +49,9 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -156,6 +158,23 @@ public class Configurator {
         for (Map.Entry<String, LspServerDo> entry : agentSettings.getLspServers().entrySet()) {
             engine.addLspServer(entry.getKey(), entry.getValue());
         }
+
+        //系统级 LSP 服务器（参考 OpenCode / Claude Code 内置列表，仅注册常见语言）
+        addSystemLspServer(engine, agentSettings, "java", Arrays.asList("jdtls", "-data", ".soloncode/lsp/java-workspace"), Arrays.asList(".java"));
+        addSystemLspServer(engine, agentSettings, "typescript", Arrays.asList("typescript-language-server", "--stdio"), Arrays.asList(".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"));
+        addSystemLspServer(engine, agentSettings, "go", Arrays.asList("gopls"), Arrays.asList(".go"));
+        addSystemLspServer(engine, agentSettings, "python", Arrays.asList("pylsp"), Arrays.asList(".py", ".pyi"));
+        addSystemLspServer(engine, agentSettings, "rust", Arrays.asList("rust-analyzer"), Arrays.asList(".rs"));
+        addSystemLspServer(engine, agentSettings, "c-cpp", Arrays.asList("clangd"), Arrays.asList(".c", ".h", ".cpp", ".hpp", ".cc", ".cxx", ".hxx", ".m", ".mm"));
+        addSystemLspServer(engine, agentSettings, "csharp", Arrays.asList("omnisharp", "-lsp"), Arrays.asList(".cs"));
+        addSystemLspServer(engine, agentSettings, "ruby", Arrays.asList("solargraph", "stdio"), Arrays.asList(".rb", ".rake", ".gemspec"));
+        addSystemLspServer(engine, agentSettings, "php", Arrays.asList("intelephense", "--stdio"), Arrays.asList(".php", ".phtml"));
+        addSystemLspServer(engine, agentSettings, "bash", Arrays.asList("bash-language-server", "start"), Arrays.asList(".sh", ".bash", ".zsh", ".ksh"));
+        addSystemLspServer(engine, agentSettings, "lua", Arrays.asList("lua-language-server"), Arrays.asList(".lua"));
+        addSystemLspServer(engine, agentSettings, "dart", Arrays.asList("dart", "language-server", "--protocol=lsp"), Arrays.asList(".dart"));
+        addSystemLspServer(engine, agentSettings, "swift", Arrays.asList("sourcekit-lsp"), Arrays.asList(".swift"));
+        addSystemLspServer(engine, agentSettings, "kotlin", Arrays.asList("kotlin-language-server"), Arrays.asList(".kt", ".kts"));
+        addSystemLspServer(engine, agentSettings, "yaml", Arrays.asList("yaml-language-server", "--stdio"), Arrays.asList(".yaml", ".yml"));
 
         engine.getCommandRegistry().load(Paths.get(AgentProperties.getUserHome(), engine.getHarnessCommands()));
         engine.getCommandRegistry().load(Paths.get(workspace, engine.getHarnessCommands()));
@@ -348,5 +367,28 @@ public class Configurator {
             String url = "ws://localhost:" + Solon.cfg().serverPort() + "/acp";
             cliShell.printWelcome("Acp interface: " + url);
         }
+    }
+
+    /**
+     * 添加系统级 LSP 服务器（如果用户未自定义同名配置，则注册）
+     */
+    private void addSystemLspServer(HarnessEngine engine, AgentSettings settings, String name, List<String> command, List<String> extensions) {
+        // 如果用户已自定义同名配置，跳过系统级注册
+        if (settings.getLspServers().containsKey(name)) {
+            return;
+        }
+
+        LspServerDo lspServer = new LspServerDo();
+        lspServer.setCommand(command);
+        lspServer.setExtensions(extensions);
+        lspServer.setEnabled(false); // 系统级默认禁用，用户按需启用
+        lspServer.setPrimary(true); // 标记为系统级
+        lspServer.setScope(AgentFlags.SCOPE_GLOBAL);
+
+        // 注册到引擎（不启用不会真正加载，仅作为可选项）
+        engine.addLspServer(name, lspServer);
+
+        // 同步到 settings 以便前端展示
+        settings.getLspServers().put(name, lspServer);
     }
 }

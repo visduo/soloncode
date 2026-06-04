@@ -1251,6 +1251,7 @@ public class WebSettingsController {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("name", name);
             item.put("enabled", params.isEnabled());
+            item.put("primary", params.isPrimary());
             item.put("scope", params.getScope() != null ? params.getScope() : AgentFlags.SCOPE_GLOBAL);
             item.put("command", params.getCommand());
             item.put("extensions", params.getExtensions());
@@ -1434,6 +1435,10 @@ public class WebSettingsController {
         String name = root.get("name").getString();
         if (Assert.isEmpty(name)) {
             return Result.failure("name is required");
+        }
+        LspServerDo params = settings.getLspServers().get(name);
+        if (params != null && params.isPrimary()) {
+            return Result.failure("系统级 LSP 服务器不可删除");
         }
         settings.getLspServers().remove(name);
         saveSettings();
