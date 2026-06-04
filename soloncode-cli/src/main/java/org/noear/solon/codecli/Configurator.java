@@ -116,7 +116,6 @@ public class Configurator {
                 .sandboxMode(props.isSandboxMode())
                 .subagentEnabled(props.isSubagentEnabled())
                 .bashAsyncEnabled(props.isBashAsyncEnabled())
-                .lspEnabled(props.isLspEnabled())
                 .hitlEnabled(props.isHitlEnabled())
                 .apiRetries(props.getApiRetries())
                 .modelRetries(props.getModelRetries())
@@ -184,6 +183,8 @@ public class Configurator {
         engine.getCommandRegistry().register(new ResumeCommand());
         engine.getCommandRegistry().register(new RewindCommand());
         engine.getCommandRegistry().register(new ModelCommand());
+
+        engine.getLspTalent().setEnabled(props.isLspEnabled());
 
         // loop scheduler
         this.loopScheduler = new LoopScheduler();
@@ -381,8 +382,7 @@ public class Configurator {
         LspServerDo lspServer = new LspServerDo();
         lspServer.setCommand(command);
         lspServer.setExtensions(extensions);
-        lspServer.setEnabled(false); // 系统级默认禁用，用户按需启用
-        lspServer.setPrimary(true); // 标记为系统级
+        lspServer.setEnabled(false); // 默认禁用，用户按需启用
         lspServer.setScope(AgentFlags.SCOPE_GLOBAL);
 
         // 注册到引擎（不启用不会真正加载，仅作为可选项）

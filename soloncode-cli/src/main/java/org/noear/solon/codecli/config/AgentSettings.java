@@ -96,6 +96,36 @@ public class AgentSettings implements Serializable {
             general.setModelRetries(props.getModelRetries());
         }
 
+        if (general.getBashAsyncEnabled() != null) {
+            props.setBashAsyncEnabled(general.getBashAsyncEnabled());
+        } else {
+            general.setBashAsyncEnabled(props.isBashAsyncEnabled());
+        }
+
+        if (general.getMemoryEnabled() != null) {
+            props.setMemoryEnabled(general.getMemoryEnabled());
+        } else {
+            general.setMemoryEnabled(props.isMemoryEnabled());
+        }
+
+        if (general.getMcpEnabled() != null) {
+            props.setMcpEnabled(general.getMcpEnabled());
+        } else {
+            general.setMcpEnabled(props.isMcpEnabled());
+        }
+
+        if (general.getOpenApiEnabled() != null) {
+            props.setOpenApiEnabled(general.getOpenApiEnabled());
+        } else {
+            general.setOpenApiEnabled(props.isOpenApiEnabled());
+        }
+
+        if (general.getLspEnabled() != null) {
+            props.setLspEnabled(general.getLspEnabled());
+        } else {
+            general.setLspEnabled(props.isLspEnabled());
+        }
+
         //-------------
 
         if (this.models.size() > 0) {
@@ -117,24 +147,6 @@ public class AgentSettings implements Serializable {
             props.getApiServers().putAll(this.apiServers);
         } else {
             this.apiServers.putAll(props.getApiServers());
-        }
-
-        if (general.getBashAsyncEnabled() != null) {
-            props.setBashAsyncEnabled(general.getBashAsyncEnabled());
-        } else {
-            general.setBashAsyncEnabled(props.isBashAsyncEnabled());
-        }
-
-        if (general.getLspEnabled() != null) {
-            props.setLspEnabled(general.getLspEnabled());
-        } else {
-            general.setLspEnabled(props.isLspEnabled());
-        }
-
-        if (general.getMemoryEnabled() != null) {
-            props.setMemoryEnabled(general.getMemoryEnabled());
-        } else {
-            general.setMemoryEnabled(props.isMemoryEnabled());
         }
 
         if (this.mountPools.size() > 0) {

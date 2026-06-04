@@ -163,8 +163,9 @@ public class WebSettingsController {
             engine.setApiRetries(tmp.getApiRetries());
 
             engine.setBashAsyncEnabled(tmp.getBashAsyncEnabled());
-            engine.setLspEnabled(tmp.getLspEnabled());
             engine.setMemoryEnabled(tmp.getMemoryEnabled());
+
+            engine.getLspTalent().setEnabled(tmp.getLspEnabled());
         }
 
         saveSettings();
@@ -1251,8 +1252,7 @@ public class WebSettingsController {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("name", name);
             item.put("enabled", params.isEnabled());
-            item.put("primary", params.isPrimary());
-            item.put("scope", params.getScope() != null ? params.getScope() : AgentFlags.SCOPE_GLOBAL);
+item.put("scope", params.getScope() != null ? params.getScope() : AgentFlags.SCOPE_GLOBAL);
             item.put("command", params.getCommand());
             item.put("extensions", params.getExtensions());
             if (params.getEnv() != null && !params.getEnv().isEmpty()) {
@@ -1437,9 +1437,6 @@ public class WebSettingsController {
             return Result.failure("name is required");
         }
         LspServerDo params = settings.getLspServers().get(name);
-        if (params != null && params.isPrimary()) {
-            return Result.failure("系统级 LSP 服务器不可删除");
-        }
         settings.getLspServers().remove(name);
         saveSettings();
         engine.removeLspServer(name);

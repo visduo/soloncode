@@ -1150,11 +1150,9 @@
                 var command = (item.command && item.command.length > 0) ? item.command.join(' ') : '';
                 var extensions = (item.extensions && item.extensions.length > 0) ? item.extensions.join(', ') : '';
                 var enabled = item.enabled !== false;
-                var isPrimary = !!item.primary;
                 var badges = '<span style="font-size:10px;color:var(--text-secondary);font-weight:400;">[lsp]</span>';
-                if (isPrimary) badges += ' <span style="font-size:10px;background:var(--accent);color:#fff;padding:1px 5px;border-radius:3px;font-weight:500;">系统</span>';
                 if (item.scope === 'workspace') badges += ' <span class="mounts-scope-badge scope-workspace">工作区</span>';
-                html += '<div class="mcp-server-item' + (isPrimary ? ' system-item' : '') + '" data-name="' + escapeAttr(name) + '">'
+                html += '<div class="mcp-server-item" data-name="' + escapeAttr(name) + '">'
                     + '<div class="mcp-server-icon">L</div>'
                     + '<div class="mcp-server-info">'
                     + '<div class="mcp-server-name">' + escapeHtml(name) + ' ' + badges + '</div>'
@@ -1231,14 +1229,9 @@
         lspEditName = name;
         showLspFormView('编辑服务器', true);
         $lspSaveBtn.text('更新');
-        $('#lspName').val(server.name).prop('readOnly', true);
-        $('#lspScope').val(server.scope || 'user').prop('disabled', true).addClass('readonly-gray');
-        // 系统级条目隐藏删除按钮
-        if (server.primary) {
-            $('#lspFormDeleteBtn').hide();
-        } else {
-            $('#lspFormDeleteBtn').show();
-        }
+        $('#lspName').val(server.name).prop('readOnly', true).addClass('readonly-gray');
+        $('#lspScope').val(server.scope || 'user');
+        $('#lspFormDeleteBtn').show();
         fillLspForm(server);
     }
 
