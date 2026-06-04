@@ -338,8 +338,8 @@ public class WebStreamBuilder {
 
                 if (thought.getTrace().getAgentName().equals(agentSelectedTmp)) {
                     // 说明是源代理（说明是最终结果）
-                    StringBuilder traceInfo = getTraceInfo(thought.getTrace());
-                    replyToBoundChannel(sessionId, resultContent + traceInfo, true);
+                    //StringBuilder traceInfo = getTraceInfo(thought.getTrace());
+                    replyToBoundChannel(sessionId, resultContent, true);//+ traceInfo, true);
                 } else {
                     // 说明是次代理
                     replyToBoundChannel(sessionId, resultContent, false);
@@ -361,21 +361,28 @@ public class WebStreamBuilder {
      *
      * <p>当 Agent 流结束时触发。若检测到异常终止，将异常内容连同追踪信息
      * 同步转发到所有已绑定的 IM 通道。无论是否异常，都将追踪信息
-     * （模型名称、token 数、耗时）作为文本 WebChunk 输出到 Web 端。</p>
+     * （模型名称、token 数、耗时）以结构化 trace 类型输出到 Web 端。</p>
      *
      * @param session Agent 会话，用于获取会话ID以进行 IM 通道转发
      * @param react   ReAct 最终汇总 chunk，包含追踪信息和可能的异常内容
-     * @return 包含追踪信息的文本 WebChunk
+     * @return 包含追踪信息的 trace 类型 WebChunk
      */
     private WebChunk onFinalChunk(AgentSession session, ReActChunk react) {
-        StringBuilder traceInfo = getTraceInfo(react.getTrace());
+        ReActTrace trace = react.getTrace();
 
         if (react.isAbnormal()) {
-            // 向所有已绑定的 IM 通道回复异常
-            replyToBoundChannel(session.getSessionId(), react.getContent() + traceInfo, true);
+            // IM 通道仍使用字符串格式的追踪信息
+            //StringBuilder traceInfo = getTraceInfo(trace);
+            replyToBoundChannel(session.getSessionId(), react.getContent(), true); //+ traceInfo, true);
         }
 
-        return WebChunk.ofText(traceInfo.toString());
+        // 结构化 trace 数据，供前端独立渲染
+        String model = trace.getOptions().getChatModel().getNameOrModel();
+        Long totalTokens = trace.getMetrics() != null ? trace.getMetrics().getTotalTokens() : null;
+        long startMs = trace.getBeginTimeMs();
+        Long elapsedSeconds = startMs > 0 ? Duration.ofMillis(System.currentTimeMillis() - startMs).getSeconds() : null;
+
+        return WebChunk.ofTrace(model, totalTokens, elapsedSeconds);
     }
 
     /**
