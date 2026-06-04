@@ -149,14 +149,6 @@ function onWebChunk(sess, chunk) {
     } catch (e) {}
 }
 
-function formatElapsed(ms) {
-    var sec = Math.floor(ms / 1000);
-    if (sec < 60) return sec + 's';
-    var min = Math.floor(sec / 60);
-    var remainSec = sec % 60;
-    return min + 'm ' + remainSec + 's';
-}
-
 function finishStream(sess) {
     var wasStreaming = sess.isStreaming;
     sess.isStreaming = false;
@@ -195,23 +187,8 @@ function finishStream(sess) {
     setAssistantTime(sess, sess._lastCreatedAt || Date.now());
     sess._lastCreatedAt = null;
 
-    // 显示 AI 响应耗时
+    // 清除客户端计时（已由 trace 类型的服务端耗时替代）
     if (sess.messageStartTime) {
-        var elapsedMs = Date.now() - sess.messageStartTime;
-        var elapsedText = formatElapsed(elapsedMs);
-        var $row = sess.currentBubbleEl ? $(sess.currentBubbleEl).closest('.msg-row') : $();
-        if ($row.length) {
-            var $bubble = $row.find('.msg-bubble');
-            if ($bubble.length) {
-                var $elapsedEl = $('<div>').addClass('msg-elapsed').text('用时 ' + elapsedText);
-                var $actionsEl = $bubble.find('.msg-actions');
-                if ($actionsEl.length) {
-                    $elapsedEl.insertBefore($actionsEl);
-                } else {
-                    $bubble.append($elapsedEl);
-                }
-            }
-        }
         sess.messageStartTime = null;
     }
 
