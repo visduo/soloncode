@@ -576,11 +576,7 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/mcp/servers/toggle")
-    public Result mcpServersToggle(@Body String json) throws Exception {
-        ONode root = ONode.ofJson(json);
-        String name = root.get("name").getString();
-        boolean enabled = root.get("enabled").getBoolean();
-
+    public Result mcpServersToggle(@Param("name") String name, @Param("enabled") boolean enabled) throws Exception {
         if (Assert.isEmpty(name)) {
             return Result.failure("name is required");
         }
@@ -588,6 +584,8 @@ public class WebSettingsController {
         McpServerParameters params = settings.getMcpServers().get(name);
         if (params == null) {
             return Result.failure("Server not found: " + name);
+        } else {
+            params.setEnabled(enabled);
         }
 
         if (enabled) {
@@ -597,8 +595,6 @@ public class WebSettingsController {
             // 停用：从引擎移除
             engine.removeMcpServer(name);
         }
-
-        params.setEnabled(enabled);
 
         saveSettings();
         LOG.info("[Settings] MCP server toggled: {} -> {}", name, enabled);
@@ -1034,11 +1030,7 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/openapi/servers/toggle")
-    public Result openapiServersToggle(Context ctx) throws Exception {
-        ONode root = ONode.ofJson(ctx.body());
-        String name = root.get("name").getString();
-        boolean enabled = root.get("enabled").getBoolean();
-
+    public Result openapiServersToggle(@Param("name") String name, @Param("enabled") Boolean enabled) throws Exception {
         if (Assert.isEmpty(name)) {
             return Result.failure("name is required");
         }
@@ -1046,6 +1038,8 @@ public class WebSettingsController {
         ApiSource source = settings.getApiServers().get(name);
         if (source == null) {
             return Result.failure("Server not found: " + name);
+        } else {
+            source.setEnabled(enabled);
         }
 
         if (enabled) {
@@ -1055,8 +1049,6 @@ public class WebSettingsController {
             // 停用：从引擎移除
             engine.removeApiServer(source.getDocUrl());
         }
-
-        source.setEnabled(enabled);
 
         saveSettings();
         LOG.info("[Settings] OpenApi server toggled: {} -> {}", name, enabled);
@@ -1451,10 +1443,7 @@ item.put("scope", params.getScope() != null ? params.getScope() : AgentFlags.SCO
      */
     @Post
     @Mapping("/web/settings/lsp/servers/toggle")
-    public Result lspServersToggle(@Body String json) throws Exception {
-        ONode root = ONode.ofJson(json);
-        String name = root.get("name").getString();
-        boolean enabled = root.get("enabled").getBoolean();
+    public Result lspServersToggle(@Param("name") String name, @Param("enabled") Boolean enabled) throws Exception {
         if (Assert.isEmpty(name)) {
             return Result.failure("name is required");
         }
@@ -1462,6 +1451,8 @@ item.put("scope", params.getScope() != null ? params.getScope() : AgentFlags.SCO
         LspServerParameters params = settings.getLspServers().get(name);
         if (params == null) {
             return Result.failure("Server not found: " + name);
+        } else {
+            params.setEnabled(enabled);
         }
 
         if (enabled) {
@@ -1469,7 +1460,6 @@ item.put("scope", params.getScope() != null ? params.getScope() : AgentFlags.SCO
         } else {
             engine.removeLspServer(name);
         }
-        params.setEnabled(enabled);
 
         saveSettings();
         LOG.info("[Settings] LSP server toggled: {} -> {}", name, enabled);
@@ -1655,11 +1645,7 @@ item.put("scope", params.getScope() != null ? params.getScope() : AgentFlags.SCO
      */
     @Post
     @Mapping("/web/settings/mounts/toggle")
-    public Result mountsToggle(@Body String json) {
-        ONode root = ONode.ofJson(json);
-        String alias = root.get("alias").getString();
-        boolean enabled = root.get("enabled").getBoolean();
-
+    public Result mountsToggle(@Param("alias") String alias, @Param("enabled") Boolean enabled) {
         if (Assert.isEmpty(alias)) {
             return Result.failure("alias is required");
         }
@@ -1667,6 +1653,8 @@ item.put("scope", params.getScope() != null ? params.getScope() : AgentFlags.SCO
         MountDir mountDir = engine.getMount(alias);
         if (mountDir == null) {
             return Result.failure("挂载池不存在: " + alias);
+        } else {
+            mountDir.setEnabled(enabled);
         }
 
         // 更新配置
@@ -1674,9 +1662,6 @@ item.put("scope", params.getScope() != null ? params.getScope() : AgentFlags.SCO
         if (mountDo != null) {
             mountDo.setEnabled(enabled);
         }
-
-        // 更新运行时
-        mountDir.setEnabled(enabled);
 
         saveSettings();
         LOG.info("[Settings] Mount toggled: {} -> {}", alias, enabled);
