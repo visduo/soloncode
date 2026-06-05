@@ -1153,7 +1153,7 @@
                 var installed = item.installed !== false;
                 var badges = '<span style="font-size:10px;color:var(--text-secondary);font-weight:400;">[lsp]</span>';
                 if (item.scope === 'workspace') badges += ' <span class="mounts-scope-badge scope-workspace">工作区</span>';
-                if (!installed) badges += ' <span style="font-size:10px;color:#e8a735;font-weight:500;background:rgba(232,167,53,0.12);padding:1px 6px;border-radius:3px;">未安装</span>';
+                if (installed) badges += ' <span class="skill-installed-badge">已安装</span>';
                 html += '<div class="mcp-server-item" data-name="' + escapeAttr(name) + '">'
                     + '<div class="mcp-server-icon">L</div>'
                     + '<div class="mcp-server-info">'
