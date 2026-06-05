@@ -2,6 +2,9 @@
 ### v2026.6.5
 
 * 添加 soloncode web 专门的 trace 显示块
+* 添加 soloncode web lsp 管理能力
+* 添加 soloncode web 更多通用设置
+* 添加 soloncode web 设置 “作用域” 权念（有效结合，全局设置和工作区设置）
 * 优化 soloncode web 代码语法高亮看不清的问题（改成了浅底色）
 * 优化 soloncode web 挂载点编辑逻辑
 * 修复 soloncode web 历史对话里没有代码语法高亮的问题
