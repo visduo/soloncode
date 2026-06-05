@@ -8,6 +8,7 @@
 * 优化 soloncode web 设置 LSP 样式
 * 优化 soloncode web 设置 挂截 样式
 * 优化 soloncode OpenAI Responses 接口兼容性
+* 优化 soloncode 压缩算法
 * 细节优化
 
 ### v2026.6.5
