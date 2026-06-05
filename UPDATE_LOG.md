@@ -1,4 +1,15 @@
 
+
+### v2026.6.6
+
+* 添加 soloncode web 文件树 tooltip
+* 优化 soloncode web 设置添加模型时，对话框架模型同步刷新
+* 优化 soloncode web 设置作用域选择框样式
+* 优化 soloncode web 设置 LSP 样式
+* 优化 soloncode web 设置 挂截 样式
+* 优化 soloncode OpenAI Responses 接口兼容性
+* 细节优化
+
 ### v2026.6.5
 
 * 添加 soloncode web 专门的 trace 显示块
