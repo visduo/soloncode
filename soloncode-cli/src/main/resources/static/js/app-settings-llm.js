@@ -291,6 +291,28 @@
         catch (e) { showToast('默认选项 JSON 格式无效', 'error'); }
     });
 
+    // LLM Provider 切换时更新 API 地址 placeholder
+    $('#llmProvider').on('change', function () {
+        var selectedValue = $(this).val();
+        var $ApiUrl = $('#llmApiUrl');
+        switch (selectedValue) {
+            case 'openai':
+                $ApiUrl.attr('placeholder', 'https://api.deepseek.com');
+                break;
+            case 'openai-responses':
+                $ApiUrl.attr('placeholder', 'https://api.openai.com');
+                break;
+            case 'anthropic':
+                $ApiUrl.attr('placeholder', 'https://api.deepseek.com/anthropic');
+                break;
+            case 'ollama':
+                $ApiUrl.attr('placeholder', 'http://127.0.0.1:11434/api/chat');
+                break;
+            default:
+                $ApiUrl.attr('placeholder', 'https://api.deepseek.com/chat/completions');
+        }
+    });
+
     // LLM API Key 显示切换
     $('#llmApiKeyToggle').on('click', function () {
         var $input = $('#llmApiKey');
