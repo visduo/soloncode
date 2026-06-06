@@ -522,7 +522,7 @@
                                     <label>接口地址规范</label>
                                     <select id="llmProvider">
                                         <option value="">FullUrl / 完整地址（自动检测）</option>
-                                        <option value="openai">OpenAI Completions BaseUrl / 兼容接口</option>
+                                        <option value="openai">OpenAI Chat Completions BaseUrl / 兼容接口</option>
                                         <option value="openai-responses">OpenAI Responses BaseUrl / 兼容接口</option>
                                         <option value="anthropic">Anthropic BaseUrl / 兼容接口</option>
                                         <option value="ollama">Ollama BaseUrl / 兼容接口</option>
@@ -530,7 +530,7 @@
                                 </div>
                                 <div class="form-group">
                                     <label>接口地址 <span class="required">*</span></label>
-                                    <input type="text" id="llmApiUrl" placeholder="https://api.openai.com/v1"/>
+                                    <input type="text" id="llmApiUrl" placeholder="https://api.deepseek.com/chat/completions"/>
                                 </div>
                                 <div class="form-group">
                                     <label>接口密钥</label>
@@ -544,7 +544,7 @@
                                 <div class="form-row-3col">
                                     <div class="form-group">
                                         <label>模型 <span class="required">*</span></label>
-                                        <input type="text" id="llmModel" />
+                                        <input type="text" id="llmModel" placeholder="deepseek-v4-flash" />
                                     </div>
                                     <div class="form-group">
                                         <label>超时时间（可选）</label>
@@ -560,7 +560,7 @@
                                         <label>默认选项（可选，JSON 格式）</label>
                                         <button type="button" class="settings-mini-btn" id="llmFormatJsonBtn">格式化 JSON</button>
                                     </div>
-                                    <textarea id="llmDefaultOptions" rows="4" placeholder='{"temperature":0.2,"top_p":0.5,"enable_thinking":false}'></textarea>
+                                    <textarea id="llmDefaultOptions" rows="4" placeholder='{"temperature":0.2,"top_p":0.5,"thinking":{"type":"enabled"},"reasoning_effort":"high"}}'></textarea>
                                 </div>
                                 <div class="form-actions form-actions-end">
                                     <div class="settings-inline-actions">
