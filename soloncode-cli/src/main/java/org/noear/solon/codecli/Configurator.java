@@ -278,10 +278,10 @@ public class Configurator {
         streamBuilder.bind(webChannel.getDingTalkLink());
         BeanWrap channelBean = Solon.context().wrapAndPut(WebChannel.class, webChannel);
         Solon.app().router().add(channelBean);
-        RunUtil.async((Runnable) webChannel);
+        RunUtil.async(webChannel);
 
         //settings controller
-        WebSettingsController settingsController = new WebSettingsController(agentRuntime, agentSettings);
+        WebSettingsController settingsController = new WebSettingsController(agentRuntime, agentProps, agentSettings);
         BeanWrap webSettingsController = Solon.context().wrapAndPut(WebSettingsController.class, settingsController);
         Solon.app().router().add(webSettingsController);
 
@@ -298,7 +298,7 @@ public class Configurator {
         BeanWrap webController = Solon.context().wrapAndPut(WebController.class, new WebController(agentRuntime, webGate, loopScheduler));
         Solon.app().router().add(webController);
 
-        WebSettingsController settingsController = new WebSettingsController(agentRuntime, agentSettings);
+        WebSettingsController settingsController = new WebSettingsController(agentRuntime, agentProps, agentSettings);
         BeanWrap webSettingsController = Solon.context().wrapAndPut(WebSettingsController.class, settingsController);
         Solon.app().router().add(webSettingsController);
 

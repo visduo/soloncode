@@ -33,6 +33,7 @@ import org.noear.solon.ai.talents.gateway.openapi.ApiTool;
 import org.noear.solon.ai.util.CmdUtil;
 import org.noear.solon.annotation.*;
 import org.noear.solon.codecli.config.AgentFlags;
+import org.noear.solon.codecli.config.AgentProperties;
 import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.codecli.config.GeneralSettings;
 import org.noear.solon.codecli.config.entity.ApiSourceDo;
@@ -97,6 +98,8 @@ public class WebSettingsController {
      */
     private final MarketManager marketManager;
 
+    private final AgentProperties properties;
+
     /**
      * 统一配置管理器，管理 LLM 模型、MCP 服务器、OpenApi 服务器的持久化数据
      */
@@ -108,8 +111,8 @@ public class WebSettingsController {
      * @param engine   AI Agent 执行引擎
      * @param settings 统一配置管理器（由 App.initAgentSettings 创建并注册到容器）
      */
-    public WebSettingsController(HarnessEngine engine, AgentSettings settings) {
-        this(engine, settings, new MarketManager());
+    public WebSettingsController(HarnessEngine engine, AgentProperties properties, AgentSettings settings) {
+        this(engine, properties, settings, new MarketManager());
     }
 
     /**
@@ -119,8 +122,9 @@ public class WebSettingsController {
      * @param settings      统一配置管理器
      * @param marketManager 技能市场管理器
      */
-    public WebSettingsController(HarnessEngine engine, AgentSettings settings, MarketManager marketManager) {
+    public WebSettingsController(HarnessEngine engine, AgentProperties properties, AgentSettings settings, MarketManager marketManager) {
         this.engine = engine;
+        this.properties = properties;
         this.settings = settings;
         this.marketManager = marketManager;
     }
@@ -154,6 +158,9 @@ public class WebSettingsController {
         GeneralSettings tmp = ONode.ofJson(json).toBean(GeneralSettings.class);
         if (tmp != null) {
             settings.setGeneral(tmp);
+            if(tmp.getMemoryIsolation() != null) {
+                properties.setMemoryIsolation(tmp.getMemoryIsolation());
+            }
 
             engine.setCompressionThreshold(tmp.getSummaryWindowSize(), tmp.getSummaryWindowToken());
             engine.setSandboxMode(tmp.getSandboxMode());
@@ -165,6 +172,7 @@ public class WebSettingsController {
 
             engine.setBashAsyncEnabled(tmp.getBashAsyncEnabled());
             engine.setMemoryEnabled(tmp.getMemoryEnabled());
+
 
             engine.getMcpGatewayTalent().setEnabled(tmp.getMcpEnabled());
             engine.getOpenApiGatewayTalent().setEnabled(tmp.getOpenApiEnabled());

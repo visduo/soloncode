@@ -76,7 +76,7 @@ public class AgentProperties implements Serializable {
     private int summaryWindowToken = 30000;
     private String summaryModel; //摘要大模型
 
-    private boolean memoryIsolation = false;
+    private boolean memoryIsolation = true;
     private boolean memoryEnabled = true;
 
     private boolean sandboxMode = true;

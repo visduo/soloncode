@@ -31,6 +31,8 @@ public class GeneralSettings implements Serializable {
     private Boolean bashAsyncEnabled;
     //启用心智记忆（跨会话长期记忆）
     private Boolean memoryEnabled;
+    //启用心智记忆隔离（按工作区隔离长期记忆）
+    private Boolean memoryIsolation;
 
 
     private Boolean mcpEnabled;

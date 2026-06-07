@@ -108,6 +108,12 @@ public class AgentSettings implements Serializable {
             general.setMemoryEnabled(props.isMemoryEnabled());
         }
 
+        if (general.getMemoryIsolation() != null) {
+            props.setMemoryIsolation(general.getMemoryIsolation());
+        } else {
+            general.setMemoryIsolation(props.isMemoryIsolation());
+        }
+
         if (general.getMcpEnabled() != null) {
             props.setMcpEnabled(general.getMcpEnabled());
         } else {

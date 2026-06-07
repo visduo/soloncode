@@ -26,6 +26,7 @@
                 $('#generalMcpRetries').val(d.mcpRetries != null ? d.mcpRetries : '');
                 $('#generalModelRetries').val(d.modelRetries != null ? d.modelRetries : '');
                 $('#generalMemoryEnabled').prop('checked', d.memoryEnabled !== false);
+                $('#generalMemoryIsolation').prop('checked', d.memoryIsolation !== false);
                 $('#generalMcpEnabled').prop('checked', d.mcpEnabled !== false);
                 $('#generalOpenApiEnabled').prop('checked', d.openApiEnabled !== false);
                 $('#generalBashAsyncEnabled').prop('checked', !!d.bashAsyncEnabled);
@@ -45,6 +46,7 @@
             mcpRetries: $('#generalMcpRetries').val().trim() ? parseInt($('#generalMcpRetries').val().trim(), 10) : null,
             modelRetries: $('#generalModelRetries').val().trim() ? parseInt($('#generalModelRetries').val().trim(), 10) : null,
             memoryEnabled: $('#generalMemoryEnabled').is(':checked'),
+            memoryIsolation: $('#generalMemoryIsolation').is(':checked'),
             mcpEnabled: $('#generalMcpEnabled').is(':checked'),
             openApiEnabled: $('#generalOpenApiEnabled').is(':checked'),
             bashAsyncEnabled: $('#generalBashAsyncEnabled').is(':checked'),
