@@ -163,13 +163,13 @@ public class WebSettingsController {
             }
 
             engine.setCompressionThreshold(tmp.getSummaryWindowSize(), tmp.getSummaryWindowToken());
-            engine.setSandboxMode(tmp.getSandboxMode());
             engine.setSessionWindowSize(tmp.getSessionWindowSize());
 
             engine.setModelRetries(tmp.getModelRetries());
             engine.setMcpRetries(tmp.getMcpRetries());
             engine.setApiRetries(tmp.getApiRetries());
 
+            engine.setSandboxEnabled(tmp.getSandboxMode());
             engine.setBashAsyncEnabled(tmp.getBashAsyncEnabled());
             engine.setMemoryEnabled(tmp.getMemoryEnabled());
 
