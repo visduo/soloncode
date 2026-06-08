@@ -1,6 +1,7 @@
 
 ### v2026.6.8
 
+* 新增 soloncode 通过提示词自动添加 config 的支持
 * 优化 soloncode web 设置体验细节
 * 重构 soloncode 沙盒模式
 * 修复 soloncode 因 mcp, openapi 配置错误而无法启动的问题
