@@ -3,6 +3,8 @@
 
 * 优化 soloncode web 设置体验细节
 * 重构 soloncode 沙盒模式
+* 修复 soloncode 因 mcp, openapi 配置错误而无法启动的问题
+* 细节优化
 
 ### v2026.6.6
 
