@@ -16,10 +16,12 @@
 package org.noear.solon.codecli.portal.web;
 
 import org.noear.snack4.ONode;
+import org.noear.snack4.codec.TypeRef;
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.chat.tool.FunctionTool;
+import org.noear.solon.ai.mcp.McpChannel;
 import org.noear.solon.ai.mcp.client.McpClientProvider;
 import org.noear.solon.ai.mcp.client.McpClientProviders;
 import org.noear.solon.ai.mcp.client.McpServerParameters;
@@ -632,29 +634,18 @@ public class WebSettingsController {
 
                 // 使用 McpClientProvider 进行真实的 MCP 初始化连接测试
                 McpClientProvider.Builder builder = McpClientProvider.builder()
-                        .channel(org.noear.solon.ai.mcp.McpChannel.STDIO)
+                        .channel(McpChannel.STDIO)
                         .command(command);
 
                 // 设置参数
-                ONode argsNode = root.get("args");
-                if (argsNode != null && argsNode.isArray()) {
-                    List<String> argsList = new ArrayList<>();
-                    for (ONode a : argsNode.getArray()) {
-                        String arg = a.getString();
-                        if (arg != null && !arg.isEmpty()) argsList.add(arg);
-                    }
-                    if (!argsList.isEmpty()) {
-                        builder.args(argsList);
-                    }
+                List<String> argsList = root.get("args").toBean(TypeRef.listOf(String.class));
+                if(Assert.isNotEmpty(argsList)){
+                    builder.args(argsList);
                 }
 
                 // 设置环境变量
-                ONode envNode = root.get("env");
-                if (envNode != null && envNode.isObject() && envNode.getObject().size() > 0) {
-                    Map<String, String> envMap = new LinkedHashMap<>();
-                    for (Map.Entry<String, ONode> entry : envNode.getObject().entrySet()) {
-                        envMap.put(entry.getKey(), entry.getValue().getString());
-                    }
+                Map<String, String> envMap = root.get("env").toBean(TypeRef.mapOf(String.class, String.class));
+                if(Assert.isNotEmpty(envMap)){
                     builder.env(envMap);
                 }
 
@@ -675,20 +666,16 @@ public class WebSettingsController {
 
                 // 使用 McpClientProvider 进行真实的 MCP 初始化连接测试
                 String channel = "sse".equals(type)
-                        ? org.noear.solon.ai.mcp.McpChannel.SSE
-                        : org.noear.solon.ai.mcp.McpChannel.STREAMABLE;
+                        ? McpChannel.SSE
+                        : McpChannel.STREAMABLE;
 
                 McpClientProvider.Builder builder = McpClientProvider.builder()
                         .channel(channel)
                         .url(url);
 
                 // 设置自定义 headers
-                ONode headersNode = root.get("headers");
-                if (headersNode != null && headersNode.isObject()) {
-                    Map<String, String> headersMap = new LinkedHashMap<>();
-                    for (Map.Entry<String, ONode> entry : headersNode.getObject().entrySet()) {
-                        headersMap.put(entry.getKey(), entry.getValue().getString());
-                    }
+                Map<String, String> headersMap = root.get("headers").toBean(TypeRef.mapOf(String.class, String.class));
+                if(Assert.isNotEmpty(headersMap)){
                     builder.headers(headersMap);
                 }
 
