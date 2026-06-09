@@ -635,3 +635,48 @@ select[disabled] {
 /* ===== Settings common overrides ===== */
 .mcp-tool-item { cursor: default; }
 .mounts-skill-item { cursor: pointer; }
+
+/* LLM 默认模型方块勾选框 */
+.llm-default-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+    user-select: none;
+}
+.llm-default-checkbox input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.llm-default-checkmark {
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid var(--border-color);
+    border-radius: 3px;
+    background: var(--bg-primary);
+    transition: all 0.2s;
+    position: relative;
+    flex-shrink: 0;
+}
+.llm-default-checkbox:hover .llm-default-checkmark {
+    border-color: var(--accent);
+}
+.llm-default-checkbox input:checked + .llm-default-checkmark {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.llm-default-checkbox input:checked + .llm-default-checkmark::after {
+    content: '';
+    position: absolute;
+    left: 4.5px;
+    top: 1.5px;
+    width: 5px;
+    height: 9px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}

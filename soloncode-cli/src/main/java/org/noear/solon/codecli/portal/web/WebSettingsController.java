@@ -265,6 +265,7 @@ public class WebSettingsController {
         if (config.getContextLength() > 0) {
             item.put("contextLength", String.valueOf(config.getContextLength()));
         }
+        item.put("isDefault", settings.getDefaultModel() != null && settings.getDefaultModel().equals(config.getNameOrModel()));
 
         return Result.succeed(item);
     }
@@ -308,9 +309,9 @@ public class WebSettingsController {
 
         engine.addModel(config);
 
-//        if(isDefaultModel){
-//            engine.setDefaultModel(config.getNameOrModel());
-//        }
+        if(isDefaultModel){
+            settings.setDefaultModel(config.getNameOrModel());
+        }
 
         settings.getModels().removeIf(c -> c.getNameOrModel().equals(config.getNameOrModel()));
         settings.getModels().add(config);
@@ -344,7 +345,7 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/llm/models/update")
-    public Result llmModelsUpdate(@Param("originalName") String originalName, @Body ModelDo config) throws Exception {
+    public Result llmModelsUpdate(@Param("originalName") String originalName, @Body ModelDo config, boolean isDefaultModel) throws Exception {
         if (Assert.isEmpty(originalName)) {
             return Result.failure("originalName is required");
         }
@@ -355,6 +356,9 @@ public class WebSettingsController {
 
         settings.getModels().removeIf(c -> originalName.equals(c.getNameOrModel()));
         settings.getModels().add(config);
+        if(isDefaultModel){
+            settings.setDefaultModel(config.getNameOrModel());
+        }
         saveSettings();
 
         LOG.info("[Settings] Model updated: {} -> {}", originalName, config.getNameOrModel());

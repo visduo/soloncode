@@ -486,7 +486,8 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 7px 12px;
+    padding: 0 12px;
+    height: 46px;
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
 }
@@ -841,7 +842,8 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 12px;
+    padding: 0 12px;
+    height: 46px;
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
 }
@@ -1612,7 +1614,8 @@ pre:hover .code-copy-btn { opacity: 1; }
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 12px;
+    padding: 0 12px;
+    height: 46px;
     border-bottom: 1px solid var(--border-color);
 }
 

@@ -578,15 +578,6 @@
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label class="general-toggle-row" style="display:flex;align-items:center;justify-content:space-between">
-                                        <span>设为默认模型</span>
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="llmIsDefaultModel"/>
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </label>
-                                </div>
-                                <div class="form-group">
                                     <label>接口地址规范</label>
                                     <select id="llmStandard">
                                         <option value="">FullUrl / 完整地址（自动检测）</option>
@@ -630,7 +621,12 @@
                                     </div>
                                     <textarea id="llmDefaultOptions" rows="4" placeholder='{"temperature":0.2,"top_p":0.5,"thinking":{"type":"enabled"},"reasoning_effort":"high"}'></textarea>
                                 </div>
-                                <div class="form-actions form-actions-end">
+                                <div class="form-actions" style="justify-content:space-between">
+                                    <label class="llm-default-checkbox">
+                                        <input type="checkbox" id="llmIsDefaultModel"/>
+                                        <span class="llm-default-checkmark"></span>
+                                        <span>设为默认模型</span>
+                                    </label>
                                     <div class="settings-inline-actions">
                                         <button class="btn-secondary" id="llmTestBtn">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>

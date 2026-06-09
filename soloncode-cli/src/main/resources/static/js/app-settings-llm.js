@@ -133,6 +133,8 @@
         if (item.timeout) $('#llmTimeout').val(item.timeout);
         if (item.contextLength) $('#llmContextLength').val(String(item.contextLength).replace(/\B(?=(\d{3})+(?!\d))/g, '_'));
         if (item.defaultOptions) $('#llmDefaultOptions').val(JSON.stringify(item.defaultOptions, null, 2));
+        // 回显“设为默认模型”勾选状态
+        $("#llmIsDefaultModel").prop("checked", !!item.isDefault);
     }
 
     function buildLlmBodyObj() {
