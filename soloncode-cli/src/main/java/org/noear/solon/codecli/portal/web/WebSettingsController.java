@@ -160,15 +160,15 @@ public class WebSettingsController {
         GeneralSettings tmp = ONode.ofJson(json).toBean(GeneralSettings.class);
         if (tmp != null) {
             settings.setGeneral(tmp);
-            if(tmp.getMemoryIsolation() != null) {
+            if (tmp.getMemoryIsolation() != null) {
                 properties.setMemoryIsolation(tmp.getMemoryIsolation());
             }
 
-            if(tmp.getSandboxAllowUserHome() != null) {
+            if (tmp.getSandboxAllowUserHome() != null) {
                 properties.setSandboxAllowUserHome(tmp.getSandboxAllowUserHome());
             }
 
-            if(tmp.getSandboxSystemRestrict() != null) {
+            if (tmp.getSandboxSystemRestrict() != null) {
                 properties.setSandboxSystemRestrict(tmp.getSandboxSystemRestrict());
             }
 
@@ -203,8 +203,8 @@ public class WebSettingsController {
      */
     @Get
     @Mapping("/web/settings/llm/models")
-    public Result<Map<String,Object>> llmModelsList() {
-        Map<String,Object> data = new LinkedHashMap<>();
+    public Result<Map<String, Object>> llmModelsList() {
+        Map<String, Object> data = new LinkedHashMap<>();
 
         List<Map> list = new ArrayList<>();
         for (ModelDo config : settings.getModels()) {
@@ -258,7 +258,7 @@ public class WebSettingsController {
         item.put("standard", config.getStandardOrProvider());
         item.put("scope", config.getScope() != null ? config.getScope() : AgentFlags.SCOPE_GLOBAL);
         if (config.getTimeout() != null) {
-            item.put("timeout", config.getTimeout().toString());
+            item.put("timeout", config.getTimeout().getSeconds() + "s");
         }
         if (config.getUserAgent() != null) {
             item.put("userAgent", config.getUserAgent());
@@ -310,7 +310,7 @@ public class WebSettingsController {
 
         engine.addModel(config);
 
-        if(isDefaultModel){
+        if (isDefaultModel) {
             settings.setDefaultModel(config.getNameOrModel());
         }
 
@@ -357,7 +357,7 @@ public class WebSettingsController {
 
         settings.getModels().removeIf(c -> originalName.equals(c.getNameOrModel()));
         settings.getModels().add(config);
-        if(isDefaultModel){
+        if (isDefaultModel) {
             settings.setDefaultModel(config.getNameOrModel());
         }
         saveSettings();
@@ -417,7 +417,7 @@ public class WebSettingsController {
                     item.put("headers", params.getHeaders());
                 }
                 if (params.getTimeout() != null) {
-                    item.put("timeout", params.getTimeout().toString());
+                    item.put("timeout", params.getTimeout().getSeconds() + "s");
                 }
             }
             list.add(item);
@@ -669,13 +669,13 @@ public class WebSettingsController {
 
                 // 设置参数
                 List<String> argsList = root.get("args").toBean(TypeRef.listOf(String.class));
-                if(Assert.isNotEmpty(argsList)){
+                if (Assert.isNotEmpty(argsList)) {
                     builder.args(argsList);
                 }
 
                 // 设置环境变量
                 Map<String, String> envMap = root.get("env").toBean(TypeRef.mapOf(String.class, String.class));
-                if(Assert.isNotEmpty(envMap)){
+                if (Assert.isNotEmpty(envMap)) {
                     builder.env(envMap);
                 }
 
@@ -705,7 +705,7 @@ public class WebSettingsController {
 
                 // 设置自定义 headers
                 Map<String, String> headersMap = root.get("headers").toBean(TypeRef.mapOf(String.class, String.class));
-                if(Assert.isNotEmpty(headersMap)){
+                if (Assert.isNotEmpty(headersMap)) {
                     builder.headers(headersMap);
                 }
 
@@ -730,7 +730,6 @@ public class WebSettingsController {
             return Result.failure("检测失败: " + e.getMessage());
         }
     }
-
 
 
     // ==================== 设置：MCP 工具权限管理 ====================
