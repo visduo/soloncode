@@ -15,7 +15,7 @@ function updateContextIndicator(chunk) {
     }
     var percent = contextLength > 0 ? Math.round(tokens / contextLength * 100) : 0;
 
-    $status.text('context: ' + tokens + ' / ' + contextLength + ' (' + percent + '%)');
+    $status.text('Context: ' + tokens + ' / ' + contextLength + ' (' + percent + '%)');
     $status.show();
 }
 
@@ -26,6 +26,6 @@ function resetContextIndicator() {
     var $status = $('.context-status');
     if ($status.length) {
         $status.hide();
-        $status.text('context: -- / -- (--%)');
+        $status.text('Context: -- / -- (--%)');
     }
 }

@@ -160,7 +160,7 @@ public class WebStreamBuilder {
                 .stream()
                 .map(chunk -> {
                     if (chunk instanceof ContextSizeChunk) {
-                        return onContextSizeChunk(agent, (ContextSizeChunk) chunk);
+                        return onContextSizeChunk(chatModel, (ContextSizeChunk) chunk);
                     } else if (chunk instanceof ReasonChunk) {
                         return onReasonChunk((ReasonChunk) chunk);
                     } else if (chunk instanceof ThoughtChunk) {
@@ -237,14 +237,14 @@ public class WebStreamBuilder {
         return buf;
     }
 
-    public WebChunk onContextSizeChunk(ReActAgent agent, ContextSizeChunk chunk){
+    public WebChunk onContextSizeChunk(ChatModel chatModel, ContextSizeChunk chunk){
         WebChunk wc = new WebChunk();
         wc.setType("context_size");
         wc.setSessionId(chunk.getSession().getSessionId());
         wc.setTotalTokens((long) chunk.getTokenCount());
         wc.setText(String.valueOf(chunk.getMessageCount()));
 
-        long contextLength = agent.getModel().getConfig().getContextLength();
+        long contextLength = chatModel.getConfig().getContextLength();
         if(contextLength == 0){
             contextLength = 128_000; //默认
         }
