@@ -1704,7 +1704,6 @@ pre:hover .code-copy-btn { opacity: 1; }
 
 .todo-done .todo-text {
     color: var(--text-secondary);
-    text-decoration: line-through;
 }
 
 .todo-in_progress .todo-text {
