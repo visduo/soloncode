@@ -160,7 +160,7 @@ public class WebStreamBuilder {
                 .stream()
                 .map(chunk -> {
                     if (chunk instanceof ContextSizeChunk) {
-                        return onContextSizeChunk((ContextSizeChunk) chunk);
+                        return onContextSizeChunk(agent, (ContextSizeChunk) chunk);
                     } else if (chunk instanceof ReasonChunk) {
                         return onReasonChunk((ReasonChunk) chunk);
                     } else if (chunk instanceof ThoughtChunk) {
@@ -237,21 +237,29 @@ public class WebStreamBuilder {
         return buf;
     }
 
-    public WebChunk onContextSizeChunk(ContextSizeChunk chunk){
+    public WebChunk onContextSizeChunk(ReActAgent agent, ContextSizeChunk chunk){
         WebChunk wc = new WebChunk();
         wc.setType("context_size");
         wc.setSessionId(chunk.getSession().getSessionId());
         wc.setTotalTokens((long) chunk.getTokenCount());
         wc.setText(String.valueOf(chunk.getMessageCount()));
+
+        long contextLength = agent.getModel().getConfig().getContextLength();
+        if(contextLength == 0){
+            contextLength = 128_000; //默认
+        }
+
+        Map<String, Object> args = new HashMap<>();
+        args.put("contextLength", contextLength);
+
         if (chunk.isCompressed()) {
-            Map<String, Object> args = new HashMap<>();
             args.put("compressed", true);
             args.put("beforeTokenCount", chunk.getBeforeTokenCount());
             args.put("afterTokenCount", chunk.getAfterTokenCount());
             args.put("beforeMessageCount", chunk.getBeforeMessageCount());
             args.put("afterMessageCount", chunk.getAfterMessageCount());
-            wc.setArgs(args);
         }
+        wc.setArgs(args);
         wc.setCreatedAt(java.time.Instant.now().toEpochMilli());
         return wc;
     }

@@ -1719,21 +1719,15 @@ pre:hover .code-copy-btn { opacity: 1; }
     text-align: center;
 }
 
-/* ===== Context Size Indicator ===== */
-.context-indicator {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
+/* ===== Context Status (above textarea) ===== */
+.context-status {
+    text-align: center;
     font-size: 11px;
     color: var(--text-secondary);
     opacity: 0.5;
-    white-space: nowrap;
-    transition: opacity 0.3s, color 0.3s;
+    padding: 2px 0;
     user-select: none;
-}
-.context-indicator.ctx-compressed {
-    opacity: 1;
-    color: #e6a23c;
+    white-space: nowrap;
 }
 
 
