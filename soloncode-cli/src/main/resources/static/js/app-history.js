@@ -192,6 +192,7 @@ function loadMessages(sess) {
                     if (!isConsecutive) resetStreamState(sess);
                     var el = ensureAssistantBubble(sess);
                     sess.reasonBuffer = isConsecutive ? sess.reasonBuffer + '\n\n' + m.content : m.content;
+                    el.setAttribute('data-md-raw', sess.reasonBuffer);
                     $(el).html(renderMd(sess.reasonBuffer));
                     if (typeof addCodeBlockButtons === 'function') addCodeBlockButtons(el);
                     if (typeof highlightCodeBlocks === 'function') highlightCodeBlocks(el);
