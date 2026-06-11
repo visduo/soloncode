@@ -482,6 +482,20 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 .loop-tpl-name { font-size: 12px; font-weight: 500; color: var(--text-primary); }
 .loop-tpl-desc { font-size: 10px; color: var(--text-secondary); }
 
+/* Loop Template Dropdown (form header) */
+.loop-tpl-dropdown { position: relative; margin-left: auto; }
+.loop-tpl-trigger { background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px 6px; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: color 0.12s, background 0.12s; }
+.loop-tpl-trigger:hover { background: var(--bg-hover); color: var(--accent); }
+.loop-tpl-menu { display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: var(--bg-input-box); border: 1px solid var(--border-color); border-radius: 10px; box-shadow: var(--shadow-lg); min-width: 260px; max-width: 320px; max-height: 320px; overflow-y: auto; z-index: 200; padding: 6px; }
+.loop-tpl-menu.show { display: block; animation: drop-up 0.15s ease-out; }
+.loop-tpl-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; cursor: pointer; transition: background 0.12s; }
+.loop-tpl-item:hover { background: var(--bg-hover); }
+.loop-tpl-item:active { opacity: 0.9; }
+.loop-tpl-item .loop-tpl-icon { width: 28px; height: 28px; border-radius: 6px; font-size: 10px; }
+.loop-tpl-item .loop-tpl-info { flex: 1; min-width: 0; }
+.loop-tpl-item .loop-tpl-name { font-size: 12px; font-weight: 500; color: var(--text-primary); }
+.loop-tpl-item .loop-tpl-desc { font-size: 10px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* Loop Checkbox */
 .loop-checkbox { font-size: 12px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; line-height: 1; }
 .loop-checkbox input[type="checkbox"] { margin: 0; width: 14px; height: 14px; flex-shrink: 0; vertical-align: middle; }

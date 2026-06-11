@@ -26,35 +26,98 @@
     }
 
     // ========== 预设模板 ==========
-    var LOOP_TEMPLATES = {
-        'ci-monitor': {
-            prompt: '检查最近的 CI 构建状态，如果有失败的用例则分析失败原因并汇总报告',
-            intervalMinutes: 30,
-            goalCondition: null,
-            makerAgent: null,
-            checkerAgent: null,
-            worktreeEnabled: false,
-            maxIterations: 20
+    var LOOP_TEMPLATES = [
+        {
+            id: 'ci-monitor',
+            icon: 'CI',
+            name: 'CI 监控',
+            desc: '定时检查构建状态，失败时分析原因',
+            data: {
+                prompt: '检查最近的 CI 构建状态，如果有失败的用例则分析失败原因并汇总报告',
+                intervalMinutes: 30,
+                goalCondition: null,
+                makerAgent: null,
+                checkerAgent: null,
+                worktreeEnabled: false,
+                maxIterations: 20
+            }
         },
-        'daily-review': {
-            prompt: '审查昨天的所有代码提交，总结变更摘要和潜在风险点',
-            cron: '0 9 * * *',
-            goalCondition: null,
-            makerAgent: null,
-            checkerAgent: 'reviewer',
-            worktreeEnabled: false,
-            maxIterations: 20
+        {
+            id: 'daily-review',
+            icon: 'CR',
+            name: '每日代码审查',
+            desc: '每天定时审查代码提交并汇总风险',
+            data: {
+                prompt: '审查昨天的所有代码提交，总结变更摘要和潜在风险点',
+                cron: '0 9 * * *',
+                goalCondition: null,
+                makerAgent: null,
+                checkerAgent: 'reviewer',
+                worktreeEnabled: false,
+                maxIterations: 20
+            }
         },
-        'issue-triage': {
-            prompt: '扫描新创建的 issue，自动分类标签并分配优先级',
-            intervalMinutes: 15,
-            goalCondition: 'all new issues triaged',
-            makerAgent: 'explorer',
-            checkerAgent: 'reviewer',
-            worktreeEnabled: true,
-            maxIterations: 30
+        {
+            id: 'issue-triage',
+            icon: 'IS',
+            name: 'Issue 分类',
+            desc: '自动扫描并分类新 issue',
+            data: {
+                prompt: '扫描新创建的 issue，自动分类标签并分配优先级',
+                intervalMinutes: 15,
+                goalCondition: 'all new issues triaged',
+                makerAgent: 'explorer',
+                checkerAgent: 'reviewer',
+                worktreeEnabled: true,
+                maxIterations: 30
+            }
+        },
+        {
+            id: 'health-check',
+            icon: 'HC',
+            name: '服务健康巡检',
+            desc: '定时探测服务状态，异常时告警',
+            data: {
+                prompt: '检查所有核心服务的健康状态（HTTP 端点），如果有异常则汇总告警信息',
+                intervalMinutes: 5,
+                goalCondition: 'all services healthy',
+                makerAgent: null,
+                checkerAgent: null,
+                worktreeEnabled: false,
+                maxIterations: 100
+            }
+        },
+        {
+            id: 'doc-sync',
+            icon: 'DC',
+            name: '文档同步',
+            desc: '定时检查代码与文档的一致性',
+            data: {
+                prompt: '对比代码接口与文档描述的一致性，找出过时或缺失的文档内容并生成更新建议',
+                cron: '0 10 * * 1',
+                goalCondition: null,
+                makerAgent: 'coder',
+                checkerAgent: 'reviewer',
+                worktreeEnabled: false,
+                maxIterations: 20
+            }
+        },
+        {
+            id: 'auto-fix',
+            icon: 'AF',
+            name: '自动修复循环',
+            desc: '反复尝试修复目标直到通过',
+            data: {
+                prompt: '运行测试套件，如果有失败的测试则分析原因并尝试修复代码',
+                intervalMinutes: 10,
+                goalCondition: 'all tests pass',
+                makerAgent: 'coder',
+                checkerAgent: 'reviewer',
+                worktreeEnabled: true,
+                maxIterations: 10
+            }
         }
-    };
+    ];
 
     // ========== 面板开关 ==========
     function toggleLoopPanel() {
@@ -277,6 +340,24 @@
         var html = '<div class="loop-panel-header">';
         html += '<button class="loop-panel-back-btn" id="loopBackBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>';
         html += '<span class="loop-panel-title">' + (loopEditId ? '编辑循环 #' + escapeHtml(loopEditId) : '新建循环') + '</span>';
+        // 模板按钮（仅新建时显示）
+        if (!loopEditId) {
+            html += '<div class="loop-tpl-dropdown" id="loopTplDropdown">';
+            html += '<button class="loop-tpl-trigger" id="loopTplBtn" title="填充模板"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></button>';
+            html += '<div class="loop-tpl-menu" id="loopTplMenu">';
+            for (var i = 0; i < LOOP_TEMPLATES.length; i++) {
+                var tpl = LOOP_TEMPLATES[i];
+                html += '<div class="loop-tpl-item" data-tpl="' + tpl.id + '">';
+                html += '<span class="loop-tpl-icon">' + tpl.icon + '</span>';
+                html += '<div class="loop-tpl-info">';
+                html += '<span class="loop-tpl-name">' + escapeHtml(tpl.name) + '</span>';
+                html += '<span class="loop-tpl-desc">' + escapeHtml(tpl.desc) + '</span>';
+                html += '</div>';
+                html += '</div>';
+            }
+            html += '</div>';
+            html += '</div>';
+        }
         html += '</div>';
         html += '<div class="loop-form">';
         html += '<div class="loop-form-group">';
@@ -390,6 +471,33 @@
             loopEditId = null;
             renderLoopList();
         });
+
+        // 模板下拉菜单
+        var $tplBtn = $('#loopTplBtn');
+        var $tplMenu = $('#loopTplMenu');
+        if ($tplBtn.length) {
+            $tplBtn.on('click', function(e) {
+                e.stopPropagation();
+                $tplMenu.toggleClass('show');
+            });
+            // 点击模板项，填充表单
+            $tplMenu.on('click', '.loop-tpl-item', function(e) {
+                e.stopPropagation();
+                var tplId = $(this).data('tpl');
+                var tpl = null;
+                for (var i = 0; i < LOOP_TEMPLATES.length; i++) {
+                    if (LOOP_TEMPLATES[i].id === tplId) { tpl = LOOP_TEMPLATES[i]; break; }
+                }
+                if (tpl && tpl.data) fillFormData(tpl.data);
+                $tplMenu.removeClass('show');
+            });
+            // 点击其他地方关闭
+            $(document).on('mousedown.looptpl', function(e) {
+                if (!$(e.target).closest('#loopTplDropdown').length) {
+                    $tplMenu.removeClass('show');
+                }
+            });
+        }
 
         $('#loopAdvancedToggle').on('click', function() {
             var $adv = $('#loopAdvanced');

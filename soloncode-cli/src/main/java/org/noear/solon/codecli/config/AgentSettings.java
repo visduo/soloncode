@@ -167,7 +167,7 @@ public class AgentSettings implements Serializable {
 
         // 合并完成后统一兜底：如果 defaultModel 未指定，取第一个模型
         if (Assert.isEmpty(this.defaultModel) && this.models.size() > 0) {
-            this.defaultModel = this.models.get(0).getNameOrModel();
+            this.defaultModel = this.models.values().iterator().next().getNameOrModel();
             props.setDefaultModel(this.defaultModel);
         }
 
