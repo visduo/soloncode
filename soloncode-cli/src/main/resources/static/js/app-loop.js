@@ -174,7 +174,7 @@
     function renderLoopForm() {
         var html = '<div class="loop-panel-header">';
         html += '<button class="loop-panel-back-btn" id="loopBackBtn">← 返回列表</button>';
-        html += '<span class="loop-panel-title">' + (loopEditId ? '编辑任务' : '新建循环任务') + '</span>';
+        html += '<span class="loop-panel-title">' + (loopEditId ? '编辑循环' : '新建循环') + '</span>';
         html += '</div>';
         html += '<div class="loop-form">';
         html += '<div class="loop-form-group">';
