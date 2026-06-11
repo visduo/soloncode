@@ -49,6 +49,17 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 }
 .sidebar-footer { padding: 14px 16px; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; }
 
+/* Sidebar resize handle */
+.sidebar-resize-handle {
+    width: 5px;
+    cursor: col-resize;
+    background: var(--bg-main);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 99;
+    transition: background 0.15s;
+}
+
 /* Sidebar collapse toggle */
 .sidebar-toggle-btn {
     position: fixed;

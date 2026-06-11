@@ -487,6 +487,95 @@ initVoice();
     }
 })();
 
+/* ===== Sidebar Resize ===== */
+(function() {
+    var $sidebar = $('.sidebar');
+    var $handle = $('#sidebarResizeHandle');
+    var $toggleBtn = $('#sidebarToggleBtn');
+
+    if (!$handle.length || !$sidebar.length) return;
+
+    var SIDEBAR_MIN_WIDTH = 180;
+    var SIDEBAR_MAX_WIDTH = 600;
+
+    function syncTogglePosition() {
+        if (!$toggleBtn.length) return;
+        if ($sidebar.hasClass('collapsed')) {
+            $toggleBtn.css('left', '4px');
+        } else {
+            var w = $sidebar[0].offsetWidth;
+            $toggleBtn.css('left', (w - 14) + 'px');
+        }
+    }
+
+    // Init resize dragging
+    (function initResize() {
+        var isDragging = false;
+        var startX = 0;
+        var startWidth = 0;
+
+        $handle.on('mousedown', function(e) {
+            if ($sidebar.hasClass('collapsed')) return;
+            isDragging = true;
+            startX = e.clientX;
+            startWidth = $sidebar[0].offsetWidth;
+            $handle.addClass('dragging');
+            $(document.body).css({ cursor: 'col-resize', userSelect: 'none' });
+            e.preventDefault();
+        });
+
+        $(document).on('mousemove', function(e) {
+            if (!isDragging) return;
+            var dx = e.clientX - startX;
+            var newWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, startWidth + dx));
+            $sidebar.css('width', newWidth + 'px');
+            localStorage.setItem('sidebar-width', newWidth);
+            syncTogglePosition();
+        });
+
+        $(document).on('mouseup', function() {
+            if (!isDragging) return;
+            isDragging = false;
+            $handle.removeClass('dragging');
+            $(document.body).css({ cursor: '', userSelect: '' });
+        });
+    })();
+
+    // Restore saved width
+    (function restoreWidth() {
+        var savedWidth = localStorage.getItem('sidebar-width');
+        if (savedWidth) {
+            var w = parseInt(savedWidth, 10);
+            if (w >= SIDEBAR_MIN_WIDTH && w <= SIDEBAR_MAX_WIDTH) {
+                $sidebar.css('width', w + 'px');
+            }
+        }
+        syncTogglePosition();
+    })();
+
+    // Patch toggle button: replace original click handler to include position sync
+    if ($toggleBtn.length) {
+        $toggleBtn.off('click').on('click', function() {
+            $sidebar.toggleClass('collapsed');
+            var collapsed = $sidebar.hasClass('collapsed');
+            $toggleBtn.toggleClass('collapsed', collapsed);
+            $toggleBtn.html(collapsed ? '\u203A' : '\u2039');
+            $toggleBtn.prop('title', collapsed ? '展开侧边栏' : '收起侧边栏');
+            localStorage.setItem('sidebar-collapsed', collapsed ? '1' : '0');
+            syncTogglePosition();
+        });
+
+        // Re-apply collapsed state with sync
+        if (localStorage.getItem('sidebar-collapsed') === '1') {
+            $sidebar.addClass('collapsed');
+            $toggleBtn.addClass('collapsed');
+            $toggleBtn.html('\u203A');
+            $toggleBtn.prop('title', '展开侧边栏');
+            syncTogglePosition();
+        }
+    }
+})();
+
 /* ===== Mobile Sidebar Drawer ===== */
 (function() {
     var mobileMenuBtn = $('#mobileMenuBtn');
