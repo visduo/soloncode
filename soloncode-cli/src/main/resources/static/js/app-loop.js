@@ -435,18 +435,23 @@
                 $('#loopFormInterval').val(mins);
                 $('#loopFormIntervalUnit').val('m');
             }
+            // 切换回间隔模式时清空 cron
+            $('#loopFormCron').val('');
         }
-        if (t.goalCondition) $('#loopFormGoal').val(t.goalCondition);
-        if (t.makerAgent) $('#loopFormMaker').val(t.makerAgent);
-        if (t.checkerAgent) $('#loopFormChecker').val(t.checkerAgent);
-        if (t.worktreeEnabled) $('#loopFormWorktree').prop('checked', true);
+        // 所有字段无条件赋值，null/undefined 时清空为默认值，避免模板切换残留
+        $('#loopFormGoal').val(t.goalCondition || '');
+        $('#loopFormMaker').val(t.makerAgent || '');
+        $('#loopFormChecker').val(t.checkerAgent || '');
+        $('#loopFormWorktree').prop('checked', !!t.worktreeEnabled);
+        $('#loopFormMaxIter').val(t.maxIterations || '');
 
-        if (t.maxIterations) $('#loopFormMaxIter').val(t.maxIterations);
-
-        // 编辑已有任务时，如果有高级字段则自动展开执行策略
+        // 有高级字段时自动展开，否则折叠
         if (t.goalCondition || t.makerAgent || t.checkerAgent || t.worktreeEnabled) {
             $('#loopAdvanced').show();
             $('#loopAdvancedToggle').removeClass('collapsed');
+        } else {
+            $('#loopAdvanced').hide();
+            $('#loopAdvancedToggle').addClass('collapsed');
         }
     }
 
