@@ -234,9 +234,25 @@ function getActiveCmdComplete() {
     return inChatMode ? $chatCmdComplete[0] : $welcomeCmdComplete[0];
 }
 
+/**
+ * 关闭所有工具栏弹出面板（互斥核心）
+ * 包括：命令补全、输入历史、循环任务、模型下拉
+ */
+function closeAllToolbarPanels() {
+    // 命令补全
+    hideCmdComplete();
+    // 输入历史
+    if (typeof $chatHistoryPanel !== 'undefined' && $chatHistoryPanel) $chatHistoryPanel.removeClass('show');
+    // 循环任务面板
+    $('#chatLoopPanel, #welcomeLoopPanel').hide();
+    // 模型下拉
+    $('#chatModelDropdown, #welcomeModelDropdown').removeClass('show');
+}
+window.closeAllToolbarPanels = closeAllToolbarPanels;
+
 function showCmdComplete(inputEl, completeEl, prefix) {
     if (!commandsLoaded || commandList.length === 0) return;
-
+    closeAllToolbarPanels();
     var trigger = prefix.charAt(0);
     var query = prefix.substring(1).toLowerCase();
     var filterType = (trigger === '@') ? 'subagent' : (trigger === '$') ? 'skill' : 'command';
@@ -478,8 +494,7 @@ function extractUserMessages() {
 }
 
 function showHistoryPanel() {
-    // 互斥：关闭 loop 面板
-    $('#chatLoopPanel, #welcomeLoopPanel').hide();
+    closeAllToolbarPanels();
     var messages = extractUserMessages();
     if (messages.length === 0) {
         $chatHistoryPanel.html('<div class="history-panel-empty">暂无输入历史</div>');
@@ -530,8 +545,6 @@ function showHistoryPanel() {
             e.stopPropagation();
         });
     }
-    // 确保互斥：关闭命令补全
-    hideCmdComplete();
     historyActiveIndex = -1;
     $chatHistoryPanel.addClass('show');
 }

@@ -26,8 +26,7 @@
             loopPanelVisible = false;
             loopEditId = null;
         } else {
-            // 互斥：关闭历史面板
-            $('#chatHistoryPanel').removeClass('show');
+            closeAllToolbarPanels();
             $panel.show();
             loopPanelVisible = true;
             renderLoopList();
