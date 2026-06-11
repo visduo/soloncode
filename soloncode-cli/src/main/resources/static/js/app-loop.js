@@ -304,7 +304,7 @@
             html += '</div></div>';
         }
 
-        html += '<div class="loop-form-advanced-toggle" id="loopAdvancedToggle">▾ 执行策略</div>';
+        html += '<div class="loop-form-advanced-toggle" id="loopAdvancedToggle"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg><span>执行策略</span></div>';
         html += '<div class="loop-form-advanced" id="loopAdvanced">';
         html += '<div class="loop-form-group"><label>目标条件</label><input type="text" class="loop-input" id="loopFormGoal" placeholder="all tests pass"/></div>';
         html += '<div class="loop-form-group"><label>执行者</label><input type="text" class="loop-input" id="loopFormMaker" placeholder="coder"/></div>';
@@ -397,10 +397,10 @@
             var $adv = $('#loopAdvanced');
             if ($adv.is(':visible')) {
                 $adv.hide();
-                $(this).text('▸ 执行策略');
+                $(this).addClass('collapsed');
             } else {
                 $adv.show();
-                $(this).text('▾ 执行策略');
+                $(this).removeClass('collapsed');
             }
         });
 
