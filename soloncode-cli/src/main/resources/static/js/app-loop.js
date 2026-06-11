@@ -84,8 +84,7 @@
             var items = (res && res.data) ? res.data : [];
             var html = '<div class="loop-panel-header">';
             html += '<span class="loop-panel-title">循环任务 (' + items.length + ')</span>';
-            html += '<button class="loop-panel-add-btn" id="loopAddNewBtn">+ 新建</button>';
-            html += '<button class="loop-panel-close-btn" id="loopCloseBtn">✕</button>';
+            html += '<button class="loop-panel-add-btn" id="loopAddNewBtn" title="新建任务"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>';
             html += '</div>';
             html += '<div class="loop-panel-list">';
 
@@ -144,9 +143,6 @@
 
     // ========== 列表事件绑定 ==========
     function bindListEvents() {
-        $('#loopCloseBtn').on('click', function() {
-            hideLoopPanel();
-        });
         $('#loopAddNewBtn').on('click', function() {
             loopEditId = null;
             renderLoopForm();

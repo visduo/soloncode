@@ -418,10 +418,8 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 .loop-panel { position: absolute; bottom: 100%; left: 0; right: 0; margin-bottom: 4px; background: var(--bg-input-box); border: 1px solid var(--border-color); border-radius: 10px; box-shadow: var(--shadow-lg); max-height: 400px; overflow-y: auto; z-index: 100; animation: drop-up 0.15s ease-out; }
 .loop-panel-header { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--border-color); gap: 8px; flex-shrink: 0; }
 .loop-panel-title { font-size: 13px; font-weight: 600; color: var(--text-primary); flex: 1; }
-.loop-panel-close-btn { background: none; border: none; cursor: pointer; color: var(--text-secondary); font-size: 16px; padding: 2px 6px; border-radius: 4px; }
-.loop-panel-close-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-.loop-panel-add-btn { background: var(--accent-color); color: #fff; border: none; cursor: pointer; font-size: 12px; padding: 4px 10px; border-radius: 6px; }
-.loop-panel-add-btn:hover { opacity: 0.9; }
+.loop-panel-add-btn { background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+.loop-panel-add-btn:hover { background: var(--bg-hover); color: var(--accent-color); }
 .loop-panel-back-btn { background: none; border: none; cursor: pointer; color: var(--text-secondary); font-size: 13px; padding: 2px 8px; border-radius: 4px; }
 .loop-panel-back-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .loop-panel-empty { padding: 24px; text-align: center; color: var(--text-secondary); font-size: 13px; }
