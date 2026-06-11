@@ -296,17 +296,6 @@
         html += '<input type="text" class="loop-input" id="loopFormCron" placeholder="0 */5 * * * ?"/>';
         html += '</div>';
         html += '</div>';
-        // 预设模板（仅新建模式）
-        if (!loopEditId) {
-            html += '<div class="loop-form-group">';
-            html += '<label>快速开始</label>';
-            html += '<div class="loop-templates">';
-            html += '<button type="button" class="loop-template-btn" data-tpl="ci-monitor"><span class="loop-tpl-icon">CI</span><span class="loop-tpl-info"><span class="loop-tpl-name">CI 监控</span><span class="loop-tpl-desc">每30分钟检查 CI 状态</span></span></button>';
-            html += '<button type="button" class="loop-template-btn" data-tpl="daily-review"><span class="loop-tpl-icon">CR</span><span class="loop-tpl-info"><span class="loop-tpl-name">每日代码审查</span><span class="loop-tpl-desc">每天9点审查提交</span></span></button>';
-            html += '<button type="button" class="loop-template-btn" data-tpl="issue-triage"><span class="loop-tpl-icon">IT</span><span class="loop-tpl-info"><span class="loop-tpl-name">Issue 分诊</span><span class="loop-tpl-desc">每15分钟扫描新 issue</span></span></button>';
-            html += '</div></div>';
-        }
-
         html += '<div class="loop-form-advanced-toggle collapsed" id="loopAdvancedToggle"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 6 8 10 12 6"/></svg><span>执行策略</span></div>';
         html += '<div class="loop-form-advanced" id="loopAdvanced">';
         html += '<div class="loop-form-group"><label>执行者子代理</label><input type="text" class="loop-input" id="loopFormMaker" placeholder="@coder"/></div>';
@@ -408,32 +397,6 @@
                 $adv.show();
                 $(this).removeClass('collapsed');
             }
-        });
-
-        // 模板点击填充（先 off 防止叠加）
-        getActivePanel().off('click.looptpl').on('click.looptpl', '.loop-template-btn', function() {
-            var tpl = LOOP_TEMPLATES[$(this).data('tpl')];
-            if (!tpl) return;
-            $('#loopFormPrompt').val(tpl.prompt);
-            if (tpl.cron) {
-                $('input[name=loopScheduleType][value=cron]').prop('checked', true).trigger('change');
-                $('#loopFormCron').val(tpl.cron);
-            } else {
-                $('input[name=loopScheduleType][value=interval]').prop('checked', true).trigger('change');
-                $('#loopFormInterval').val(tpl.intervalMinutes || 5);
-                $('#loopFormIntervalUnit').val('m');
-            }
-            if (tpl.goalCondition) $('#loopFormGoal').val(tpl.goalCondition);
-            if (tpl.makerAgent) $('#loopFormMaker').val(tpl.makerAgent);
-            if (tpl.checkerAgent) $('#loopFormChecker').val(tpl.checkerAgent);
-            if (tpl.worktreeEnabled) $('#loopFormWorktree').prop('checked', true);
-            if (tpl.maxIterations) $('#loopFormMaxIter').val(tpl.maxIterations);
-            // 模板有高级字段时自动展开执行策略
-            if (tpl.goalCondition || tpl.makerAgent || tpl.checkerAgent || tpl.worktreeEnabled) {
-                $('#loopAdvanced').show();
-                $('#loopAdvancedToggle').removeClass('collapsed');
-            }
-            showToast('已填充模板，可按需修改后保存', 'success');
         });
 
         // 间隔类型切换

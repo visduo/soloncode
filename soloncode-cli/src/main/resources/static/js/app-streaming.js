@@ -279,7 +279,10 @@ function connectWebGate() {
                 var userSess = sessionMap[sid];
                 if (!userSess) return;
                 appendUserMessage(userSess, chunk.text, null, null, chunk.createdAt);
-                if (userSess.sessionId === activeSessionId) scrollToBottom(true);
+                if (userSess.sessionId === activeSessionId) {
+                    if (!inChatMode) switchToChatMode();
+                    scrollToBottom(true);
+                }
                 return;
             }
 
@@ -290,6 +293,7 @@ function connectWebGate() {
                 if (sess2.sessionId === activeSessionId) {
                     isStreaming = true;
                     setBtnStopMode();
+                    if (!inChatMode) switchToChatMode();
                 }
                 resetStreamState(sess2);
                 showThinking(sess2);
