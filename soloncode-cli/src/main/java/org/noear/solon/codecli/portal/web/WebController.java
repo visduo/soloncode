@@ -767,6 +767,46 @@ public class WebController {
     }
 
     /**
+     * 获取单个循环任务详情（用于编辑回填）。
+     */
+    @Get
+    @Mapping("/web/chat/loop/get")
+    public Result<Map> loopGet(@Param("sessionId") String sessionId,
+                               @Param("taskId") String taskId) {
+        if (sessionId == null || sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+            return Result.failure(400, "Invalid sessionId");
+        }
+        if (taskId == null || taskId.trim().isEmpty()) {
+            return Result.failure(400, "taskId is required");
+        }
+
+        List<LoopTask> tasks = loopScheduler.listAll(sessionId, engine.getWorkspace(), engine.getHarnessSessions());
+        for (LoopTask t : tasks) {
+            if (t.getId().equals(taskId)) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", t.getId());
+                item.put("prompt", t.getPrompt());
+                item.put("intervalMinutes", t.getIntervalMinutes());
+                if (t.getCron() != null) item.put("cron", t.getCron());
+                item.put("enabled", t.isEnabled());
+                item.put("cancelled", t.isCancelled());
+                item.put("running", t.isRunning());
+                item.put("currentIteration", t.getCurrentIteration());
+                if (t.getLastResult() != null) item.put("lastResult", t.getLastResult());
+                if (t.getLastExecutedAt() != null) item.put("lastExecutedAt", t.getLastExecutedAt().toString());
+                if (t.getGoalCondition() != null) item.put("goalCondition", t.getGoalCondition());
+                if (t.getMakerAgent() != null) item.put("makerAgent", t.getMakerAgent());
+                if (t.getCheckerAgent() != null) item.put("checkerAgent", t.getCheckerAgent());
+                item.put("worktreeEnabled", t.isWorktreeEnabled());
+                if (t.getChannelNotify() != null) item.put("channelNotify", t.getChannelNotify());
+                item.put("maxIterations", t.getMaxIterations());
+                return Result.succeed(item);
+            }
+        }
+        return Result.failure(404, "Task not found");
+    }
+
+    /**
      * 新增循环任务。
      */
     @Post

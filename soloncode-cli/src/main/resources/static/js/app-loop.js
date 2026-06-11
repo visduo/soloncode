@@ -165,7 +165,7 @@
         data.sessionId = SESSION_ID;
         $.ajax({
             url: '/web/chat/loop/' + action,
-            method: action === 'list' ? 'GET' : 'POST',
+            method: (action === 'list' || action === 'get' || action === 'history' || action === 'state') ? 'GET' : 'POST',
             data: data,
             dataType: 'json',
             success: function(res) {
@@ -394,28 +394,21 @@
             var $inputs = $panel.find('.loop-input, .loop-checkbox input, select');
             $inputs.prop('disabled', true);
             $('#loopFormSaveBtn').prop('disabled', true).text('加载中...');
-            loopApi('list', null, function(res) {
-                var items = (res && res.data) ? res.data : [];
-                var found = false;
-                for (var i = 0; i < items.length; i++) {
-                    if (items[i].id === loopEditId) {
-                        fillFormData(items[i]);
-                        found = true;
-                        // 在标题旁显示状态标签
-                        var t = items[i];
-                        var statusText = t.cancelled ? '已取消' : (!t.enabled ? '已停用' : (t.running ? '运行中' : '就绪'));
-                        var statusClass = t.cancelled ? 'cancelled' : (!t.enabled ? 'disabled' : (t.running ? 'running' : 'ready'));
-                        var $title = $panel.find('.loop-panel-title');
-                        $title.html('编辑循环 #' + escapeHtml(loopEditId) + ' <span class="loop-item-status ' + statusClass + '" style="margin-left:6px;font-size:11px">' + statusText + '</span>' + (t.currentIteration > 0 ? '<span class="loop-item-meta" style="margin-left:6px">已执行' + t.currentIteration + '次</span>' : ''));
-                        break;
-                    }
+            loopApi('get', { taskId: loopEditId }, function(res) {
+                var t = (res && res.data) ? res.data : null;
+                if (t) {
+                    fillFormData(t);
+                    // 在标题旁显示状态标签
+                    var statusText = t.cancelled ? '已取消' : (!t.enabled ? '已停用' : (t.running ? '运行中' : '就绪'));
+                    var statusClass = t.cancelled ? 'cancelled' : (!t.enabled ? 'disabled' : (t.running ? 'running' : 'ready'));
+                    var $title = $panel.find('.loop-panel-title');
+                    $title.html('编辑循环 #' + escapeHtml(loopEditId) + ' <span class="loop-item-status ' + statusClass + '" style="margin-left:6px;font-size:11px">' + statusText + '</span>' + (t.currentIteration > 0 ? '<span class="loop-item-meta" style="margin-left:6px">已执行' + t.currentIteration + '次</span>' : ''));
+                } else if (res !== null) {
+                    showToast('未找到任务数据', 'error');
                 }
                 // 恢复表单
                 $inputs.prop('disabled', false);
                 $('#loopFormSaveBtn').prop('disabled', false).text('保存');
-                if (!found && res !== null) {
-                    showToast('未找到任务数据', 'error');
-                }
             });
         }
     }
