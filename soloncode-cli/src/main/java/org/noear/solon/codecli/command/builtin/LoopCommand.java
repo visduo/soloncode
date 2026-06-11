@@ -216,37 +216,22 @@ public class LoopCommand implements Command {
 
         String prompt = promptBuilder.toString().trim();
 
-        // 检测 skill 引用（prompt 以 $ 开头）
-        if (prompt.startsWith("$")) {
-            skillRef = prompt;
-            // skillRef 保持原样，由上层（CliShell）在执行时解析
-        }
+        // 检测 skill 引用已移除：AI 根据 prompt 自动匹配技能
 
         if (prompt.isEmpty()) {
             printUsage(ctx);
             return;
         }
 
-        // 初始化状态目录
-        String stateDir = LoopStateManager.init(workspace, "pending", prompt);
-        // 用生成的 ID 需要先创建 task 才知道，这里先用临时目录
-        // 实际上 LoopTask 构造中会生成 ID，这里需要在 schedule 之后重命名
-        // 简化方案：先生成 ID，再初始化目录
-        String tempId = java.util.UUID.randomUUID().toString().substring(0, 8);
-        stateDir = LoopStateManager.init(workspace, tempId, prompt);
-
-        // Create and schedule
+        // Create task (workspace 用于动态拼接 stateDir)
         LoopTask task = new LoopTask(
                 prompt, intervalMinutes, cronExpr,
                 skillRef, goalCondition, makerAgent, checkerAgent,
-                worktreeEnabled, channelNotify, maxIterations, stateDir
+                worktreeEnabled, channelNotify, maxIterations, workspace
         );
 
-        // 如果生成的 ID 与 tempId 不同，重新初始化状态目录
-        if (!task.getId().equals(tempId)) {
-            LoopStateManager.cleanup(workspace, tempId);
-            stateDir = LoopStateManager.init(workspace, task.getId(), prompt);
-        }
+        // 初始化状态目录（用 task 生成的 ID）
+        LoopStateManager.init(workspace, task.getId(), prompt);
 
         try {
             scheduler.schedule(sessionId, workspace, harnessSessions, task);
@@ -267,9 +252,6 @@ public class LoopCommand implements Command {
         ctx.println(ctx.color("  " + BOLD + "Prompt:" + RESET + " " + prompt));
 
         // 打印 Loop Engineering 扩展信息
-        if (skillRef != null) {
-            ctx.println(ctx.color("  " + MAGENTA + "Skill:" + RESET + " " + skillRef));
-        }
         if (goalCondition != null) {
             ctx.println(ctx.color("  " + MAGENTA + "Goal:" + RESET + " " + goalCondition));
         }
@@ -289,7 +271,7 @@ public class LoopCommand implements Command {
             ctx.println(ctx.color("  " + MAGENTA + "Max Iterations:" + RESET + " " + maxIterations));
         }
 
-        ctx.println(ctx.color("  " + DIM + "State:" + RESET + " " + stateDir));
+        ctx.println(ctx.color("  " + DIM + "State:" + RESET + " " + new AgentProperties().getHarnessLoops() + "/" + task.getId() + "/"));
         ctx.println(ctx.color(DIM + "  Expires: " + task.getExpireAt() + RESET));
     }
 

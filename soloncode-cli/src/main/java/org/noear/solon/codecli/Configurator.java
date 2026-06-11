@@ -213,7 +213,7 @@ public class Configurator {
         String flag = Solon.cfg().argx().flagAt(0);
 
         if (AgentFlags.FLAG_VERSION.equals(flag)) {
-            System.err.println(Solon.cfg().appTitle() + " " + AgentFlags.getVersion());
+            System.out.println(Solon.cfg().appTitle() + " " + AgentFlags.getVersion());
             return;
         }
 
@@ -254,14 +254,14 @@ public class Configurator {
     private void checkUpdate() {
         if (AgentFlags.checkUpdate()) {
             // 使用颜色代码让提示更醒目
-            System.err.println("\033[33mDiscover the new version: " + AgentFlags.getLastVersion() + "\033[0m");
+            System.out.println("\033[33mDiscover the new version: " + AgentFlags.getLastVersion() + "\033[0m");
 
             if (JavaUtil.IS_WINDOWS) {
-                System.err.println("Update: \033[36mirm https://solon.noear.org/soloncode/setup.ps1 | iex\033[0m");
+                System.out.println("Update: \033[36mirm https://solon.noear.org/soloncode/setup.ps1 | iex\033[0m");
             } else {
-                System.err.println("Update: \033[36mcurl -fsSL https://solon.noear.org/soloncode/setup.sh | bash\033[0m");
+                System.out.println("Update: \033[36mcurl -fsSL https://solon.noear.org/soloncode/setup.sh | bash\033[0m");
             }
-            System.err.println();
+            System.out.println();
         }
     }
 

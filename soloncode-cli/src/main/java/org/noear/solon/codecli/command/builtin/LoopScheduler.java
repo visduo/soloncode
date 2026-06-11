@@ -169,8 +169,8 @@ public class LoopScheduler {
                 }
 
                 // P1-fix: 清理 worktree
-                if (t.isWorktreeEnabled() && t.getStateDir() != null) {
-                    String ws = extractWorkspaceFromStateDir(t.getStateDir());
+                if (t.isWorktreeEnabled() && t.getWorkspace() != null) {
+                    String ws = t.getWorkspace();
                     try {
                         getWorktreeManager().cleanup(ws);
                         LOG.info("Loop task '{}' worktree cleaned up on remove", t.getId());
@@ -319,8 +319,8 @@ public class LoopScheduler {
                     jobManager.jobRemove(jobName);
                 }
                 // F6: 清理 worktree
-                if (t.isWorktreeEnabled() && t.getStateDir() != null) {
-                    String wtWorkspace = extractWorkspaceFromStateDir(t.getStateDir());
+                if (t.isWorktreeEnabled() && t.getWorkspace() != null) {
+                    String wtWorkspace = t.getWorkspace();
                     getWorktreeManager().cleanup(wtWorkspace);
                 }
             });
@@ -421,7 +421,7 @@ public class LoopScheduler {
             String originalWorkspace = null;
             String worktreePath = null;
             if (task.isWorktreeEnabled()) {
-                String workspace = extractWorkspaceFromStateDir(task.getStateDir());
+                String workspace = task.getWorkspace();
                 worktreePath = getWorktreeManager().create(workspace, task.getId());
                 if (worktreePath != null) {
                     originalWorkspace = workspace;
@@ -465,8 +465,8 @@ public class LoopScheduler {
                 }
 
                 // 写入执行历史
-                if (task.getStateDir() != null) {
-                    String workspace = extractWorkspaceFromStateDir(task.getStateDir());
+                if (task.getWorkspace() != null) {
+                    String workspace = task.getWorkspace();
                     LoopStateManager.appendHistory(workspace, task.getId(),
                             executionResult != null ? executionResult : "ok", iteration);
                 }
@@ -497,25 +497,25 @@ public class LoopScheduler {
         String prompt = task.getPrompt();
 
         // 1. Skill 引用解析：尝试从 workspace/.soloncode/skills/ 加载 SKILL.md
-        if (task.getSkillRef() != null && !task.getSkillRef().isEmpty()
-                && task.getStateDir() != null) {
-            String ws = extractWorkspaceFromStateDir(task.getStateDir());
-            try {
-                java.nio.file.Path skillFile = java.nio.file.Paths.get(ws, ".soloncode", "skills",
-                        task.getSkillRef(), "SKILL.md");
-                if (java.nio.file.Files.exists(skillFile)) {
-                    String skillContent = new String(java.nio.file.Files.readAllBytes(skillFile),
-                            java.nio.charset.StandardCharsets.UTF_8);
-                    prompt = prompt + "\n\n--- Skill: " + task.getSkillRef() + " ---\n" + skillContent;
-                }
-            } catch (Exception e) {
-                LOG.warn("Failed to load skill '{}': {}", task.getSkillRef(), e.getMessage());
-            }
-        }
+//        if (task.getSkillRef() != null && !task.getSkillRef().isEmpty()
+//                && task.getWorkspace() != null) {
+//            String ws = task.getWorkspace();
+//            try {
+//                java.nio.file.Path skillFile = java.nio.file.Paths.get(ws, ".soloncode", "skills",
+//                        task.getSkillRef(), "SKILL.md");
+//                if (java.nio.file.Files.exists(skillFile)) {
+//                    String skillContent = new String(java.nio.file.Files.readAllBytes(skillFile),
+//                            java.nio.charset.StandardCharsets.UTF_8);
+//                    prompt = prompt + "\n\n--- Skill: " + task.getSkillRef() + " ---\n" + skillContent;
+//                }
+//            } catch (Exception e) {
+//                LOG.warn("Failed to load skill '{}': {}", task.getSkillRef(), e.getMessage());
+//            }
+//        }
 
         // 2. 状态上下文注入
-        if (task.getStateDir() != null) {
-            String workspace = extractWorkspaceFromStateDir(task.getStateDir());
+        if (task.getWorkspace() != null) {
+            String workspace = task.getWorkspace();
             String stateContext = LoopStateManager.buildStateContext(workspace, task.getId());
             if (!stateContext.isEmpty()) {
                 prompt = prompt + stateContext;
@@ -578,8 +578,8 @@ public class LoopScheduler {
         }
 
         // 将 checker 的评估结果写入状态
-        if (task.getStateDir() != null && checkerResult != null) {
-            String workspace = extractWorkspaceFromStateDir(task.getStateDir());
+        if (task.getWorkspace() != null && checkerResult != null) {
+            String workspace = task.getWorkspace();
             LoopStateManager.appendDecision(workspace, task.getId(),
                     "Checker: " + (checkerResult.length() > 200 ? checkerResult.substring(0, 200) + "..." : checkerResult));
         }
@@ -587,19 +587,6 @@ public class LoopScheduler {
         return makerResult;
     }
 
-    /**
-     * 从 stateDir 提取 workspace 路径
-     * stateDir 格式: /path/to/workspace/.soloncode/loops/<loopId>
-     */
-    private String extractWorkspaceFromStateDir(String stateDir) {
-        if (stateDir == null) return ".";
-        String loopsPath = "/" + new AgentProperties().getHarnessLoops();
-        int idx = stateDir.indexOf(loopsPath);
-        if (idx > 0) {
-            return stateDir.substring(0, idx);
-        }
-        return ".";
-    }
 
     /**
      * 移除当前任务（从 IJobManager 和内存列表中）
@@ -660,8 +647,8 @@ public class LoopScheduler {
         if (worktreeManager != null) {
             for (Map.Entry<String, List<LoopTask>> entry : sessionTasks.entrySet()) {
                 for (LoopTask t : entry.getValue()) {
-                    if (t.isWorktreeEnabled() && t.getStateDir() != null) {
-                        String workspace = extractWorkspaceFromStateDir(t.getStateDir());
+                    if (t.isWorktreeEnabled() && t.getWorkspace() != null) {
+                        String workspace = t.getWorkspace();
                         worktreeManager.cleanup(workspace);
                         break; // 每个 workspace 只需 cleanup 一次
                     }

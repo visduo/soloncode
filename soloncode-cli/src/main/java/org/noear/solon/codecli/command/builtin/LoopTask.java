@@ -28,7 +28,7 @@ import java.util.UUID;
  * <p>支持 Loop Engineering 的 6 个基元：
  * <ul>
  *   <li>Automations — 定时/cron 触发（intervalMinutes / cron）</li>
- *   <li>Skills — 通过 skillRef 引用 $skill-name</li>
+ *   <li>Skills — AI 根据 prompt 自动匹配可用技能</li>
  *   <li>Sub-agents — makerAgent / checkerAgent 双角色</li>
  *   <li>Worktrees — worktreeEnabled 在独立分支执行</li>
  *   <li>Connectors — channelNotify 结果通知</li>
@@ -56,14 +56,14 @@ public class LoopTask {
     private final boolean autoInterval;
 
     // ---- Loop Engineering 扩展字段 ----
-    private final String skillRef;           // 技能引用，如 "$triage-skill"
+    private final String skillRef;           // 技能引用
     private final String goalCondition;      // 目标条件，如 "all tests pass"
     private final String makerAgent;         // 执行者代理名
     private final String checkerAgent;       // 验证者代理名
     private final boolean worktreeEnabled;   // 是否在独立 worktree 中执行
     private final String worktreeBranch;     // worktree 分支名（运行时分配）
     private final String channelNotify;      // 通知通道，如 "feishu"
-    private final String stateDir;           // .loop/<id>/ 状态目录路径
+    private final String workspace;         // 工作空间路径（用于动态拼接 stateDir）
     private final int maxIterations;         // 最大迭代次数
 
     // ---- 运行时状态 ----
@@ -72,7 +72,6 @@ public class LoopTask {
     private volatile String lastResult;
     private volatile Instant lastExecutedAt;
     private volatile int currentIteration;
-    private volatile String name;           // 人类可读名称
     private volatile boolean enabled = true; // 启用/停用
 
     /**
@@ -102,10 +101,10 @@ public class LoopTask {
      */
     private LoopTask(String id, String prompt, int intervalMinutes, String cron,
                      Instant createdAt, Instant expireAt, boolean autoInterval,
-                     String name, boolean enabled,
+                     boolean enabled,
                      String skillRef, String goalCondition, String makerAgent,
                      String checkerAgent, boolean worktreeEnabled, String worktreeBranch,
-                     String channelNotify, String stateDir, int maxIterations,
+                     String channelNotify, String workspace, int maxIterations,
                      boolean cancelled, String lastResult, Instant lastExecutedAt, int currentIteration) {
         this.id = id;
         this.prompt = prompt;
@@ -114,7 +113,6 @@ public class LoopTask {
         this.createdAt = createdAt;
         this.expireAt = expireAt;
         this.autoInterval = autoInterval;
-        this.name = name;
         this.enabled = enabled;
         this.skillRef = skillRef;
         this.goalCondition = goalCondition;
@@ -123,7 +121,7 @@ public class LoopTask {
         this.worktreeEnabled = worktreeEnabled;
         this.worktreeBranch = worktreeBranch;
         this.channelNotify = channelNotify;
-        this.stateDir = stateDir;
+        this.workspace = workspace;
         this.maxIterations = maxIterations;
         this.cancelled = cancelled;
         this.lastResult = lastResult;
@@ -137,7 +135,7 @@ public class LoopTask {
     public LoopTask(String prompt, int intervalMinutes, String cron,
                     String skillRef, String goalCondition, String makerAgent,
                     String checkerAgent, Boolean worktreeEnabled, String channelNotify,
-                    Integer maxIterations, String stateDir) {
+                    Integer maxIterations, String workspace) {
         this.id = UUID.randomUUID().toString().substring(0, 8);
         this.prompt = prompt;
         this.intervalMinutes = Math.max(MIN_INTERVAL, Math.min(MAX_INTERVAL, intervalMinutes));
@@ -152,10 +150,9 @@ public class LoopTask {
         this.worktreeEnabled = worktreeEnabled != null ? worktreeEnabled : false;
         this.worktreeBranch = null; // 运行时分配
         this.channelNotify = channelNotify;
-        this.stateDir = stateDir;
+        this.workspace = workspace;
         this.maxIterations = maxIterations != null ? maxIterations : DEFAULT_MAX_ITERATIONS;
         this.currentIteration = 0;
-        this.name = null;
         this.enabled = true;
     }
 
@@ -252,7 +249,6 @@ public class LoopTask {
         return makerAgent != null && !makerAgent.isEmpty();
     }
 
-    public void setName(String name) { this.name = name; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
 
     /**
@@ -272,7 +268,6 @@ public class LoopTask {
         node.set("autoInterval", autoInterval);
         node.set("cancelled", cancelled);
         node.set("running", running);
-        if (name != null) node.set("name", name);
         node.set("enabled", enabled);
 
         // 运行时状态
@@ -292,7 +287,7 @@ public class LoopTask {
         if (worktreeEnabled) node.set("worktreeEnabled", worktreeEnabled);
         if (worktreeBranch != null) node.set("worktreeBranch", worktreeBranch);
         if (channelNotify != null) node.set("channelNotify", channelNotify);
-        if (stateDir != null) node.set("stateDir", stateDir);
+        node.set("workspace", workspace);
         if (maxIterations != DEFAULT_MAX_ITERATIONS) node.set("maxIterations", maxIterations);
 
         return node;
@@ -312,9 +307,7 @@ public class LoopTask {
                 ? node.get("cron").getString()
                 : null;
 
-        // Loop Engineering 扩展字段（向后兼容：缺失时给默认值）
-        String nameVal = node.getOrNull("name") != null
-                ? node.get("name").getString() : null;
+        // 向后兼容：缺失时给默认值
         boolean enabledVal = node.getOrNull("enabled") != null
                 ? node.get("enabled").getBoolean() : true;
 
@@ -332,8 +325,7 @@ public class LoopTask {
                 ? node.get("worktreeBranch").getString() : null;
         String channelNotifyVal = node.getOrNull("channelNotify") != null
                 ? node.get("channelNotify").getString() : null;
-        String stateDirVal = node.getOrNull("stateDir") != null
-                ? node.get("stateDir").getString() : null;
+        String workspaceVal = node.get("workspace").getString();
         int maxIterationsVal = node.getOrNull("maxIterations") != null
                 ? node.get("maxIterations").getInt() : DEFAULT_MAX_ITERATIONS;
         int currentIterationVal = node.getOrNull("currentIteration") != null
@@ -347,7 +339,6 @@ public class LoopTask {
                 Instant.parse(node.get("createdAt").getString()),
                 Instant.parse(node.get("expireAt").getString()),
                 node.get("autoInterval").getBoolean(),
-                nameVal,
                 enabledVal,
                 skillRefVal,
                 goalConditionVal,
@@ -356,7 +347,7 @@ public class LoopTask {
                 worktreeEnabledVal,
                 worktreeBranchVal,
                 channelNotifyVal,
-                stateDirVal,
+                workspaceVal,
                 maxIterationsVal,
                 node.getOrNull("cancelled") != null
                         ? node.get("cancelled").getBoolean() : false,

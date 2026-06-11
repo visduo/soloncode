@@ -746,7 +746,6 @@ public class WebController {
         for (LoopTask t : tasks) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("id", t.getId());
-            item.put("name", t.getName());
             item.put("prompt", t.getPrompt());
             item.put("intervalMinutes", t.getIntervalMinutes());
             if (t.getCron() != null) item.put("cron", t.getCron());
@@ -774,7 +773,6 @@ public class WebController {
     @Post
     @Mapping("/web/chat/loop/add")
     public Result loopAdd(@Param("sessionId") String sessionId,
-                          @Param("name") String name,
                           @Param("prompt") String prompt,
                           @Param(value = "intervalMinutes", required = false) Integer intervalMinutes,
                           @Param(value = "cron", required = false) String cron,
@@ -802,13 +800,11 @@ public class WebController {
                 skillRef, goalCondition, makerAgent, checkerAgent,
                 worktreeEnabled != null ? worktreeEnabled : false,
                 channelNotify, maxIterations,
-                null
+                workspace
         );
 
-        // 设置 name 和 enabled
-        if (name != null && !name.trim().isEmpty()) {
-            task.setName(name.trim());
-        }
+        // 设置 enabled
+        // (name removed: use id for display)
 
         try {
             loopScheduler.schedule(sessionId, workspace, harnessSessions, task);
@@ -826,7 +822,6 @@ public class WebController {
     @Mapping("/web/chat/loop/update")
     public Result loopUpdate(@Param("sessionId") String sessionId,
                              @Param("taskId") String taskId,
-                             @Param(value = "name", required = false) String name,
                              @Param(value = "prompt", required = false) String prompt,
                              @Param(value = "intervalMinutes", required = false) Integer intervalMinutes,
                              @Param(value = "cron", required = false) String cron,
@@ -866,12 +861,10 @@ public class WebController {
                 worktreeEnabled != null ? worktreeEnabled : existing.isWorktreeEnabled(),
                 channelNotify != null ? channelNotify : existing.getChannelNotify(),
                 maxIterations != null ? maxIterations : existing.getMaxIterations(),
-                existing.getStateDir()
+                existing.getWorkspace()
         );
 
-        // 保留 name 和 enabled
-        String effectiveName = (name != null && !name.trim().isEmpty()) ? name.trim() : existing.getName();
-        newTask.setName(effectiveName);
+        // 保留 enabled
         newTask.setEnabled(existing.isEnabled());
 
         loopScheduler.update(sessionId, workspace, harnessSessions, taskId, newTask);

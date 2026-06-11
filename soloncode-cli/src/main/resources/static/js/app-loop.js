@@ -108,12 +108,7 @@
                     html += '<div class="loop-item" data-id="' + t.id + '">';
                     html += '<div class="loop-item-row">';
                     html += '<span class="loop-item-dot ' + statusClass + '"></span>';
-                    if (t.name) {
-                        html += '<span class="loop-item-name">' + escapeHtml(t.name) + '</span>';
-                        html += '<span class="loop-item-id">#' + escapeHtml(t.id) + '</span>';
-                    } else {
-                        html += '<span class="loop-item-name">' + escapeHtml(t.id) + '</span>';
-                    }
+                    html += '<span class="loop-item-name">#' + escapeHtml(t.id) + '</span>';
                     html += '<span class="loop-item-schedule">' + scheduleText + '</span>';
                     html += '<span class="loop-item-status ' + statusClass + '">' + statusText + '</span>';
                     html += '<div class="loop-item-actions">';
@@ -183,12 +178,8 @@
         html += '</div>';
         html += '<div class="loop-form">';
         html += '<div class="loop-form-group">';
-        html += '<label>名称</label>';
-        html += '<input type="text" class="loop-input" id="loopFormName" placeholder="例如: morning-triage"/>';
-        html += '</div>';
-        html += '<div class="loop-form-group">';
         html += '<label>提示词 <span class="loop-required">*</span></label>';
-        html += '<textarea class="loop-textarea" id="loopFormPrompt" rows="2" placeholder="例如: 检查CI状态并汇总失败用例"></textarea>';
+        html += '<input type="text" class="loop-input" id="loopFormPrompt" placeholder="例如: 检查CI状态并汇总失败用例"/>';
         html += '</div>';
         html += '<div class="loop-form-group">';
         html += '<label>间隔</label>';
@@ -204,7 +195,6 @@
         html += '</div>';
         html += '<div class="loop-form-advanced-toggle" id="loopAdvancedToggle">▸ 高级选项</div>';
         html += '<div class="loop-form-advanced" id="loopAdvanced" style="display:none">';
-        html += '<div class="loop-form-group"><label>技能引用</label><input type="text" class="loop-input" id="loopFormSkill" placeholder="$skill-name"/></div>';
         html += '<div class="loop-form-group"><label>目标条件</label><input type="text" class="loop-input" id="loopFormGoal" placeholder="all tests pass"/></div>';
         html += '<div class="loop-form-group"><label>执行者</label><input type="text" class="loop-input" id="loopFormMaker" placeholder="coder"/></div>';
         html += '<div class="loop-form-group"><label>验证者</label><input type="text" class="loop-input" id="loopFormChecker" placeholder="reviewer"/></div>';
@@ -236,7 +226,6 @@
     }
 
     function fillFormData(t) {
-        $('#loopFormName').val(t.name || '');
         $('#loopFormPrompt').val(t.prompt || '');
         if (t.cron) {
             $('input[name=loopScheduleType][value=cron]').prop('checked', true);
@@ -252,7 +241,6 @@
                 $('#loopFormIntervalUnit').val('m');
             }
         }
-        if (t.skillRef) $('#loopFormSkill').val(t.skillRef);
         if (t.goalCondition) $('#loopFormGoal').val(t.goalCondition);
         if (t.makerAgent) $('#loopFormMaker').val(t.makerAgent);
         if (t.checkerAgent) $('#loopFormChecker').val(t.checkerAgent);
@@ -304,11 +292,9 @@
             }
 
             var params = {
-                name: $('#loopFormName').val().trim(),
                 prompt: prompt,
                 intervalMinutes: intervalVal,
                 cron: cronVal,
-                skillRef: $('#loopFormSkill').val().trim() || null,
                 goalCondition: $('#loopFormGoal').val().trim() || null,
                 makerAgent: $('#loopFormMaker').val().trim() || null,
                 checkerAgent: $('#loopFormChecker').val().trim() || null,
