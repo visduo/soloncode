@@ -492,7 +492,7 @@
                 $tplMenu.removeClass('show');
             });
             // 点击其他地方关闭
-            $(document).on('mousedown.looptpl', function(e) {
+            $(document).off('mousedown.looptpl').on('mousedown.looptpl', function(e) {
                 if (!$(e.target).closest('#loopTplDropdown').length) {
                     $tplMenu.removeClass('show');
                 }
