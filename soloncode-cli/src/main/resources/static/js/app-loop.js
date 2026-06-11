@@ -165,12 +165,15 @@
                     html += '<span class="loop-item-schedule">' + scheduleText + '</span>';
                     html += '<span class="loop-item-status ' + statusClass + '">' + statusText + '</span>';
                     html += '<div class="loop-item-actions">';
+                    var toggleIcon = t.enabled
+                        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'
+                        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>';
                     if (!t.cancelled) {
-                        html += '<button class="loop-action-btn loop-toggle-btn" data-action="toggle" data-id="' + t.id + '" data-enabled="' + t.enabled + '" title="' + (t.enabled ? '停用' : '启用') + '">' + (t.enabled ? '停用' : '启用') + '</button>';
-                        html += '<button class="loop-action-btn loop-trigger-btn" data-action="trigger" data-id="' + t.id + '" title="手动触发">⟳</button>';
+                        html += '<button class="loop-action-btn" data-action="toggle" data-id="' + t.id + '" data-enabled="' + t.enabled + '" title="' + (t.enabled ? '停用' : '启用') + '">' + toggleIcon + '</button>';
+                        html += '<button class="loop-action-btn" data-action="trigger" data-id="' + t.id + '" title="手动触发"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>';
                         html += '<button class="loop-action-btn" data-action="edit" data-id="' + t.id + '" title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>';
                     }
-                    html += '<button class="loop-action-btn danger" data-action="remove" data-id="' + t.id + '" title="删除">✕</button>';
+                    html += '<button class="loop-action-btn danger" data-action="remove" data-id="' + t.id + '" title="删除"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>';
                     html += '</div>';
                     html += '</div>';
                     html += '<div class="loop-item-prompt">' + escapeHtml(t.prompt) + '</div>';
@@ -270,7 +273,7 @@
     // ========== 表单渲染 ==========
     function renderLoopForm() {
         var html = '<div class="loop-panel-header">';
-        html += '<button class="loop-panel-back-btn" id="loopBackBtn">← 返回列表</button>';
+        html += '<button class="loop-panel-back-btn" id="loopBackBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>';
         html += '<span class="loop-panel-title">' + (loopEditId ? '编辑循环 #' + escapeHtml(loopEditId) : '新建循环') + '</span>';
         html += '</div>';
         html += '<div class="loop-form">';
@@ -533,10 +536,10 @@
         $panel.css('max-height', Math.min(safeMaxH, 560) + 'px');
 
         var html = '<div class="loop-panel-header">';
-        html += '<button class="loop-panel-back-btn" id="loopDetailBack">← 返回列表</button>';
+        html += '<button class="loop-panel-back-btn" id="loopDetailBack"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>';
         html += '<span class="loop-panel-title">#' + escapeHtml(taskId) + ' 详情</span>';
         html += '<div class="loop-detail-actions">';
-        html += '<button class="loop-action-btn loop-trigger-btn" id="loopDetailTriggerBtn" title="手动触发">⟳</button>';
+        html += '<button class="loop-action-btn" id="loopDetailTriggerBtn" title="手动触发"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>';
         html += '<button class="loop-action-btn" id="loopDetailEditBtn" title="编辑"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>';
         html += '</div>';
         html += '</div>';
