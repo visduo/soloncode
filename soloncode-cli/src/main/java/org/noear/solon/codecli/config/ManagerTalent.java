@@ -18,7 +18,6 @@ package org.noear.solon.codecli.config;
 import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.ai.harness.HarnessEngine;
-import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.annotation.Param;
 import org.noear.solon.codecli.command.builtin.GoalCommand;
 import org.noear.solon.codecli.command.builtin.LoopScheduler;
@@ -55,16 +54,10 @@ public class ManagerTalent extends AbsTalent {
         return "运行时动态添加 LLM 模型、MCP 服务、OpenAPI 源，创建自主目标。添加后立即生效并持久化。";
     }
 
-    @Override
-    public String getInstruction(Prompt prompt) {
-        return "根据用户提供的信息（如密钥、地址等）由 AI 调用工具完成配置。" +
-                "若信息不能直接映射到工具参数，应先通过网络搜索等方式查找能实现用户目的的工具或服务（若涉及远程依赖包，须先确认已安装到本地，再调用工具），" +
-                "再转换为完整配置；信息不足时先向用户确认。";
-    }
-
     // ==================== add_model ====================
 
-    @ToolMapping(name = "add_model", description = "添加一个新的 LLM 模型配置，使其可用于对话。添加后立即生效并持久化。")
+    @ToolMapping(name = "add_model", description = "添加一个新的 LLM 模型配置，使其可用于对话。添加后立即生效并持久化。" +
+            "若用户提供的信息不能直接映射到参数（如只说了模型名，没给 API 地址），应先向用户确认缺失信息后再调用。")
     public String addModel(
             @Param(name = "name", description = "模型名称标识", required = false) String name,
             @Param(name = "apiUrl", description = "API 服务地址") String apiUrl,
@@ -104,7 +97,8 @@ public class ManagerTalent extends AbsTalent {
                     "传输协议（transport）三选一，不同模式所需的参数不同：" +
                     "- stdio 模式：必填 command（如 'npx'、'uvx'、'node'）；可选 args、env。若依赖远程包，须先确认本地已安装，再调用本接口。" +
                     "- sse / streamable 模式：必填 url（如 'http://localhost:8080/mcp'）；可选 headers。" +
-                    "三种模式互斥，不可混用。timeout（超时秒数，默认 120）适用于所有模式。")
+                    "三种模式互斥，不可混用。timeout（超时秒数，默认 120）适用于所有模式。" +
+                    "若无法推断 transport 类型或参数不完整，应先向用户确认后再调用。若涉及远程依赖包（如 npx 包），须先确认本地已安装。")
     public String addMcpServer(
             @Param(name = "name", description = "服务名称标识，需全局唯一") String name,
             @Param(name = "transport", description = "传输协议：stdio、sse、streamable（三选一）") String transport,
@@ -162,7 +156,8 @@ public class ManagerTalent extends AbsTalent {
 
     // ==================== add_api_server ====================
 
-    @ToolMapping(name = "add_api_server", description = "添加一个新的 OpenAPI 源，使其接口可被调用。添加后立即生效并持久化。")
+    @ToolMapping(name = "add_api_server", description = "添加一个新的 OpenAPI 源，使其接口可被调用。添加后立即生效并持久化。" +
+            "若用户未提供 OpenAPI 文档地址，应先向用户确认后再调用。")
     public String addApiServer(
             @Param(name = "docUrl", description = "OpenAPI 文档地址") String docUrl,
             @Param(name = "apiBaseUrl", description = "API 基础路径", required = false) String apiBaseUrl,
