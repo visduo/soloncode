@@ -287,7 +287,7 @@
     function bindListEvents() {
         var $panel = getActivePanel();
 
-        $('#loopAddNewBtn').on('click', function(e) {
+        $panel.find('#loopAddNewBtn').on('click', function(e) {
             e.stopPropagation();
             loopEditId = null;
             renderLoopForm();
@@ -367,7 +367,7 @@
         html += '<input type="text" class="loop-input" id="loopFormPrompt" placeholder="例如: 检查CI状态并汇总失败用例"/>';
         html += '</div>';
         html += '<div class="loop-form-group">';
-        html += '<label>目标完成条件</label>';
+        html += '<label>目标完成检测描述（goal）</label>';
         html += '<input type="text" class="loop-input" id="loopFormGoal" placeholder="例如：所有测试通过"/>';
         html += '</div>';
         html += '<div class="loop-form-group">';
@@ -410,7 +410,7 @@
         if (loopEditId) {
             var $inputs = $panel.find('.loop-input, .loop-checkbox input, select');
             $inputs.prop('disabled', true);
-            $('#loopFormSaveBtn').prop('disabled', true).text('加载中...');
+            $panel.find('#loopFormSaveBtn').prop('disabled', true).text('加载中...');
             loopApi('get', { taskId: loopEditId }, function(res) {
                 var t = (res && res.data) ? res.data : null;
                 if (t) {
@@ -425,56 +425,59 @@
                 }
                 // 恢复表单
                 $inputs.prop('disabled', false);
-                $('#loopFormSaveBtn').prop('disabled', false).text('保存');
+                $panel.find('#loopFormSaveBtn').prop('disabled', false).text('保存');
             });
         }
     }
 
     function fillFormData(t) {
-        $('#loopFormPrompt').val(t.prompt || '');
+        var $panel = getActivePanel();
+        $panel.find('#loopFormPrompt').val(t.prompt || '');
         if (t.cron) {
-            $('input[name=loopScheduleType][value=cron]').prop('checked', true);
-            $('#loopFormCron').val(t.cron);
+            $panel.find('input[name=loopScheduleType][value=cron]').prop('checked', true);
+            $panel.find('#loopFormCron').val(t.cron);
         } else {
-            $('input[name=loopScheduleType][value=interval]').prop('checked', true);
+            $panel.find('input[name=loopScheduleType][value=interval]').prop('checked', true);
             var mins = t.intervalMinutes || 5;
             if (mins >= 60 && mins % 60 === 0) {
-                $('#loopFormInterval').val(mins / 60);
-                $('#loopFormIntervalUnit').val('h');
+                $panel.find('#loopFormInterval').val(mins / 60);
+                $panel.find('#loopFormIntervalUnit').val('h');
             } else {
-                $('#loopFormInterval').val(mins);
-                $('#loopFormIntervalUnit').val('m');
+                $panel.find('#loopFormInterval').val(mins);
+                $panel.find('#loopFormIntervalUnit').val('m');
             }
             // 切换回间隔模式时清空 cron
-            $('#loopFormCron').val('');
+            $panel.find('#loopFormCron').val('');
         }
         // 所有字段无条件赋值，null/undefined 时清空为默认值，避免模板切换残留
-        $('#loopFormGoal').val(t.goalCondition || '');
-        $('#loopFormMaker').val(t.makerAgent || '');
-        $('#loopFormChecker').val(t.checkerAgent || '');
-        $('#loopFormWorktree').prop('checked', !!t.worktreeEnabled);
-        $('#loopFormMaxIter').val(t.maxIterations || '');
+        $panel.find('#loopFormGoal').val(t.goalCondition || '');
+        $panel.find('#loopFormMaker').val(t.makerAgent || '');
+        $panel.find('#loopFormChecker').val(t.checkerAgent || '');
+        $panel.find('#loopFormWorktree').prop('checked', !!t.worktreeEnabled);
+        $panel.find('#loopFormMaxIter').val(t.maxIterations || '');
 
         // 有高级字段时自动展开，否则折叠
         if (t.goalCondition || t.makerAgent || t.checkerAgent || t.worktreeEnabled) {
-            $('#loopAdvanced').show();
-            $('#loopAdvancedToggle').removeClass('collapsed');
+            $panel.find('#loopAdvanced').show();
+            $panel.find('#loopAdvancedToggle').removeClass('collapsed');
         } else {
-            $('#loopAdvanced').hide();
-            $('#loopAdvancedToggle').addClass('collapsed');
+            $panel.find('#loopAdvanced').hide();
+            $panel.find('#loopAdvancedToggle').addClass('collapsed');
         }
     }
 
     // ========== 表单事件绑定 ==========
     function bindFormEvents() {
-        $('#loopBackBtn').on('click', function() {
+        var $panel = getActivePanel();
+
+        $panel.find('#loopBackBtn').on('click', function() {
             loopEditId = null;
             renderLoopList();
         });
 
         // 模板下拉菜单
-        var $tplBtn = $('#loopTplBtn');
-        var $tplMenu = $('#loopTplMenu');
+        var $tplBtn = $panel.find('#loopTplBtn');
+        var $tplMenu = $panel.find('#loopTplMenu');
         if ($tplBtn.length) {
             $tplBtn.on('click', function(e) {
                 e.stopPropagation();
@@ -499,8 +502,8 @@
             });
         }
 
-        $('#loopAdvancedToggle').on('click', function() {
-            var $adv = $('#loopAdvanced');
+        $panel.find('#loopAdvancedToggle').on('click', function() {
+            var $adv = $panel.find('#loopAdvanced');
             if ($adv.is(':visible')) {
                 $adv.hide();
                 $(this).addClass('collapsed');
@@ -511,19 +514,19 @@
         });
 
         // 间隔类型切换
-        $('input[name=loopScheduleType]').on('change', function() {
+        $panel.find('input[name=loopScheduleType]').on('change', function() {
             var isCron = $(this).val() === 'cron';
-            $('#loopFormInterval').prop('disabled', isCron);
-            $('#loopFormIntervalUnit').prop('disabled', isCron);
-            $('#loopFormCron').prop('disabled', !isCron);
+            $panel.find('#loopFormInterval').prop('disabled', isCron);
+            $panel.find('#loopFormIntervalUnit').prop('disabled', isCron);
+            $panel.find('#loopFormCron').prop('disabled', !isCron);
         });
 
         // 保存（防重复点击 + loading 状态）
-        var $saveBtn = $('#loopFormSaveBtn');
+        var $saveBtn = $panel.find('#loopFormSaveBtn');
         $saveBtn.on('click', function() {
             if ($saveBtn.prop('disabled')) return; // 防重复
 
-            var prompt = $('#loopFormPrompt').val().trim();
+            var prompt = $panel.find('#loopFormPrompt').val().trim();
             if (!prompt) {
                 showToast('请输入任务描述', 'error');
                 return;
@@ -532,12 +535,12 @@
             // 进入 loading 状态
             $saveBtn.prop('disabled', true).text('保存中...');
 
-            var isCron = $('input[name=loopScheduleType]:checked').val() === 'cron';
-            var cronVal = isCron ? $('#loopFormCron').val().trim() : null;
+            var isCron = $panel.find('input[name=loopScheduleType]:checked').val() === 'cron';
+            var cronVal = isCron ? $panel.find('#loopFormCron').val().trim() : null;
             var intervalVal = null;
             if (!isCron) {
-                var num = parseInt($('#loopFormInterval').val()) || 5;
-                var unit = $('#loopFormIntervalUnit').val();
+                var num = parseInt($panel.find('#loopFormInterval').val()) || 5;
+                var unit = $panel.find('#loopFormIntervalUnit').val();
                 intervalVal = unit === 'h' ? num * 60 : num;
             }
 
@@ -545,11 +548,11 @@
                 prompt: prompt,
                 intervalMinutes: intervalVal,
                 cron: cronVal,
-                goalCondition: $('#loopFormGoal').val().trim() || null,
-                makerAgent: $('#loopFormMaker').val().trim() || null,
-                checkerAgent: $('#loopFormChecker').val().trim() || null,
-                worktreeEnabled: $('#loopFormWorktree').is(':checked'),
-                maxIterations: parseInt($('#loopFormMaxIter').val()) || null
+                goalCondition: $panel.find('#loopFormGoal').val().trim() || null,
+                makerAgent: $panel.find('#loopFormMaker').val().trim() || null,
+                checkerAgent: $panel.find('#loopFormChecker').val().trim() || null,
+                worktreeEnabled: $panel.find('#loopFormWorktree').is(':checked'),
+                maxIterations: parseInt($panel.find('#loopFormMaxIter').val()) || null
             };
 
             function restoreBtn() {
@@ -583,7 +586,7 @@
         });
 
         // 测试运行
-        $('#loopFormTriggerBtn').on('click', function() {
+        $panel.find('#loopFormTriggerBtn').on('click', function() {
             if (loopEditId) {
                 loopApi('trigger', { taskId: loopEditId }, function() {
                     showToast('已触发执行', 'success');
@@ -640,7 +643,7 @@
         $panel.html(html);
 
         // 详情面板操作按钮
-        $('#loopDetailTriggerBtn').on('click', function(e) {
+        $panel.find('#loopDetailTriggerBtn').on('click', function(e) {
             e.stopPropagation();
             loopApi('trigger', { taskId: taskId }, function(res) {
                 if (res) {
@@ -650,7 +653,7 @@
                 }
             });
         });
-        $('#loopDetailEditBtn').on('click', function(e) {
+        $panel.find('#loopDetailEditBtn').on('click', function(e) {
             e.stopPropagation();
             loopEditId = taskId;
             $panel.removeClass('mode-detail');
@@ -658,7 +661,7 @@
         });
 
         // 返回按钮
-        $('#loopDetailBack').on('click', function() {
+        $panel.find('#loopDetailBack').on('click', function() {
             $panel.removeClass('mode-detail');
             renderLoopList();
         });
@@ -686,7 +689,7 @@
     }
 
     function renderHistoryTab(res) {
-        var $content = $('#loopDetailContent');
+        var $content = getActivePanel().find('#loopDetailContent');
         if (!$content.length) return;
         var items = (res && res.data) ? res.data : [];
         if (items.length === 0) {
@@ -714,7 +717,7 @@
     }
 
     function renderStateTab(res) {
-        var $content = $('#loopDetailContent');
+        var $content = getActivePanel().find('#loopDetailContent');
         if (!$content.length) return;
         var data = (res && res.data) ? res.data : {};
         var html = '';
