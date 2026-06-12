@@ -66,7 +66,7 @@ public class GoalCommand implements Command {
 
     @Override
     public String description() {
-        return "即时目标模式 (set, edit, pause, resume, clear)";
+        return "设定自主目标并循环执行 (<description>, edit <description>, pause, resume, clear)";
     }
 
     @Override
