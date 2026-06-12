@@ -190,9 +190,6 @@ public class WebController {
 
                 for (File dir : dirs) {
                     String sid = dir.getName();
-                    File msgFile = new File(dir, sid + ".messages.ndjson");
-                    if (!msgFile.exists()) continue;
-
                     // 优先使用自定义标签
                     String label = null;
                     File labelFile = new File(dir, "label.txt");
@@ -200,12 +197,20 @@ public class WebController {
                         try (BufferedReader lblReader = new BufferedReader(
                                 new InputStreamReader(new FileInputStream(labelFile), "UTF-8"))) {
                             label = lblReader.readLine();
-                        } catch (Exception ignored) {}
+                        } catch (Exception ignored) {
+                        }
                     }
-                    if (label == null || label.isEmpty()) {
+
+                    if (Assert.isEmpty(label)) {
+                        File msgFile = new File(dir, sid + ".messages.ndjson");
+                        if (!msgFile.exists()) continue;
+
                         label = extractFirstUserMessage(msgFile);
                     }
-                    if (label == null || label.isEmpty()) continue;
+
+                    if (Assert.isEmpty(label)) {
+                        continue;
+                    }
 
                     Map<String, Object> item = new LinkedHashMap<>();
                     item.put("sessionId", sid);
@@ -252,7 +257,7 @@ public class WebController {
      * <p>在会话目录下写入 label.txt 文件保存自定义标签，标签最大长度 50 字符。</p>
      *
      * @param sessionId 待重命名的会话 ID
-     * @param label      新的会话标签文本
+     * @param label     新的会话标签文本
      * @return 操作结果
      * @throws Exception 文件写入异常
      */
@@ -921,7 +926,12 @@ public class WebController {
             return Result.failure(400, "taskId is required");
         }
 
-        loopScheduler.remove(sessionId, engine.getWorkspace(), engine.getHarnessSessions(), taskId);
+        LoopTask task = loopScheduler.getTaskById(sessionId, taskId);
+        if (task == null) {
+            return Result.failure(400, "the task does not exist.");
+        }
+
+        loopScheduler.remove(sessionId, engine.getWorkspace(), engine.getHarnessSessions(), task);
         return Result.succeed();
     }
 

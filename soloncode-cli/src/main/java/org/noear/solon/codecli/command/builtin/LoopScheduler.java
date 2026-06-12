@@ -108,13 +108,6 @@ public class LoopScheduler {
     }
 
     /**
-     * 注入 IM 通道列表（用于 loop 结果通知）
-     */
-    public void setChannels(List<Channel> channels) {
-        this.channels = channels != null ? channels : new ArrayList<>();
-    }
-
-    /**
      * 获取或创建 WorktreeManager（lazy init）
      */
     private WorktreeManager getWorktreeManager() {
@@ -168,110 +161,35 @@ public class LoopScheduler {
         return task;
     }
 
-    /**
-     * 注册并立即执行即时模式任务（intervalMinutes=0）
-     *
-     * <p>等价于 schedule() + trigger()，但执行完一轮后会自动 re-trigger 直到 goal 达成或迭代耗尽。
-     * 一个 session 中只能有一个 id="goal" 的即时任务（如有旧的会先移除）。
-     *
-     * @return 已注册的任务
-     */
-    public LoopTask scheduleNow(String sessionId, String workspace, String harnessSessions, LoopTask task) {
-        // 0. 如果已有 id 相同的即时任务，先移除
-        remove(sessionId, workspace, harnessSessions, task.getId());
-
-        // 1. 走 schedule 注册（内部会跳过 IJobManager 注册）
-        schedule(sessionId, workspace, harnessSessions, task);
-
-        // 2. 立即异步触发首次执行
-        Thread thread = new Thread(() -> onTrigger(sessionId, workspace, harnessSessions, task), "loop-goal-" + task.getId());
-        thread.setDaemon(true);
-        thread.start();
-
-        return task;
-    }
-
-    // ==================== Steering 注入 ====================
-
-    /**
-     * 向即时模式任务注入一次性 steering prompt，通知模型目标已变更。
-     *
-     * <p>对标 Codex 的 objective_updated.md：当 /goal edit 修改目标文本后，
-     * 运行时注入 steering 让模型知道目标已更新，避免继续按旧目标工作。
-     *
-     * <p>仅在任务处于 active + running 状态时注入。如果任务未在运行，
-     * 下一轮 continuation 自然会使用新目标，无需额外处理。
-     *
-     * @return true 如果成功注入 steering
-     */
-    public boolean injectSteering(String sessionId, String workspace, String harnessSessions, String taskId, String steeringPrompt) {
-        LoopTask task = getTaskById(sessionId, taskId);
-        if (task == null || !task.isRunning()) {
-            return false;
-        }
-
-        // 通过 TaskExecutor 注入 steering（作为一次轻量执行）
-        for (TaskExecutor taskExecutor : taskExecutors) {
-            String result = taskExecutor.execute(sessionId, steeringPrompt, null);
-            if (result != null) {
-                LOG.info("Steering injected for task '{}': {}", taskId, steeringPrompt.substring(0, Math.min(80, steeringPrompt.length())));
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 加载 classpath 资源文件内容
-     *
-     * <p>使用 Solon IoUtil 读取 classpath 下的文本资源。
-     * 若加载失败则返回空字符串并记录警告。
-     *
-     * @param path 资源相对路径（如 "goal/goal_continuation.md"）
-     * @return 文件内容字符串，失败时返回 ""
-     */
-    private static String loadResource(String path) {
-        try {
-            return ResourceUtil.getResourceAsString(path, "utf-8");
-        } catch (Exception e) {
-            LOG.error("Failed to load goal template: {}", path, e);
-            return "";
-        }
-    }
-
     // ==================== 任务移除 ====================
 
     /**
      * 停止指定任务
      */
-    public void remove(String sessionId, String workspace, String harnessSessions, String taskId) {
+    public void remove(String sessionId, String workspace, String harnessSessions, LoopTask task) {
+        LOG.info("Removing loop task '{}' from session '{}'", task.getId(), sessionId);
         List<LoopTask> tasks = sessionTasks.get(sessionId);
-        if (tasks == null) return;
+        if (tasks == null) {
+            LOG.warn("Loop task '{}' remove failed: no tasks found for session '{}'", task.getId(), sessionId);
+            return;
+        }
 
-        tasks.removeIf(t -> {
-            if (t.getId().equals(taskId)) {
-                t.setEnabled(false);
-                t.cancel();
-                String jobName = t.getJobName();
-                if (jobManager.jobExists(jobName)) {
-                    jobManager.jobRemove(jobName);
-                }
+        task.cancel();
+        String jobName = task.getJobName();
+        if (jobManager.jobExists(jobName)) {
+            jobManager.jobRemove(jobName);
+        }
 
-                // P1-fix: 清理 worktree
-                if (t.isWorktreeEnabled() && t.getWorkspace() != null) {
-                    String ws = t.getWorkspace();
-                    try {
-                        getWorktreeManager().cleanup(ws);
-                        LOG.info("Loop task '{}' worktree cleaned up on remove", t.getId());
-                    } catch (Exception e) {
-                        LOG.warn("Loop task '{}' worktree cleanup failed on remove: {}", t.getId(), e.getMessage());
-                    }
-                }
-
-                return true;
+        // P1-fix: 清理 worktree
+        if (task.isWorktreeEnabled() && task.getWorkspace() != null) {
+            String ws = task.getWorkspace();
+            try {
+                getWorktreeManager().cleanup(ws);
+                LOG.info("Loop task '{}' worktree cleaned up on remove", task.getId());
+            } catch (Exception e) {
+                LOG.warn("Loop task '{}' worktree cleanup failed on remove: {}", task.getId(), e.getMessage());
             }
-            return false;
-        });
+        }
 
         saveToFile(sessionId, workspace, harnessSessions, tasks);
     }
@@ -499,10 +417,13 @@ public class LoopScheduler {
             return;
         }
 
-        // 达到最大迭代次数则自动取消
+        // 达到最大迭代次数则自动移除
         if (task.isMaxIterationsReached()) {
             LOG.info("Loop task '{}' reached max iterations ({})", task.getId(), task.getMaxIterations());
-            removeCurrentTask(sessionId, task);
+            if (task.getWorkspace() != null) {
+                LoopStateManager.cleanup(task.getWorkspace(), task.getId());
+            }
+            remove(sessionId, workspace, harnessSessions, task);
             return;
         }
 
@@ -558,13 +479,13 @@ public class LoopScheduler {
                 boolean goalMet = executionResult != null &&
                         (executionResult.isGoalAchieved() ||
                          (task.isMakerCheckerMode() && executionResult.isCheckerPassed()));
-                if (task.isGoalMode() && goalMet) {
+                if (goalMet) {
                     LOG.info("Loop task '{}' goal achieved at iteration {}", task.getId(), iteration);
                     if (task.getWorkspace() != null) {
                         LoopStateManager.appendHistory(task.getWorkspace(), task.getId(), executionResult, iteration, "GOAL_ACHIEVED");
+                        LoopStateManager.cleanup(task.getWorkspace(), task.getId());
                     }
-                    removeCurrentTask(sessionId, task);
-                    persistCancellation(sessionId, workspace, harnessSessions);
+                    remove(sessionId, workspace, harnessSessions, task);
                     notifyChannels(sessionId, task);
                     return;
                 }
@@ -574,10 +495,10 @@ public class LoopScheduler {
 
                     if (task.getWorkspace() != null) {
                         LoopStateManager.appendHistory(task.getWorkspace(), task.getId(), executionResult, iteration, "MAX_ITERATIONS_REACHED");
+                        LoopStateManager.cleanup(task.getWorkspace(), task.getId());
                     }
 
-                    removeCurrentTask(sessionId, task);
-                    persistCancellation(sessionId, workspace, harnessSessions);
+                    remove(sessionId, workspace, harnessSessions, task);
                     notifyChannels(sessionId, task);
                     return;
                 }
@@ -705,39 +626,6 @@ public class LoopScheduler {
         }
 
         return LoopExecutionResult.makerChecker(makerResult, checkerResult);
-    }
-
-
-    /**
-     * 移除当前任务（从 IJobManager 和内存列表中）
-     */
-    private void removeCurrentTask(String sessionId, LoopTask task) {
-        String jobName = task.getJobName();
-        if (jobManager.jobExists(jobName)) {
-            jobManager.jobRemove(jobName);
-        }
-        task.cancel();
-    }
-
-    /**
-     * 终止后持久化：将内存中的 cancelled 状态写入 JSON，防止进程重启后被 restore 重新激活
-     */
-    private void persistCancellation(String sessionId, String workspace, String harnessSessions) {
-        List<LoopTask> tasks = sessionTasks.get(sessionId);
-        if (tasks != null) {
-            saveToFile(sessionId, workspace, harnessSessions, tasks);
-        }
-    }
-
-    /**
-     * 供外部移除任务（带持久化）
-     */
-    public void removeWithPersist(String sessionId, String workspace, String harnessSessions, LoopTask task) {
-        removeCurrentTask(sessionId, task);
-        List<LoopTask> tasks = sessionTasks.get(sessionId);
-        if (tasks != null) {
-            saveToFile(sessionId, workspace, harnessSessions, tasks);
-        }
     }
 
     // ==================== 清理过期任务 ====================

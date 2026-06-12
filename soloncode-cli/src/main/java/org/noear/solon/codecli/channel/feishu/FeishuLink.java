@@ -145,7 +145,7 @@ public class FeishuLink implements Channel, Runnable {
         }
 
         if (bindings.isEmpty()) {
-            LOG.info("[Feishu] No bindings, waiting for web bind...");
+            LOG.info("[Feishu] No bindings...");
             return;
         }
 

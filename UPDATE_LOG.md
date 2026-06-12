@@ -1,9 +1,13 @@
 
 
+### v2026.6.14
+
+* 修复 soloncode web 新对话发送 command 对话记录没名字的问题
+* 修复 soloncode loop maker/checker 模式下无法停止的问题
+
 ### v2026.6.13
 
 * 添加 soloncode web 左侧面板拖动大小的功能（同时取消展开与收起的动画）
-* 添加 soloncode goal 命令
 * 添加 soloncode loop goal 模式支持
 * 优化 soloncode web loop 管理面板
 * 修复 soloncode 在用户根目录启动时，配置错乱问题

@@ -94,7 +94,11 @@ public class LoopCommand implements Command {
             if (taskId == null || taskId.isEmpty()) {
                 ctx.println(ctx.color(RED + "Usage: /loop stop <id>" + RESET));
             } else {
-                scheduler.remove(sessionId, workspace, harnessSessions, taskId);
+                LoopTask task = scheduler.getTaskById(sessionId, taskId);
+                if (task != null) {
+                    scheduler.remove(sessionId, workspace, harnessSessions, task);
+                }
+
                 ctx.println(ctx.color(GREEN + "Loop task '" + taskId + "' stopped." + RESET));
             }
         } else if ("stop-all".equals(sub)) {

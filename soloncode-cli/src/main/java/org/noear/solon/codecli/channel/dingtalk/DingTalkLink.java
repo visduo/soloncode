@@ -155,7 +155,7 @@ public class DingTalkLink implements Channel, Runnable {
     @Override
     public void run() {
         if (bindings.isEmpty()) {
-            LOG.info("[DingTalk] No bindings, waiting for web bind...");
+            LOG.info("[DingTalk] No bindings...");
             return;
         }
 
