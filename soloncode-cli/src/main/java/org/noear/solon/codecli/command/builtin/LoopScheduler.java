@@ -536,8 +536,8 @@ public class LoopScheduler {
      * 定时触发 — 执行任务
      */
     private void onTrigger(String sessionId, String workspace, String harnessSessions, LoopTask task) {
-        // 过期或已取消则移除
-        if (task.isExpired() || task.isCancelled()) {
+        // 已禁用/过期/已取消则移除
+        if (!task.isEnabled() || task.isExpired() || task.isCancelled()) {
             String jobName = task.getJobName();
             if (jobManager.jobExists(jobName)) {
                 jobManager.jobRemove(jobName);
@@ -665,8 +665,8 @@ public class LoopScheduler {
             task.finish();
         }
 
-        // 即时模式 re-trigger：如果任务未被取消、未过期、未达最大迭代，则立即触发下一轮
-        if (task.isImmediateMode() && task.isActive() && !task.isMaxIterationsReached()) {
+        // 即时模式 re-trigger：如果任务已启用、未被取消、未过期、未达最大迭代，则立即触发下一轮
+        if (task.isImmediateMode() && task.isEnabled() && task.isActive() && !task.isMaxIterationsReached()) {
             // 并发保护：只有一个 re-trigger 线程可以进入
             if (task.tryScheduleContinuation()) {
                 Thread reTrigger = new Thread(
