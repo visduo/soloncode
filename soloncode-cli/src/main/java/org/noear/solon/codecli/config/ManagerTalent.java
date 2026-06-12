@@ -49,23 +49,18 @@ public class ManagerTalent extends AbsTalent {
         this.loopScheduler = loopScheduler;
     }
 
-    @Override
-    public String description() {
-        return "运行时动态添加 LLM 模型、MCP 服务、OpenAPI 源，创建自主目标。添加后立即生效并持久化。";
-    }
 
     // ==================== add_model ====================
 
-    @ToolMapping(name = "add_model", description = "添加一个新的 LLM 模型配置，使其可用于对话。添加后立即生效并持久化。" +
-            "若用户提供的信息不能直接映射到参数（如只说了模型名，没给 API 地址），应先向用户确认缺失信息后再调用。")
+    @ToolMapping(name = "add_model", description = "添加 LLM 模型配置。添加后立即生效并持久化。参数应由用户提供，若有缺失应主动向用户确认后再调用。")
     public String addModel(
-            @Param(name = "name", description = "模型名称标识", required = false) String name,
-            @Param(name = "apiUrl", description = "API 服务地址") String apiUrl,
+            @Param(name = "name", description = "模型名称标识（可选；不传则自动取 model 值）", required = false) String name,
+            @Param(name = "apiUrl", description = "API 服务地址（如 https://api.openai.com/v1）") String apiUrl,
             @Param(name = "apiKey", description = "API 密钥") String apiKey,
-            @Param(name = "standard", description = "接口规范（可选：openai、ollama、anthropic）", required = false) String standard,
-            @Param(name = "model", description = "模型 ID（如 gpt-4o、deepseek-chat 等）") String model,
-            @Param(name = "headers", description = "自定义请求头", required = false) Map<String, String> headers,
-            @Param(name = "timeout", description = "超时秒数（可选，默认 120）", required = false) String timeout) {
+            @Param(name = "standard", description = "接口规范：openai、ollama、anthropic（不传则自动推断）", required = false) String standard,
+            @Param(name = "model", description = "模型 ID（如 gpt-5.5、deepseek-v4-flash）") String model,
+            @Param(name = "headers", description = "自定义请求头（如 Authorization: Bearer xxx）", required = false) Map<String, String> headers,
+            @Param(name = "timeout", description = "超时秒数，默认 120", required = false) String timeout) {
 
         ModelDo modelDo = new ModelDo();
         modelDo.setName(name);
@@ -93,21 +88,21 @@ public class ManagerTalent extends AbsTalent {
     // ==================== add_mcp_server ====================
 
     @ToolMapping(name = "add_mcp_server",
-            description = "添加一个新的 MCP 服务，使其工具可被调用。添加后立即生效并持久化。" +
-                    "传输协议（transport）三选一，不同模式所需的参数不同：" +
-                    "- stdio 模式：必填 command（如 'npx'、'uvx'、'node'）；可选 args、env。若依赖远程包，须先确认本地已安装，再调用本接口。" +
-                    "- sse / streamable 模式：必填 url（如 'http://localhost:8080/mcp'）；可选 headers。" +
-                    "三种模式互斥，不可混用。timeout（超时秒数，默认 120）适用于所有模式。" +
-                    "若无法推断 transport 类型或参数不完整，应先向用户确认后再调用。若涉及远程依赖包（如 npx 包），须先确认本地已安装。")
+            description = "添加 MCP 服务集成第三方工具。添加后立即生效并持久化。" +
+                    "传输协议三选一，参数按协议而定：" +
+                    "- stdio：必填 command（如 npx/uvx/node）+ 可选 args/env。若依赖远程包，须先确认已安装。" +
+                    "- sse/streamable：必填 url（如 http://localhost:8080/mcp）+ 可选 headers。" +
+                    "三种协议互斥不可混用。timeout 默认 120s。" +
+                    "参数不完整时应主动向用户确认后再调用。")
     public String addMcpServer(
-            @Param(name = "name", description = "服务名称标识，需全局唯一") String name,
-            @Param(name = "transport", description = "传输协议：stdio、sse、streamable（三选一）") String transport,
-            @Param(name = "url", description = "服务地址（仅 sse / streamable 模式必填，如 'http://localhost:8080/mcp'）", required = false) String url,
-            @Param(name = "headers", description = "自定义请求头（仅 sse / streamable 模式）", required = false) Map<String, String> headers,
-            @Param(name = "command", description = "启动命令（仅 stdio 模式必填，如 'npx'、'uvx'、'node'）", required = false) String command,
-            @Param(name = "args", description = "命令参数列表（仅 stdio 模式）", required = false) List<String> args,
+            @Param(name = "name", description = "服务名称，需全局唯一") String name,
+            @Param(name = "transport", description = "传输协议：stdio / sse / streamable（三选一）") String transport,
+            @Param(name = "url", description = "服务地址（仅 sse/streamable 模式必填，如 http://localhost:8080/mcp）", required = false) String url,
+            @Param(name = "headers", description = "自定义请求头（仅 sse/streamable 模式）", required = false) Map<String, String> headers,
+            @Param(name = "command", description = "启动命令（仅 stdio 模式必填，如 npx/uvx/node）", required = false) String command,
+            @Param(name = "args", description = "命令参数（仅 stdio 模式）", required = false) List<String> args,
             @Param(name = "env", description = "环境变量（仅 stdio 模式）", required = false) Map<String, String> env,
-            @Param(name = "timeout", description = "超时秒数（所有模式通用，默认 120）", required = false) String timeout) {
+            @Param(name = "timeout", description = "超时秒数，默认 120", required = false) String timeout) {
 
         // ---- transport 参数校验 ----
         if (transport == null || transport.isEmpty()) {
@@ -156,14 +151,13 @@ public class ManagerTalent extends AbsTalent {
 
     // ==================== add_api_server ====================
 
-    @ToolMapping(name = "add_api_server", description = "添加一个新的 OpenAPI 源，使其接口可被调用。添加后立即生效并持久化。" +
-            "若用户未提供 OpenAPI 文档地址，应先向用户确认后再调用。")
+    @ToolMapping(name = "add_api_server", description = "添加 OpenAPI 源导入外部 HTTP API。添加后立即生效并持久化。docUrl 应指向 OpenAPI 规范文档（JSON/YAML）；若用户未提供，主动询问后再调用。")
     public String addApiServer(
-            @Param(name = "docUrl", description = "OpenAPI 文档地址") String docUrl,
-            @Param(name = "apiBaseUrl", description = "API 基础路径", required = false) String apiBaseUrl,
-            @Param(name = "headers", description = "自定义请求头", required = false) Map<String, String> headers,
-            @Param(name = "disallowedTools", description = "不允许用的工具黑名单", required = false) List<String> disallowedTools,
-            @Param(name = "timeout", description = "超时秒数", required = false) String timeout) {
+            @Param(name = "docUrl", description = "OpenAPI 规范文档地址（JSON/YAML 格式，如 https://api.example.com/openapi.json）") String docUrl,
+            @Param(name = "apiBaseUrl", description = "API 基础路径（可选，覆盖规范中的 server 地址）", required = false) String apiBaseUrl,
+            @Param(name = "headers", description = "自定义请求头（如 API-Key: xxx）", required = false) Map<String, String> headers,
+            @Param(name = "disallowedTools", description = "禁用的工具名列表（不在列表中暴露）", required = false) List<String> disallowedTools,
+            @Param(name = "timeout", description = "超时秒数，默认 120", required = false) String timeout) {
 
         ApiSourceDo apiDo = new ApiSourceDo();
         apiDo.setDocUrl(docUrl);
@@ -185,13 +179,14 @@ public class ManagerTalent extends AbsTalent {
     // ==================== create_goal ====================
 
     @ToolMapping(name = "create_goal",
-            description = "创建一个自主目标并循环执行，AI 会持续工作直到目标达成或迭代耗尽。" +
-                    "适用于需要多轮迭代才能完成的复杂任务，如修复所有失败的测试、重构模块、排查问题等。" +
-                    "目标描述应具体、可验证，例如 'fix all failing tests'、'refactor auth module to use JWT'。")
+            description = "创建自主目标让 AI 持续迭代执行，直到目标达成或迭代耗尽。" +
+                    "创建后 AI 会自动反复执行、自我评估进度，无需人工干预。" +
+                    "适用于多轮迭代的复杂任务：修复测试、重构模块、排查问题等。" +
+                    "描述务必具体可验证，例如 'fix all failing tests' 而非 'improve code quality'。")
     public String createGoal(
-            @Param(name = "sessionId", description = "当前会话 ID") String sessionId,
-            @Param(name = "description", description = "目标描述，应具体且可验证") String description,
-            @Param(name = "maxIterations", description = "最大迭代次数（可选，默认 30）", required = false) Integer maxIterations) {
+            @Param(name = "description", description = "目标描述，务必具体可验证（如 'fix all failing tests in auth module'）") String description,
+            @Param(name = "maxIterations", description = "最大迭代次数，默认 30（可选）", required = false) Integer maxIterations,
+            String __sessionId) {
 
         // 基本合理性校验
         if (description == null || description.trim().isEmpty()) {
@@ -209,7 +204,7 @@ public class ManagerTalent extends AbsTalent {
         String harnessSessions = engine.getHarnessSessions();
 
         // 检查是否已有活跃 goal
-        LoopTask existing = loopScheduler.getTaskById(sessionId, GoalCommand.getGoalTaskId());
+        LoopTask existing = loopScheduler.getTaskById(__sessionId, GoalCommand.getGoalTaskId());
         if (existing != null && !existing.isCancelled()) {
             return "ERROR: 已有活跃目标: '" + existing.getGoalCondition() +
                    "' (进度: " + existing.getCurrentIteration() + "/" + existing.getMaxIterations() + ")\n" +
@@ -224,7 +219,7 @@ public class ManagerTalent extends AbsTalent {
 
         // 注册并立即执行
         try {
-            loopScheduler.scheduleNow(sessionId, workspace, harnessSessions, goalTask);
+            loopScheduler.scheduleNow(__sessionId, workspace, harnessSessions, goalTask);
         } catch (IllegalStateException e) {
             LoopStateManager.cleanup(workspace, goalTask.getId());
             return "ERROR: 创建目标失败: " + e.getMessage();
@@ -238,11 +233,10 @@ public class ManagerTalent extends AbsTalent {
 
     // ==================== goal_status ====================
 
-    @ToolMapping(name = "goal_status", description = "查询当前活跃目标的状态。")
-    public String goalStatus(
-            @Param(name = "sessionId", description = "当前会话 ID") String sessionId) {
+    @ToolMapping(name = "goal_status", description = "查询当前活跃目标的进度、状态和最近结果。无活跃目标时返回提示信息。")
+    public String goalStatus(String __sessionId) {
 
-        LoopTask goalTask = loopScheduler.getTaskById(sessionId, GoalCommand.getGoalTaskId());
+        LoopTask goalTask = loopScheduler.getTaskById(__sessionId, GoalCommand.getGoalTaskId());
         if (goalTask == null || goalTask.isCancelled()) {
             return "当前没有活跃目标。可使用 create_goal 创建新目标。";
         }
