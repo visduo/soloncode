@@ -21,6 +21,7 @@ import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.codecli.config.AgentProperties;
 
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -396,6 +397,9 @@ public class LoopCommand implements Command {
     }
 
     private String formatAgo(Instant instant) {
-        return GoalCommand.formatAgo(instant);
+        long seconds = Duration.between(instant, Instant.now()).getSeconds();
+        if (seconds < 60) return seconds + "s ago";
+        if (seconds < 3600) return (seconds / 60) + "m ago";
+        return (seconds / 3600) + "h ago";
     }
 }

@@ -101,7 +101,7 @@ public class LoopTask {
     }
 
     /**
-     * 全参数构造（由 Builder、GoalCommand、copyWithUpdate 调用）
+     * 全参数构造（由 Builder、copyWithUpdate 调用）
      */
     LoopTask(String id, String prompt, int intervalMinutes, String cron,
                      Instant createdAt, Instant expireAt, boolean autoInterval,
@@ -293,15 +293,6 @@ public class LoopTask {
      */
     public boolean isGoalMode() {
         return goalCondition != null && !goalCondition.isEmpty();
-    }
-
-    /**
-     * 是否为即时模式（intervalMinutes == 0，执行完立即 re-trigger，不经过 IJobManager 定时器）
-     *
-     * <p>goal 命令创建的任务使用此模式。
-     */
-    public boolean isImmediateMode() {
-        return intervalMinutes == 0;
     }
 
     /**

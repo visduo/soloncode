@@ -53,11 +53,6 @@ public class LoopScheduler {
     private static final int MAX_TASKS_PER_SESSION = 50;
     private static final String TASKS_FILE = "loop-tasks.json";
 
-    // Goal prompt 模板缓存（从 classpath:goal/ 目录加载）
-    private static final String GOAL_CONTINUATION_TEMPLATE = loadResource("goal/goal_continuation.md");
-    private static final String GOAL_OBJECTIVE_UPDATED_TEMPLATE = loadResource("goal/goal_objective_updated.md");
-    private static final String GOAL_WRAP_UP_TEMPLATE = loadResource("goal/goal_wrap_up.md");
-
     // Solon 原生调度管理器
     private final IJobManager jobManager;
 
@@ -162,9 +157,7 @@ public class LoopScheduler {
         cleanExpired(sessionId, workspace, harnessSessions, tasks);
 
         // 3. 定时模式才注册到 IJobManager；即时模式由 scheduleNow 管理
-        if (!task.isImmediateMode()) {
-            registerJob(sessionId, workspace, harnessSessions, task);
-        }
+        registerJob(sessionId, workspace, harnessSessions, task);
 
         // 4. 加入内存列表
         tasks.add(task);
@@ -246,26 +239,6 @@ public class LoopScheduler {
         }
     }
 
-    /**
-     * 构建目标已变更的 steering prompt（从 goal_objective_updated.md 模板加载）
-     */
-    public static String buildObjectiveUpdatedSteering(String newObjective) {
-        return GOAL_OBJECTIVE_UPDATED_TEMPLATE
-                .replace("{{objective}}", newObjective);
-    }
-
-    /**
-     * 构建迭代预算耗尽时的 wrap-up prompt（从 goal_wrap_up.md 模板加载）
-     *
-     * <p>对标 Codex 的 budget_limit.md：不直接停止，而是让模型总结进度、识别剩余工作和阻塞项。
-     */
-    private static String buildWrapUpPrompt(LoopTask task) {
-        return GOAL_WRAP_UP_TEMPLATE
-                .replace("{{objective}}", task.getGoalCondition())
-                .replace("{{current_iteration}}", String.valueOf(task.getCurrentIteration()))
-                .replace("{{max_iterations}}", String.valueOf(task.getMaxIterations()));
-    }
-
     // ==================== 任务移除 ====================
 
     /**
@@ -317,12 +290,6 @@ public class LoopScheduler {
                 if (newEnabled) {
                     // 恢复：重新注册 Job（即时模式会被 registerJob 内部跳过）
                     registerJob(sessionId, workspace, harnessSessions, t);
-                    // 即时模式恢复后立即 re-trigger
-                    if (t.isImmediateMode() && !t.isMaxIterationsReached()) {
-                        Thread thread = new Thread(() -> onTrigger(sessionId, workspace, harnessSessions, t), "loop-goal-resume-" + t.getId());
-                        thread.setDaemon(true);
-                        thread.start();
-                    }
                 } else {
                     // 暂停：移除 Job，但不 cancel
                     String jobName = t.getJobName();
@@ -482,15 +449,6 @@ public class LoopScheduler {
             registerJob(sessionId, workspace, harnessSessions, t);
         }
 
-        // 即时模式任务恢复后立即 re-trigger
-        for (LoopTask t : alive) {
-            if (t.isImmediateMode() && !t.isMaxIterationsReached()) {
-                Thread thread = new Thread(() -> onTrigger(sessionId, workspace, harnessSessions, t), "loop-goal-restore-" + t.getId());
-                thread.setDaemon(true);
-                thread.start();
-            }
-        }
-
         // 回写（去掉过期任务）
         saveToFile(sessionId, workspace, harnessSessions, alive);
         LOG.info("Restored {} loop tasks for session {}", alive.size(), sessionId);
@@ -504,11 +462,6 @@ public class LoopScheduler {
      * <p>即时模式（intervalMinutes=0）不应调用此方法。
      */
     private void registerJob(String sessionId, String workspace, String harnessSessions, LoopTask task) {
-        if (task.isImmediateMode()) {
-            // 即时模式不注册定时器，由 onTrigger 尾部 re-trigger
-            return;
-        }
-
         String jobName = task.getJobName();
 
         ScheduledAnno scheduled;
@@ -614,26 +567,8 @@ public class LoopScheduler {
                 if (task.isMaxIterationsReached()) {
                     LOG.info("Loop task '{}' reached max iterations ({})", task.getId(), task.getMaxIterations());
 
-                    // 即时模式 goal 任务：执行一次 wrap-up turn 让模型优雅收尾
-                    if (task.isImmediateMode() && task.isGoalMode() && !task.isWrapUpPending()) {
-                        task.setWrapUpPending(true);
-                        String wrapUpPrompt = buildWrapUpPrompt(task);
-                        LoopExecutionResult wrapUpResult = executeSingle(sessionId, wrapUpPrompt, null);
-
-                        // wrap-up 中也可能标记 GOAL_ACHIEVED
-                        if (wrapUpResult != null && wrapUpResult.isGoalAchieved()) {
-                            if (task.getWorkspace() != null) {
-                                LoopStateManager.appendHistory(task.getWorkspace(), task.getId(), wrapUpResult, iteration, "GOAL_ACHIEVED");
-                            }
-                        } else {
-                            if (task.getWorkspace() != null) {
-                                LoopStateManager.appendHistory(task.getWorkspace(), task.getId(), executionResult, iteration, "MAX_ITERATIONS_REACHED");
-                            }
-                        }
-                    } else {
-                        if (task.getWorkspace() != null) {
-                            LoopStateManager.appendHistory(task.getWorkspace(), task.getId(), executionResult, iteration, "MAX_ITERATIONS_REACHED");
-                        }
+                    if (task.getWorkspace() != null) {
+                        LoopStateManager.appendHistory(task.getWorkspace(), task.getId(), executionResult, iteration, "MAX_ITERATIONS_REACHED");
                     }
 
                     removeCurrentTask(sessionId, task);
@@ -664,18 +599,6 @@ public class LoopScheduler {
         } finally {
             task.finish();
         }
-
-        // 即时模式 re-trigger：如果任务已启用、未被取消、未过期、未达最大迭代，则立即触发下一轮
-        if (task.isImmediateMode() && task.isEnabled() && task.isActive() && !task.isMaxIterationsReached()) {
-            // 并发保护：只有一个 re-trigger 线程可以进入
-            if (task.tryScheduleContinuation()) {
-                Thread reTrigger = new Thread(
-                        () -> onTrigger(sessionId, workspace, harnessSessions, task),
-                        "loop-goal-" + task.getId());
-                reTrigger.setDaemon(true);
-                reTrigger.start();
-            }
-        }
     }
 
     /**
@@ -698,21 +621,13 @@ public class LoopScheduler {
             StringBuilder goalPrompt = new StringBuilder();
             goalPrompt.append("\n\n--- Goal (persistent objective) ---\n");
 
-            if (task.isImmediateMode() && GOAL_CONTINUATION_TEMPLATE != null && !GOAL_CONTINUATION_TEMPLATE.isEmpty()) {
-                // 即时模式：使用模板文件（含审计指令、continuation behavior 等）
-                goalPrompt.append(GOAL_CONTINUATION_TEMPLATE
-                        .replace("{{objective}}", task.getGoalCondition())
-                        .replace("{{current_iteration}}", String.valueOf(task.getCurrentIteration()))
-                        .replace("{{max_iterations}}", String.valueOf(task.getMaxIterations())));
-            } else {
-                // 定时模式 或 模板加载失败时的回退：简短提示
-                goalPrompt.append("<objective>\n");
-                goalPrompt.append(task.getGoalCondition()).append("\n");
-                goalPrompt.append("</objective>\n\n");
-                goalPrompt.append("Progress: iteration ").append(task.getCurrentIteration())
-                          .append("/").append(task.getMaxIterations()).append("\n");
-                goalPrompt.append("\nIf the goal is achieved, respond with [GOAL_ACHIEVED].");
-            }
+            // 定时模式 或 模板加载失败时的回退：简短提示
+            goalPrompt.append("<objective>\n");
+            goalPrompt.append(task.getGoalCondition()).append("\n");
+            goalPrompt.append("</objective>\n\n");
+            goalPrompt.append("Progress: iteration ").append(task.getCurrentIteration())
+                    .append("/").append(task.getMaxIterations()).append("\n");
+            goalPrompt.append("\nIf the goal is achieved, respond with [GOAL_ACHIEVED].");
 
             prompt = prompt + goalPrompt;
         }
