@@ -15,8 +15,11 @@ function updateContextIndicator(chunk) {
     }
     var percent = contextLength > 0 ? Math.round(tokens / contextLength * 100) : 0;
 
-    function fmt(n) { return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '_'); }
-    $status.text('Context: ' + fmt(tokens) + ' / ' + fmt(contextLength) + ' (' + percent + '%)');
+    function fmtK(n) {
+        if (n >= 1000) return (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1).replace(/\.0$/, '') + 'k';
+        return n.toString();
+    }
+    $status.text('Context: ' + fmtK(tokens) + ' / ' + fmtK(contextLength) + ' (' + percent + '%)');
     $status.show();
 }
 

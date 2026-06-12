@@ -275,10 +275,13 @@ function appendErrorChunk(sess, text) {
 /* ===== Trace Badge ===== */
 function appendTraceBadge(sess, chunk) {
     ensureAssistantBubble(sess);
-    function fmt(n) { return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '_'); }
+    function fmtK(n) {
+        if (n >= 1000) return (n / 1000).toFixed(n % 1000 === 0 ? 0 : 1).replace(/\.0$/, '') + 'k';
+        return n.toString();
+    }
     var parts = [];
     if (chunk.model) parts.push(chunk.model);
-    if (chunk.totalTokens != null) parts.push(fmt(chunk.totalTokens) + 'tk');
+    if (chunk.totalTokens != null) parts.push(fmtK(chunk.totalTokens));
     if (chunk.elapsedSeconds != null) parts.push(chunk.elapsedSeconds + 's');
     if (parts.length === 0) return;
     var badge = $('<div>').addClass('msg-trace').text(parts.join(' \u00b7 '));
