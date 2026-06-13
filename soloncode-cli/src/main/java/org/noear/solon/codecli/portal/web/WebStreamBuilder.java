@@ -27,6 +27,8 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.TaskTalent;
+import org.noear.solon.ai.talents.cli.TerminalTalent;
+import org.noear.solon.ai.talents.cli.TodoTalent;
 import org.noear.solon.ai.talents.memory.MemoryTalent;
 import org.noear.solon.codecli.channel.Channel;
 import org.noear.solon.codecli.channel.wechat.WeChatLink;
@@ -327,11 +329,19 @@ public class WebStreamBuilder {
                 }
                 webChunk.setArgs(chunk.getArgs());
 
-                if ("todowrite".equals(chunk.getToolName())) {
-                    String todos = (String) chunk.getArgs().get("todos");
+                if (TodoTalent.TOOL_TODOWRITE.equals(chunk.getToolName())) {
+                    String todos = (String) chunk.getArgs().get(TodoTalent.PARAM_TODOS);
 
                     if (Assert.isNotEmpty(todos)) {
                         webChunk.setText(todos);
+                    }
+                }
+
+                if (TerminalTalent.TOOL_WRITE.equals(chunk.getToolName())) {
+                    String content = (String) chunk.getArgs().get(TerminalTalent.PARAM_CONTENT);
+
+                    if (Assert.isNotEmpty(content)) {
+                        webChunk.setText(content);
                     }
                 }
             }
