@@ -39,10 +39,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Web 流式响应构建器
@@ -322,18 +319,20 @@ public class WebStreamBuilder {
             WebChunk webChunk = WebChunk.ofAction(chunk.getContent());
 
             if (Assert.isNotEmpty(chunk.getToolName())) {
+                webChunk.setArgs(new LinkedHashMap<>(chunk.getArgs()));
+
                 if (engine.getName().equals(chunk.getAgentName())) {
                     webChunk.setToolName(chunk.getToolName());
                 } else {
                     webChunk.setToolName(chunk.getAgentName() + "/" + chunk.getToolName());
                 }
-                webChunk.setArgs(chunk.getArgs());
 
                 if (TodoTalent.TOOL_TODOWRITE.equals(chunk.getToolName())) {
                     String todos = (String) chunk.getArgs().get(TodoTalent.PARAM_TODOS);
 
                     if (Assert.isNotEmpty(todos)) {
                         webChunk.setText(todos);
+                        webChunk.getArgs().remove(TodoTalent.PARAM_TODOS);
                     }
                 }
 
@@ -342,6 +341,7 @@ public class WebStreamBuilder {
 
                     if (Assert.isNotEmpty(content)) {
                         webChunk.setText(content);
+                        webChunk.getArgs().remove(TerminalTalent.PARAM_CONTENT);
                     }
                 }
 
@@ -350,6 +350,7 @@ public class WebStreamBuilder {
 
                     if (Assert.isNotEmpty(diff)) {
                         webChunk.setText(diff);
+                        webChunk.getArgs().remove(TerminalTalent.PARAM_DIFF);
                     }
                 }
             }
