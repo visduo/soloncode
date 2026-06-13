@@ -18,10 +18,9 @@ package org.noear.solon.codecli.command.builtin;
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.snack4.Options;
+import org.noear.solon.codecli.config.AgentFlags;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.noear.solon.codecli.config.AgentProperties;
 
 import java.io.OutputStreamWriter;
 import java.io.Writer;
@@ -57,14 +56,14 @@ public class LoopStateManager {
      * 获取 loop 状态目录的根路径（.soloncode/loops/）
      */
     public static Path getLoopBaseDir(String workspace) {
-        return Paths.get(workspace, AgentProperties.getHarnessLoops());
+        return Paths.get(workspace, AgentFlags.getHarnessLoops());
     }
 
     /**
      * 获取指定任务的状态目录路径
      */
     public static Path getStateDir(String workspace, String loopId) {
-        return Paths.get(workspace, AgentProperties.getHarnessLoops(), loopId);
+        return Paths.get(workspace, AgentFlags.getHarnessLoops(), loopId);
     }
 
     /**

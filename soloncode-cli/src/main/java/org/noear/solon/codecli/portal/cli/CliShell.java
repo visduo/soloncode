@@ -42,8 +42,8 @@ import org.noear.solon.ai.talents.memory.MemoryTalent;
 import org.noear.solon.ai.util.CmdUtil;
 import org.noear.solon.codecli.command.CliCommandContext;
 import org.noear.solon.codecli.config.AgentFlags;
-import org.noear.solon.codecli.config.AgentProperties;
 import org.noear.solon.codecli.command.builtin.LoopScheduler;
+import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.DateUtil;
 import org.noear.solon.lang.Preview;
@@ -73,7 +73,7 @@ public class CliShell implements Runnable {
     private Terminal terminal;
     private LineReader reader;
     private final HarnessEngine engine;
-    private final AgentProperties agentProps;
+    private final AgentSettings agentProps;
     private final LoopScheduler loopScheduler;
 
     /**
@@ -96,7 +96,7 @@ public class CliShell implements Runnable {
             RESET = "\033[0m";     // 重置所有样式和颜色（恢复终端默认）
 
 
-    public CliShell(HarnessEngine engine, AgentProperties agentProps, LoopScheduler loopScheduler) {
+    public CliShell(HarnessEngine engine, AgentSettings agentProps, LoopScheduler loopScheduler) {
         this.engine = engine;
         this.agentProps = agentProps;
         this.loopScheduler = loopScheduler;
@@ -518,7 +518,7 @@ public class CliShell implements Runnable {
             }
 
             if (reason.getMessage().isThinking()) {
-                if (agentProps.isThinkPrinted()) {
+                if (agentProps.getGeneral().getCliThinkPrinted()) {
                     onReasonDeltaChunkDo(DIM + delta + RESET, isFirstReasonDeltaChunk, isFirstConversation);
                 }
             } else {
@@ -610,7 +610,7 @@ public class CliShell implements Runnable {
             String argsStr = argsBuilder.toString().replace("\n", " ");
             boolean hasBigArgs = argsStr.length() > 100 || (args != null && args.values().stream().anyMatch(v -> v instanceof String && ((String) v).contains("\n")));
 
-            if (agentProps.isCliPrintSimplified() && isTodo == false) {
+            if (agentProps.getGeneral().getCliPrintSimplified() && isTodo == false) {
                 // --- 简化风格：单行摘要模式 ---
                 String content = action.getContent() == null ? "" : action.getContent().trim();
                 String summary;

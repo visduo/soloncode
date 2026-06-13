@@ -23,6 +23,7 @@ import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.task.ObservationChunk;
 import org.noear.solon.ai.agent.react.task.ReasonChunk;
 import org.noear.solon.ai.agent.react.task.ThoughtChunk;
+import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.chat.message.UserMessage;
@@ -36,9 +37,10 @@ import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.talents.memory.MemoryTalent;
 import org.noear.solon.ai.util.CmdUtil;
 import org.noear.solon.codecli.command.WebCommandContext;
-import org.noear.solon.codecli.config.AgentProperties;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLTask;
+import org.noear.solon.codecli.config.AgentFlags;
+import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.websocket.WebSocket;
 import org.noear.solon.net.websocket.listener.SimpleWebSocketListener;
@@ -49,10 +51,6 @@ import reactor.core.Disposable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.charset.StandardCharsets;
 
 /**
  * Code CLI WebSocket 网关
@@ -67,17 +65,17 @@ public class WsGate extends SimpleWebSocketListener {
     private static final String SESSION_ID_DESKTOP = "desktop";
 
     private final HarnessEngine engine;
-    private final AgentProperties agentPros;
+    private final AgentSettings agentSettings;
 
-    public WsGate(HarnessEngine engine, AgentProperties agentPros) {
+    public WsGate(HarnessEngine engine, AgentSettings agentSettings) {
         this.engine = engine;
-        this.agentPros = agentPros;
+        this.agentSettings = agentSettings;
     }
 
     @Override
     public void onOpen(WebSocket socket) {
         String sessionId = socket.paramOrDefault("sessionId", SESSION_ID_DESKTOP);
-        String sessionCwd = socket.param(AgentProperties.X_SESSION_CWD);//工作区
+        String sessionCwd = socket.param(AgentFlags.X_SESSION_CWD);//工作区
 
         if (Assert.isNotEmpty(sessionId)) {
             if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
@@ -499,15 +497,14 @@ public class WsGate extends SimpleWebSocketListener {
 
                 if (apiUrl != null || apiKey != null || model != null) {
                     // 更新 AgentProperties 的 chatModel 配置
-                    if (agentPros.getChatModel() != null) {
-                        if (apiUrl != null) agentPros.getChatModel().setApiUrl(apiUrl);
-                        if (apiKey != null) agentPros.getChatModel().setApiKey(apiKey);
-                        if (model != null) agentPros.getChatModel().setModel(model);
-                    }
+                    ChatConfig chatConfig = new ChatConfig();
+                    chatConfig.setApiUrl(apiUrl);
+                    chatConfig.setApiKey(apiKey);
+                    chatConfig.setModel(model);
 
                     // 重建 ChatModel 并注入 kernel
-                    engine.removeModel(agentPros.getChatModel().getNameOrModel());
-                    engine.addModel(agentPros.getChatModel());
+                    engine.removeModel(chatConfig.getNameOrModel());
+                    engine.addModel(chatConfig);
                     engine.refreshMainAgent();
 
                     LOG.info("[WS] Config updated: model={}", model);
@@ -536,34 +533,35 @@ public class WsGate extends SimpleWebSocketListener {
      * 将 chatModel 配置持久化到 YAML 文件（~/.soloncode/chat-model.yml）
      */
     private void saveConfigToFile(String apiUrl, String apiKey, String model) {
-        try {
-            String home = System.getProperty("user.home");
-            Path configDir = Paths.get(home, ".soloncode");
-            Files.createDirectories(configDir);
-
-            Path configFile = configDir.resolve("chat-model.yml");
-
-            // 读取已有配置，保留未更新的字段
-            String existApiUrl = agentPros.getChatModel() != null ? agentPros.getChatModel().getApiUrl() : null;
-            String existApiKey = agentPros.getChatModel() != null ? agentPros.getChatModel().getApiKey() : null;
-            String existModel = agentPros.getChatModel() != null ? agentPros.getChatModel().getNameOrModel() : null;
-
-            String finalApiUrl = apiUrl != null ? apiUrl : existApiUrl;
-            String finalApiKey = apiKey != null ? apiKey : existApiKey;
-            String finalModel = model != null ? model : existModel;
-
-            StringBuilder yaml = new StringBuilder();
-            yaml.append("soloncode:\n");
-            yaml.append("  chatModel:\n");
-            if (finalApiUrl != null) yaml.append("    apiUrl: \"").append(escapeYaml(finalApiUrl)).append("\"\n");
-            if (finalApiKey != null) yaml.append("    apiKey: \"").append(escapeYaml(finalApiKey)).append("\"\n");
-            if (finalModel != null) yaml.append("    model: \"").append(escapeYaml(finalModel)).append("\"\n");
-
-            Files.write(configFile, yaml.toString().getBytes(StandardCharsets.UTF_8));
-            LOG.info("[WS] Config persisted to: {}", configFile);
-        } catch (Exception e) {
-            LOG.error("[WS] Failed to persist config to YAML", e);
-        }
+        //todo: 这块要根据 AppSetttings 类重新进行设计。noear,2026.6
+//        try {
+//            String home = System.getProperty("user.home");
+//            Path configDir = Paths.get(home, ".soloncode");
+//            Files.createDirectories(configDir);
+//
+//            Path configFile = configDir.resolve("chat-model.yml");
+//
+//            // 读取已有配置，保留未更新的字段
+//            String existApiUrl = agentPros.getChatModel() != null ? agentPros.getChatModel().getApiUrl() : null;
+//            String existApiKey = agentPros.getChatModel() != null ? agentPros.getChatModel().getApiKey() : null;
+//            String existModel = agentPros.getChatModel() != null ? agentPros.getChatModel().getNameOrModel() : null;
+//
+//            String finalApiUrl = apiUrl != null ? apiUrl : existApiUrl;
+//            String finalApiKey = apiKey != null ? apiKey : existApiKey;
+//            String finalModel = model != null ? model : existModel;
+//
+//            StringBuilder yaml = new StringBuilder();
+//            yaml.append("soloncode:\n");
+//            yaml.append("  chatModel:\n");
+//            if (finalApiUrl != null) yaml.append("    apiUrl: \"").append(escapeYaml(finalApiUrl)).append("\"\n");
+//            if (finalApiKey != null) yaml.append("    apiKey: \"").append(escapeYaml(finalApiKey)).append("\"\n");
+//            if (finalModel != null) yaml.append("    model: \"").append(escapeYaml(finalModel)).append("\"\n");
+//
+//            Files.write(configFile, yaml.toString().getBytes(StandardCharsets.UTF_8));
+//            LOG.info("[WS] Config persisted to: {}", configFile);
+//        } catch (Exception e) {
+//            LOG.error("[WS] Failed to persist config to YAML", e);
+//        }
     }
 
     private String escapeYaml(String value) {

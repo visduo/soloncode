@@ -35,7 +35,6 @@ import org.noear.solon.ai.talents.gateway.openapi.ApiTool;
 import org.noear.solon.ai.util.CmdUtil;
 import org.noear.solon.annotation.*;
 import org.noear.solon.codecli.config.AgentFlags;
-import org.noear.solon.codecli.config.AgentProperties;
 import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.codecli.config.GeneralSettings;
 import org.noear.solon.codecli.config.entity.ApiSourceDo;
@@ -100,8 +99,6 @@ public class WebSettingsController {
      */
     private final MarketManager marketManager;
 
-    private final AgentProperties properties;
-
     /**
      * 统一配置管理器，管理 LLM 模型、MCP 服务器、OpenApi 服务器的持久化数据
      */
@@ -113,8 +110,8 @@ public class WebSettingsController {
      * @param engine   AI Agent 执行引擎
      * @param settings 统一配置管理器（由 App.initAgentSettings 创建并注册到容器）
      */
-    public WebSettingsController(HarnessEngine engine, AgentProperties properties, AgentSettings settings) {
-        this(engine, properties, settings, new MarketManager());
+    public WebSettingsController(HarnessEngine engine, AgentSettings settings) {
+        this(engine, settings, new MarketManager());
     }
 
     /**
@@ -124,9 +121,8 @@ public class WebSettingsController {
      * @param settings      统一配置管理器
      * @param marketManager 技能市场管理器
      */
-    public WebSettingsController(HarnessEngine engine, AgentProperties properties, AgentSettings settings, MarketManager marketManager) {
+    public WebSettingsController(HarnessEngine engine, AgentSettings settings, MarketManager marketManager) {
         this.engine = engine;
-        this.properties = properties;
         this.settings = settings;
         this.marketManager = marketManager;
     }
@@ -157,39 +153,28 @@ public class WebSettingsController {
     @Post
     @Mapping("/web/settings/general/save")
     public Result generalSave(@Body String json) throws Exception {
-        GeneralSettings tmp = ONode.ofJson(json).toBean(GeneralSettings.class);
-        if (tmp != null) {
-            settings.setGeneral(tmp);
-            if (tmp.getMemoryIsolation() != null) {
-                properties.setMemoryIsolation(tmp.getMemoryIsolation());
-            }
+        ONode tmp = ONode.ofJson(json);
+        if (tmp.isObject()) {
+            tmp.bindTo(settings.getGeneral());
 
-            if (tmp.getSandboxAllowUserHome() != null) {
-                properties.setSandboxAllowUserHome(tmp.getSandboxAllowUserHome());
-            }
+            engine.setCompressionThreshold(settings.getGeneral().getSummaryWindowSize(), settings.getGeneral().getSummaryWindowToken());
+            engine.setSessionWindowSize(settings.getGeneral().getSessionWindowSize());
 
-            if (tmp.getSandboxSystemRestrict() != null) {
-                properties.setSandboxSystemRestrict(tmp.getSandboxSystemRestrict());
-            }
+            engine.setModelRetries(settings.getGeneral().getModelRetries());
+            engine.setMcpRetries(settings.getGeneral().getMcpRetries());
+            engine.setApiRetries(settings.getGeneral().getApiRetries());
 
-            engine.setCompressionThreshold(tmp.getSummaryWindowSize(), tmp.getSummaryWindowToken());
-            engine.setSessionWindowSize(tmp.getSessionWindowSize());
+            engine.setSandboxEnabled(settings.getGeneral().getSandboxMode());
+            engine.setSandboxAllowUserHome(settings.getGeneral().getSandboxAllowUserHome());
+            engine.setSandboxSystemRestrict(settings.getGeneral().getSandboxSystemRestrict());
 
-            engine.setModelRetries(tmp.getModelRetries());
-            engine.setMcpRetries(tmp.getMcpRetries());
-            engine.setApiRetries(tmp.getApiRetries());
-
-            engine.setSandboxEnabled(tmp.getSandboxMode());
-            engine.setSandboxAllowUserHome(tmp.getSandboxAllowUserHome());
-            engine.setSandboxSystemRestrict(tmp.getSandboxSystemRestrict());
-
-            engine.setBashAsyncEnabled(tmp.getBashAsyncEnabled());
-            engine.setMemoryEnabled(tmp.getMemoryEnabled());
+            engine.setBashAsyncEnabled(settings.getGeneral().getBashAsyncEnabled());
+            engine.setMemoryEnabled(settings.getGeneral().getMemoryEnabled());
 
 
-            engine.getMcpGatewayTalent().setEnabled(tmp.getMcpEnabled());
-            engine.getOpenApiGatewayTalent().setEnabled(tmp.getOpenApiEnabled());
-            engine.getLspTalent().setEnabled(tmp.getLspEnabled());
+            engine.getMcpGatewayTalent().setEnabled(settings.getGeneral().getMcpEnabled());
+            engine.getOpenApiGatewayTalent().setEnabled(settings.getGeneral().getOpenApiEnabled());
+            engine.getLspTalent().setEnabled(settings.getGeneral().getLspEnabled());
         }
 
         saveSettings();
@@ -286,7 +271,7 @@ public class WebSettingsController {
                     .apiKey(apiKey)
                     .standard(standard)
                     .model(model)
-                    .userAgent(properties.getUserAgent())
+                    .userAgent(settings.getGeneral().getUserAgent())
                     .build();
 
             chatModel.prompt("hi").call();

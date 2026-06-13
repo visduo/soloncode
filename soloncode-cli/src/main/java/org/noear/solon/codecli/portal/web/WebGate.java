@@ -31,7 +31,7 @@ import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.util.CmdUtil;
 import org.noear.solon.codecli.command.WebCommandContext;
-import org.noear.solon.codecli.config.AgentProperties;
+import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.core.handle.UploadedFile;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.net.websocket.WebSocket;
@@ -66,9 +66,6 @@ public class WebGate extends SimpleWebSocketListener {
     /** AI 引擎实例，提供会话管理、模型获取、命令注册等核心能力 */
     private final HarnessEngine engine;
 
-    /** Agent 配置属性（模型参数、工作空间路径等） */
-    private final AgentProperties agentProps;
-
     /** 流式响应构建器，负责组装 ReAct Agent 的流式输出并通过本网关推送 */
     private final WebStreamBuilder streamBuilder;
 
@@ -88,11 +85,9 @@ public class WebGate extends SimpleWebSocketListener {
      * 构造网关实例。
      *
      * @param engine     AI 引擎，提供会话、模型、Agent、命令等核心服务
-     * @param agentProps Agent 配置属性
      */
-    public WebGate(HarnessEngine engine, AgentProperties agentProps) {
+    public WebGate(HarnessEngine engine) {
         this.engine = engine;
-        this.agentProps = agentProps;
         this.streamBuilder = new WebStreamBuilder(engine);
     }
 
@@ -358,7 +353,7 @@ public class WebGate extends SimpleWebSocketListener {
                 if (session.isEmpty() && Assert.isNotEmpty(input)) {
                     //如果是空，可能发的是 command（还没有对话记录）
                     try {
-                        Path sessionPath = Paths.get(engine.getWorkspace(), AgentProperties.getHarnessSessions(), sessionId).toAbsolutePath().normalize();
+                        Path sessionPath = Paths.get(engine.getWorkspace(), engine.getHarnessSessions(), sessionId).toAbsolutePath().normalize();
                         File labelFile = new File(sessionPath.toFile(), "label.txt");
                         if (labelFile.exists() == false) {
                             // 从用户输入生成 label（空会话场景，如纯命令输入）

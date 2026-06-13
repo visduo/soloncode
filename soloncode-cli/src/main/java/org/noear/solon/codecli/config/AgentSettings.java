@@ -36,7 +36,9 @@ public class AgentSettings implements Serializable {
     private static final Logger LOG = LoggerFactory.getLogger(AgentSettings.class);
 
     //general 常规
-    private GeneralSettings general = new GeneralSettings();
+    private final GeneralSettings general = new GeneralSettings();
+    //permission 权限
+    private final PermissionSettings permission = new PermissionSettings();
 
     //defaultModel
     private String defaultModel;
@@ -58,108 +60,123 @@ public class AgentSettings implements Serializable {
      * 如果 settings 为空，则从 props 补充到 settings。</p>
      */
     public void mergeFrom(AgentProperties props) {
-        if (general.getSessionWindowSize() != null) {
-            props.setSessionWindowSize(general.getSessionWindowSize());
-        } else {
+        if (general.getSessionWindowSize() == null) {
             general.setSessionWindowSize(props.getSessionWindowSize());
         }
 
-        if (general.getSummaryWindowSize() != null) {
-            props.setSummaryWindowSize(general.getSummaryWindowSize());
-        } else {
+        if (general.getSummaryWindowSize() == null) {
             general.setSummaryWindowSize(props.getSummaryWindowSize());
         }
 
-        if (general.getSummaryWindowToken() != null) {
-            props.setSummaryWindowToken(general.getSummaryWindowToken());
-        } else {
+        if (general.getSummaryWindowToken() == null) {
             general.setSummaryWindowToken(props.getSummaryWindowToken());
         }
 
-        if (general.getSandboxMode() != null) {
-            props.setSandboxMode(general.getSandboxMode());
-        } else {
+        if(general.getSummaryModel() == null){
+            general.setSummaryModel(props.getSummaryModel());
+        }
+
+        if (general.getSandboxMode() == null) {
             general.setSandboxMode(props.isSandboxMode());
         }
 
-        if (general.getSandboxAllowUserHome() != null) {
-            props.setSandboxAllowUserHome(general.getSandboxAllowUserHome());
-        } else {
+        if (general.getSandboxAllowUserHome() == null) {
             general.setSandboxAllowUserHome(props.isSandboxAllowUserHome());
         }
 
-        if (general.getSandboxSystemRestrict() != null) {
-            props.setSandboxSystemRestrict(general.getSandboxSystemRestrict());
-        } else {
+        if (general.getSandboxSystemRestrict() == null) {
             general.setSandboxSystemRestrict(props.isSandboxSystemRestrict());
         }
 
-        if (general.getApiRetries() != null) {
-            props.setApiRetries(general.getApiRetries());
-        } else {
+        if (general.getApiRetries() == null) {
             general.setApiRetries(props.getApiRetries());
         }
 
-        if (general.getMcpRetries() != null) {
-            props.setMcpRetries(general.getMcpRetries());
-        } else {
+        if (general.getMcpRetries() == null) {
             general.setMcpRetries(props.getMcpRetries());
         }
 
-        if (general.getModelRetries() != null) {
-            props.setModelRetries(general.getModelRetries());
-        } else {
+        if (general.getModelRetries() == null) {
             general.setModelRetries(props.getModelRetries());
         }
 
-        if (general.getBashAsyncEnabled() != null) {
-            props.setBashAsyncEnabled(general.getBashAsyncEnabled());
-        } else {
+        if (general.getBashAsyncEnabled() == null) {
             general.setBashAsyncEnabled(props.isBashAsyncEnabled());
         }
 
-        if (general.getMemoryEnabled() != null) {
-            props.setMemoryEnabled(general.getMemoryEnabled());
-        } else {
+        if (general.getMemoryEnabled() == null) {
             general.setMemoryEnabled(props.isMemoryEnabled());
         }
 
-        if (general.getMemoryIsolation() != null) {
-            props.setMemoryIsolation(general.getMemoryIsolation());
-        } else {
+        if (general.getMemoryIsolation() == null) {
             general.setMemoryIsolation(props.isMemoryIsolation());
         }
 
-        if (general.getMcpEnabled() != null) {
-            props.setMcpEnabled(general.getMcpEnabled());
-        } else {
+        if (general.getMcpEnabled() == null) {
             general.setMcpEnabled(props.isMcpEnabled());
         }
 
-        if (general.getOpenApiEnabled() != null) {
-            props.setOpenApiEnabled(general.getOpenApiEnabled());
-        } else {
+        if (general.getOpenApiEnabled() == null) {
             general.setOpenApiEnabled(props.isOpenApiEnabled());
         }
 
-        if (general.getLspEnabled() != null) {
-            props.setLspEnabled(general.getLspEnabled());
-        } else {
+        if (general.getLspEnabled() == null) {
             general.setLspEnabled(props.isLspEnabled());
         }
 
-        //-------------
+        if(general.getUserAgent() == null){
+            general.setUserAgent(props.getUserAgent());
+        }
 
-        if (Assert.isNotEmpty(this.defaultModel)) {
-            props.setDefaultModel(this.defaultModel);
-        } else {
+        if(general.getMaxTurns() == null) {
+            general.setMaxTurns(props.getMaxTurns());
+
+            if (general.getMaxTurns() == null) {
+                general.setMaxTurns(20);
+            }
+        }
+
+        if(general.getAutoRethink() == null){
+            general.setAutoRethink(props.isAutoRethink());
+        }
+
+        if(general.getHitlEnabled() == null){
+            general.setHitlEnabled(props.isHitlEnabled());
+        }
+
+        if(general.getSubagentEnabled() == null){
+            general.setSubagentEnabled(props.isSubagentEnabled());
+        }
+
+        if(general.getCliPrintSimplified() == null){
+            general.setCliPrintSimplified(props.isCliPrintSimplified());
+        }
+
+        if(general.getCliThinkPrinted() == null){
+            general.setCliThinkPrinted(props.isThinkPrinted());
+        }
+
+        //-----------------------------------------------------
+
+        if(permission.getTools().size() == 0) {
+            permission.getTools().addAll(props.getTools());
+
+            if (permission.getTools().size() == 0) {
+                permission.getTools().add("**");
+            }
+        }
+
+        if(permission.getDisallowedTools().size() == 0){
+            permission.getDisallowedTools().addAll(props.getDisallowedTools());
+        }
+
+        //-----------------------------------------------------
+
+        if (Assert.isEmpty(this.defaultModel)) {
             this.defaultModel = props.getDefaultModel();
         }
 
-        if (this.models.size() > 0) {
-            props.getModels().clear();
-            props.getModels().addAll(this.models.values());
-        } else {
+        if (this.models.size() == 0) {
             for (ModelDo modelDo : props.getModels()) {
                 this.models.put(modelDo.getNameOrModel(), modelDo);
             }
@@ -168,38 +185,23 @@ public class AgentSettings implements Serializable {
         // 合并完成后统一兜底：如果 defaultModel 未指定，取第一个模型
         if (Assert.isEmpty(this.defaultModel) && this.models.size() > 0) {
             this.defaultModel = this.models.values().iterator().next().getNameOrModel();
-            props.setDefaultModel(this.defaultModel);
         }
 
-        if (this.mcpServers.size() > 0) {
-            props.getMcpServers().clear();
-            props.getMcpServers().putAll(this.mcpServers);
-        } else {
+        if (this.mcpServers.size() == 0) {
             this.mcpServers.putAll(props.getMcpServers());
         }
 
-        if (this.apiServers.size() > 0) {
-            props.getApiServers().clear();
-            props.getApiServers().putAll(this.apiServers);
-        } else {
+        if (this.apiServers.size() == 0) {
             this.apiServers.putAll(props.getApiServers());
         }
 
-        if (this.mountPools.size() > 0) {
-            props.getSkillPools().clear();
-            for (Map.Entry<String, MountDo> entry : this.mountPools.entrySet()) {
-                props.getSkillPools().put(entry.getKey(), entry.getValue().getPath());
-            }
-        } else {
+        if (this.mountPools.size() == 0) {
             for (Map.Entry<String, String> entry : props.getSkillPools().entrySet()) {
                 this.mountPools.put(entry.getKey(), new MountDo(AgentFlags.SCOPE_GLOBAL, "", MountType.SKILLS, entry.getValue(), false, true, false));
             }
         }
 
-        if (this.lspServers.size() > 0) {
-            props.getLspServers().clear();
-            props.getLspServers().putAll(this.lspServers);
-        } else {
+        if (this.lspServers.size() == 0) {
             this.lspServers.putAll(props.getLspServers());
         }
     }
@@ -209,8 +211,8 @@ public class AgentSettings implements Serializable {
      */
     public static AgentSettings loadFromFile() {
         try {
-            Path globalFile = Paths.get(AgentProperties.getUserHome(), ".soloncode", "settings.json").toAbsolutePath();
-            Path localFile = Paths.get(AgentProperties.getUserDir(), ".soloncode", "settings.json").toAbsolutePath();
+            Path globalFile = Paths.get(AgentFlags.getUserHome(), ".soloncode", "settings.json").toAbsolutePath();
+            Path localFile = Paths.get(AgentFlags.getUserDir(), ".soloncode", "settings.json").toAbsolutePath();
             boolean isLocalAsGlobal = localFile.toString().equals(globalFile.toString());
 
             AgentSettings agentSettings = new AgentSettings();
@@ -265,17 +267,23 @@ public class AgentSettings implements Serializable {
      */
     public void saveToFile() {
         try {
-            Path globalFile = Paths.get(AgentProperties.getUserHome(), ".soloncode", "settings.json").toAbsolutePath();
-            Path localFile = Paths.get(AgentProperties.getUserDir(), ".soloncode", "settings.json").toAbsolutePath();
+            Path globalFileOld = Paths.get(AgentFlags.getUserHome(), ".soloncode", "config.yml").toAbsolutePath();
+            Path localFileOld = Paths.get(AgentFlags.getUserDir(), ".soloncode", "config.yml").toAbsolutePath();
+
+            Path globalFile = Paths.get(AgentFlags.getUserHome(), ".soloncode", "settings.json").toAbsolutePath();
+            Path localFile = Paths.get(AgentFlags.getUserDir(), ".soloncode", "settings.json").toAbsolutePath();
             boolean isLocalAsGlobal = localFile.toString().equals(globalFile.toString());
 
             Files.createDirectories(globalFile.getParent());
             Files.write(globalFile, getGlobalJson(isLocalAsGlobal).getBytes("UTF-8"));
+            Files.deleteIfExists(globalFileOld); //有新配置后，去掉旧配置
+
 
             if (isLocalAsGlobal == false) {
                 //如果本地文件，不同于全局文件
                 Files.createDirectories(localFile.getParent());
                 Files.write(localFile, getLocalJson().getBytes("UTF-8"));
+                Files.deleteIfExists(localFileOld); //有新配置后，去掉旧配置
             }
         } catch (Exception e) {
             LOG.warn("[Settings] Failed to save settings to file: {}", e.getMessage());

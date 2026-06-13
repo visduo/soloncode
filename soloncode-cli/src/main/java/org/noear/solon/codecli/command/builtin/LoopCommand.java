@@ -18,7 +18,7 @@ package org.noear.solon.codecli.command.builtin;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
-import org.noear.solon.codecli.config.AgentProperties;
+import org.noear.solon.codecli.config.AgentFlags;
 
 import java.nio.file.Paths;
 import java.time.Duration;
@@ -265,7 +265,7 @@ public class LoopCommand implements Command {
             ctx.println(ctx.color("  " + MAGENTA + "Max Iterations:" + RESET + " " + maxIterations));
         }
 
-        ctx.println(ctx.color("  " + DIM + "State:" + RESET + " " + Paths.get(AgentProperties.getHarnessLoops(), task.getId())));
+        ctx.println(ctx.color("  " + DIM + "State:" + RESET + " " + Paths.get(AgentFlags.getHarnessLoops(), task.getId())));
         ctx.println(ctx.color(DIM + "  Expires: " + task.getExpireAt() + RESET));
     }
 

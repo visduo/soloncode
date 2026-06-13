@@ -4,6 +4,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  *
@@ -19,6 +21,8 @@ public class GeneralSettings implements Serializable {
     private Integer summaryWindowSize;
     //上下文压缩触发词元数（达到这个数，就开始触发）
     private Integer summaryWindowToken;
+    //压缩模型
+    private String summaryModel;
 
     //启用沙盒模式
     private Boolean sandboxMode;
@@ -40,9 +44,30 @@ public class GeneralSettings implements Serializable {
     //启用心智记忆隔离（按工作区隔离长期记忆）
     private Boolean memoryIsolation;
 
-
+    //是否接入 MCP 服务
     private Boolean mcpEnabled;
+    //是否接入 OpenAPI 服务
     private Boolean openApiEnabled;
     //启用LSP代码智能（增加上下文消耗，非编码用户建议关闭）
     private Boolean lspEnabled;
+
+    //------------
+
+    //http 用户代理
+    private String userAgent; // "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; SolonCode/1.0 like claude-code; +https://solon.noear.org/)";
+
+    //最大回合
+    private Integer maxTurns; // 20
+    //自我反思
+    private Boolean autoRethink; //true
+
+    //是否启用人工审核危险操作
+    private Boolean hitlEnabled; //false
+    //是否启用子代理模式
+    private Boolean subagentEnabled; // true
+
+    //内心思考，是否打印
+    private Boolean cliThinkPrinted; //true
+    //控制台打印是否简化
+    private Boolean cliPrintSimplified; //true
 }

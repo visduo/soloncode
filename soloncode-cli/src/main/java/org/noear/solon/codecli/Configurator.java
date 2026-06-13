@@ -72,9 +72,6 @@ public class Configurator {
     HarnessEngine agentRuntime;
 
     @Inject
-    AgentProperties agentProps;
-
-    @Inject
     AgentSettings agentSettings;
 
     @Inject
@@ -83,50 +80,40 @@ public class Configurator {
     private LoopScheduler loopScheduler;
 
     @Bean
-    public HarnessEngine agentRuntime(AgentProperties props) throws Exception {
-        //props.getMountPools().put("@global", Paths.get(props.getUserHome(), props.getHarnessSkills()).toString());
-        //props.getMountPools().put("@local", Paths.get(props.getWorkspace(), props.getHarnessSkills()).toString());
-
-        //props.getAgentPools().add(Paths.get(props.getUserHome(), props.getHarnessAgents()).toString()); //global
-        //props.getAgentPools().add(Paths.get(props.getWorkspace(), props.getHarnessAgents()).toString()); //local
-
-
-        //-----------------
-
-        String workspace = AgentProperties.getUserDir();
+    public HarnessEngine agentRuntime(AgentSettings settings) throws Exception {
+        String workspace = AgentFlags.getUserDir();
         Map<String, AgentSession> sessionMap = new ConcurrentHashMap<>();
 
         // 会话数据存到全局目录 ~/.soloncode/sessions/<sessionId>/
         AgentSessionProvider sessionProvider = (sessionId) -> sessionMap.computeIfAbsent(sessionId, key ->
-                new FileAgentSession(key, Paths.get(workspace, props.getHarnessSessions()).resolve(key).normalize().toFile().toString()));
+                new FileAgentSession(key, Paths.get(workspace, AgentFlags.getHarnessSessions()).resolve(key).normalize().toFile().toString()));
 
-        HarnessEngine engine = HarnessEngine.of(workspace, props.getHarnessHome())
-                .userAgent(props.getUserAgent())
-                .systemPrompt(props.getAgentsMd())
-                .maxTurns(props.getMaxSteps())
-                .maxTurns(props.getMaxTurns())
-                .autoRethink(props.isAutoRethink())
-                .toolsAdd(props.getTools())
-                .disallowedToolsAdd(props.getTools())
-                .sessionWindowSize(props.getSessionWindowSize())
+        HarnessEngine engine = HarnessEngine.of(workspace, AgentFlags.getHarnessHome())
+                .userAgent(settings.getGeneral().getUserAgent())
+                .systemPrompt(AgentFlags.getAgentsMd())
+                .maxTurns(settings.getGeneral().getMaxTurns())
+                .autoRethink(settings.getGeneral().getAutoRethink())
+                .sessionWindowSize(settings.getGeneral().getSessionWindowSize())
                 .sessionProvider(sessionProvider)
-                .compressionThreshold(props.getSummaryWindowSize(), props.getSummaryWindowToken())
-                .compressionModel(props.getSummaryModel())
-                .memoryEnabled(props.isMemoryEnabled())
-                .memorySolution(new MemoryFactory(agentProps))
-                .sandboxEnabled(props.isSandboxMode())
-                .sandboxAllowUserHome(props.isSandboxAllowUserHome())
-                .sandboxSystemRestrict(props.isSandboxSystemRestrict())
-                .bashAsyncEnabled(props.isBashAsyncEnabled())
-                .subagentEnabled(props.isSubagentEnabled())
-                .hitlEnabled(props.isHitlEnabled())
-                .apiRetries(props.getApiRetries())
-                .modelRetries(props.getModelRetries())
-                .mcpRetries(props.getModelRetries())
+                .compressionThreshold(settings.getGeneral().getSummaryWindowSize(), settings.getGeneral().getSummaryWindowToken())
+                .compressionModel(settings.getGeneral().getSummaryModel())
+                .memoryEnabled(settings.getGeneral().getMemoryEnabled())
+                .memorySolution(new MemoryFactory(agentSettings))
+                .sandboxEnabled(settings.getGeneral().getSandboxMode())
+                .sandboxAllowUserHome(settings.getGeneral().getSandboxAllowUserHome())
+                .sandboxSystemRestrict(settings.getGeneral().getSandboxSystemRestrict())
+                .bashAsyncEnabled(settings.getGeneral().getBashAsyncEnabled())
+                .subagentEnabled(settings.getGeneral().getSubagentEnabled())
+                .hitlEnabled(settings.getGeneral().getHitlEnabled())
+                .apiRetries(settings.getGeneral().getApiRetries())
+                .modelRetries(settings.getGeneral().getModelRetries())
+                .mcpRetries(settings.getGeneral().getModelRetries())
+                .toolsAdd(settings.getPermission().getTools())
+                .disallowedToolsAdd(settings.getPermission().getDisallowedTools())
                 .build();
 
 
-        engine.setDefaultModel(props.getDefaultModel());
+        engine.setDefaultModel(settings.getDefaultModel());
         for (ModelDo model : agentSettings.getModels().values()) {
             engine.addModel(model);
         }
@@ -143,7 +130,6 @@ public class Configurator {
                     .writeable(mount.isWriteable())
                     .build());
         }
-
 
         engine.addMount(MountDir.builder().alias("@global-skills").type(MountType.SKILLS).path("~/" + engine.getHarnessSkills()).primary(true).build());
         engine.addMount(MountDir.builder().alias("@workspace-skills").type(MountType.SKILLS).path("./" + engine.getHarnessSkills()).primary(true).build());
@@ -180,7 +166,7 @@ public class Configurator {
         addSystemLspServer(engine, agentSettings, "kotlin", Arrays.asList("kotlin-language-server"), Arrays.asList(".kt", ".kts"));
         addSystemLspServer(engine, agentSettings, "yaml", Arrays.asList("yaml-language-server", "--stdio"), Arrays.asList(".yaml", ".yml"));
 
-        engine.getCommandRegistry().load(Paths.get(AgentProperties.getUserHome(), engine.getHarnessCommands()));
+        engine.getCommandRegistry().load(Paths.get(AgentFlags.getUserHome(), engine.getHarnessCommands()));
         engine.getCommandRegistry().load(Paths.get(workspace, engine.getHarnessCommands()));
 
         engine.getCommandRegistry().register(new ExitCommand());
@@ -189,10 +175,10 @@ public class Configurator {
         engine.getCommandRegistry().register(new RewindCommand());
         engine.getCommandRegistry().register(new ModelCommand());
 
-        engine.getLspTalent().setEnabled(props.isLspEnabled());
+        engine.getLspTalent().setEnabled(settings.getGeneral().getLspEnabled());
 
         // loop scheduler
-        this.loopScheduler = new LoopScheduler(props.getHarnessLoopWorktrees());
+        this.loopScheduler = new LoopScheduler(AgentFlags.getHarnessLoopWorktrees());
         engine.getCommandRegistry().register(new LoopCommand(loopScheduler));
 
 
@@ -209,7 +195,7 @@ public class Configurator {
         });
 
 
-        CliShell cliShell = new CliShell(agentRuntime, agentProps, loopScheduler);
+        CliShell cliShell = new CliShell(agentRuntime, agentSettings, loopScheduler);
         String flag = Solon.cfg().argx().flagAt(0);
 
         if (AgentFlags.FLAG_VERSION.equals(flag)) {
@@ -224,23 +210,23 @@ public class Configurator {
             if (AgentFlags.FLAG_RUN.equals(flag)) { // java -jar soloncode.jar run '你好' // soloncode run '你好'
                 //单次任务态
                 String prompt = Solon.cfg().argx().flagAt(1);
-                new CliShell(agentRuntime, agentProps, null).call(prompt);
+                new CliShell(agentRuntime, agentSettings, null).call(prompt);
                 Solon.stop();
                 return;
             }
 
             if (AgentFlags.FLAG_SERVE.equals(flag)) { // java -jar soloncode.jar server // soloncode server
-                runServe(agentRuntime, agentProps, cliShell);
+                runServe(agentRuntime, agentSettings, cliShell);
                 return;
             }
 
             if (AgentFlags.FLAG_WEB.equals(flag)) { // java -jar soloncode.jar web // soloncode web
-                runWeb(agentRuntime, agentProps, cliShell);
+                runWeb(agentRuntime, agentSettings, cliShell);
                 return;
             }
 
             if (AgentFlags.FLAG_ACP.equals(flag)) { // java -jar soloncode.jar acp // soloncode acp
-                runAcp(agentRuntime, agentProps, cliShell);
+                runAcp(agentRuntime, agentSettings, cliShell);
                 return;
             }
 
@@ -265,16 +251,16 @@ public class Configurator {
         }
     }
 
-    private void runServe(HarnessEngine agentRuntime, AgentProperties agentProps, CliShell cliShell) {
+    private void runServe(HarnessEngine agentRuntime, AgentSettings settings, CliShell cliShell) {
         //serve ws gate
-        WebSocketRouter.getInstance().of(agentProps.getWsEndpoint(), new WsGate(agentRuntime, agentProps));
+        WebSocketRouter.getInstance().of("/ws", new WsGate(agentRuntime, settings));
 
         //serve web controller
         BeanWrap webBean = Solon.context().wrapAndPut(WsController.class, new WsController(agentRuntime, modelProviderFactory));
         Solon.app().router().add(webBean);
 
         //注册第三方渠道（HTTP 端点 + 后台线程）
-        WebGate webGate = new WebGate(agentRuntime, agentProps);
+        WebGate webGate = new WebGate(agentRuntime);
         WebStreamBuilder streamBuilder = new WebStreamBuilder(agentRuntime);
         WebChannel webChannel = new WebChannel(agentRuntime, webGate);
         // 将渠道绑定到 streamBuilder，使 IM 回复能同步
@@ -288,7 +274,7 @@ public class Configurator {
         RunUtil.async(webChannel);
 
         //settings controller
-        WebSettingsController settingsController = new WebSettingsController(agentRuntime, agentProps, agentSettings);
+        WebSettingsController settingsController = new WebSettingsController(agentRuntime, settings);
         BeanWrap webSettingsController = Solon.context().wrapAndPut(WebSettingsController.class, settingsController);
         Solon.app().router().add(webSettingsController);
 
@@ -296,16 +282,16 @@ public class Configurator {
     }
 
 
-    private void runWeb(HarnessEngine agentRuntime, AgentProperties agentProps, CliShell cliShell) {
+    private void runWeb(HarnessEngine agentRuntime, AgentSettings settings, CliShell cliShell) {
         //web ws gate
-        WebGate webGate = new WebGate(agentRuntime, agentProps);
+        WebGate webGate = new WebGate(agentRuntime);
         WebSocketRouter.getInstance().of("/web/gate", webGate);
 
         //web
         BeanWrap webController = Solon.context().wrapAndPut(WebController.class, new WebController(agentRuntime, webGate, loopScheduler));
         Solon.app().router().add(webController);
 
-        WebSettingsController settingsController = new WebSettingsController(agentRuntime, agentProps, agentSettings);
+        WebSettingsController settingsController = new WebSettingsController(agentRuntime, settings);
         BeanWrap webSettingsController = Solon.context().wrapAndPut(WebSettingsController.class, settingsController);
         Solon.app().router().add(webSettingsController);
 
@@ -353,28 +339,17 @@ public class Configurator {
     }
 
 
-    private void runAcp(HarnessEngine agentRuntime, AgentProperties agentProps, CliShell cliShell) {
-        AcpAgentTransport agentTransport;
-        if ("stdio".equals(agentProps.getAcpTransport())) {
-            agentTransport = new StdioAcpAgentTransport();
-        } else {
-            agentTransport = new WebSocketSolonAcpAgentTransport(
-                    agentProps.getAcpTransport(), McpJsonDefaults.getMapper());
-        }
+    private void runAcp(HarnessEngine agentRuntime, AgentSettings settings, CliShell cliShell) {
+        AcpAgentTransport agentTransport = new StdioAcpAgentTransport();
 
-        new AcpLink(agentRuntime, agentTransport, agentProps).run();
+        new AcpLink(agentRuntime, agentTransport, settings).run();
 
-        if (cliShell == null) {
-            return;
-        }
+//        if (cliShell == null) {
+//            return;
+//        }
 
-        if ("stdio".equals(agentProps.getAcpTransport())) {
-            //不能有打印
-            cliShell.printWelcome("Acp interface: stdio");
-        } else {
-            String url = "ws://localhost:" + Solon.cfg().serverPort() + "/acp";
-            cliShell.printWelcome("Acp interface: " + url);
-        }
+        //不能有打印
+        //cliShell.printWelcome("Acp interface: stdio");
     }
 
     /**

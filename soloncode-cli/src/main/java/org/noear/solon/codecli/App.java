@@ -45,7 +45,7 @@ public class App {
         AgentProperties agentProps = new AgentProperties();
 
         //配置用户扩展目录
-        System.setProperty("solon.extend", "!" + AgentProperties.getUserExtensions());
+        System.setProperty("solon.extend", "!" + AgentFlags.getUserExtensions());
 
         Solon.start(App.class, args, app -> {
             initAgentProperties(app, agentProps);
@@ -55,7 +55,7 @@ public class App {
     private static void initAgentProperties(SolonApp app, AgentProperties c) throws Exception {
         //加载配置文件
 
-        URL configUrl = AgentProperties.getConfigUrl();
+        URL configUrl = AgentFlags.getConfigUrl();
 
         app.cfg().loadAdd(configUrl);
 
@@ -70,7 +70,7 @@ public class App {
         initAgentSettings(app, c);
 
         //推入容器
-        app.context().wrapAndPut(AgentProperties.class, c);
+        //app.context().wrapAndPut(AgentProperties.class, c);
 
         //-----
 
@@ -128,11 +128,9 @@ public class App {
     }
 
     private static void enabledAcp(SolonApp app, AgentProperties c) {
-        //开始控制台日志
-        if ("stdio".equals(c.getAcpTransport()) == false) {
-            app.enableHttp(true);
-            app.enableWebSocket(true);
-        }
+        //开始控制台日志(web 通讯关闭)
+        app.enableHttp(false);
+        app.enableWebSocket(false);
     }
 
     private static String findAvailablePort() {
