@@ -88,7 +88,7 @@ public class LoopCommand implements Command {
         String sub = ctx.argAt(0);
 
         if (sub == null || sub.isEmpty() || "ls".equals(sub)) {
-            doList(ctx, sessionId, workspace, harnessSessions);
+            doList(ctx, sessionId);
         } else if ("stop".equals(sub)) {
             String taskId = ctx.argAt(1);
             if (taskId == null || taskId.isEmpty()) {
@@ -96,13 +96,13 @@ public class LoopCommand implements Command {
             } else {
                 LoopTask task = scheduler.getTaskById(sessionId, taskId);
                 if (task != null) {
-                    scheduler.remove(sessionId, workspace, harnessSessions, task);
+                    scheduler.remove(sessionId, task);
                 }
 
                 ctx.println(ctx.color(GREEN + "Loop task '" + taskId + "' stopped." + RESET));
             }
         } else if ("stop-all".equals(sub)) {
-            scheduler.stopAll(sessionId, workspace, harnessSessions);
+            scheduler.stopAll(sessionId);
             ctx.println(ctx.color(GREEN + "All loop tasks stopped." + RESET));
         } else {
             // Schedule a new task
@@ -220,18 +220,18 @@ public class LoopCommand implements Command {
             return;
         }
 
-        // Create task (workspace 用于动态拼接 stateDir)
+        // Create task
         LoopTask task = new LoopTask(
                 prompt, intervalMinutes, cronExpr,
                 goalCondition, makerAgent, checkerAgent,
-                worktreeEnabled, maxIterations, workspace
+                worktreeEnabled, maxIterations
         );
 
         // 初始化状态目录（用 task 生成的 ID）
         LoopStateManager.init(workspace, task.getId(), prompt);
 
         try {
-            scheduler.schedule(sessionId, workspace, harnessSessions, task);
+            scheduler.schedule(sessionId, task);
         } catch (IllegalStateException e) {
             ctx.println(ctx.color(RED + "Failed: " + e.getMessage() + RESET));
             LoopStateManager.cleanup(workspace, task.getId());
@@ -269,8 +269,8 @@ public class LoopCommand implements Command {
         ctx.println(ctx.color(DIM + "  Expires: " + task.getExpireAt() + RESET));
     }
 
-    private void doList(CommandContext ctx, String sessionId, String workspace, String harnessSessions) {
-        List<LoopTask> tasks = scheduler.listActive(sessionId, workspace, harnessSessions);
+    private void doList(CommandContext ctx, String sessionId) {
+        List<LoopTask> tasks = scheduler.listActive(sessionId);
         if (tasks.isEmpty()) {
             ctx.println(ctx.color(DIM + "No active loop tasks." + RESET));
             ctx.println(ctx.color(DIM + "Usage: /loop [interval] <prompt>" + RESET));

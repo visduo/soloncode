@@ -18,16 +18,13 @@ package org.noear.solon.codecli.command.builtin;
 import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.snack4.Options;
-import org.noear.solon.ai.harness.channel.Channel;
-import org.noear.solon.core.util.IoUtil;
-import org.noear.solon.core.util.ResourceUtil;
+import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.scheduling.ScheduledAnno;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;
 import org.noear.solon.scheduling.simple.JobManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
@@ -52,6 +49,8 @@ public class LoopScheduler {
     private static final Logger LOG = LoggerFactory.getLogger(LoopScheduler.class);
     private static final int MAX_TASKS_PER_SESSION = 50;
     private static final String TASKS_FILE = "loop-tasks.json";
+
+    private final HarnessEngine engine;
 
     // Solon 原生调度管理器
     private final IJobManager jobManager;
@@ -88,14 +87,12 @@ public class LoopScheduler {
         String execute(String sessionId, String prompt, String agentName);
     }
 
-    public LoopScheduler() {
-        this(null);
-    }
 
     /**
      * @param worktreeDir worktree 目录名（如 ".soloncode/loop-worktrees"），null 时使用默认值
      */
-    public LoopScheduler(String worktreeDir) {
+    public LoopScheduler(HarnessEngine engine, String worktreeDir) {
+        this.engine = engine;
         this.jobManager = JobManager.getInstance();
         this.worktreeDir = worktreeDir;
     }
@@ -130,12 +127,10 @@ public class LoopScheduler {
      * <p>即时模式（intervalMinutes=0）不注册到 IJobManager，由 scheduleNow 触发首次执行后自动 re-trigger。
      *
      * @param sessionId      会话 ID
-     * @param workspace      工作空间路径
-     * @param harnessSessions 会话目录相对路径
      * @param task           待注册的任务
      * @return 已注册的任务
      */
-    public LoopTask schedule(String sessionId, String workspace, String harnessSessions, LoopTask task) {
+    public LoopTask schedule(String sessionId, LoopTask task) {
         // 1. 检查最大任务数
         List<LoopTask> tasks = sessionTasks.computeIfAbsent(sessionId,
                 k -> Collections.synchronizedList(new ArrayList<>()));
@@ -144,16 +139,16 @@ public class LoopScheduler {
         }
 
         // 2. 清理过期任务
-        cleanExpired(sessionId, workspace, harnessSessions, tasks);
+        cleanExpired(sessionId, tasks);
 
         // 3. 定时模式才注册到 IJobManager；即时模式由 scheduleNow 管理
-        registerJob(sessionId, workspace, harnessSessions, task);
+        registerJob(sessionId, task);
 
         // 4. 加入内存列表
         tasks.add(task);
 
         // 5. 持久化到 JSON
-        saveToFile(sessionId, workspace, harnessSessions, tasks);
+        saveToFile(sessionId, tasks);
 
         return task;
     }
@@ -163,7 +158,7 @@ public class LoopScheduler {
     /**
      * 停止指定任务
      */
-    public void remove(String sessionId, String workspace, String harnessSessions, LoopTask task) {
+    public void remove(String sessionId, LoopTask task) {
         LOG.info("Removing loop task '{}' from session '{}'", task.getId(), sessionId);
 
         task.cancel();
@@ -173,10 +168,9 @@ public class LoopScheduler {
         }
 
         // P1-fix: 清理 worktree
-        if (task.isWorktreeEnabled() && task.getWorkspace() != null) {
-            String ws = task.getWorkspace();
+        if (task.isWorktreeEnabled()) {
             try {
-                getWorktreeManager().cleanup(ws);
+                getWorktreeManager().cleanup(engine.getWorkspace());
                 LOG.info("Loop task '{}' worktree cleaned up on remove", task.getId());
             } catch (Exception e) {
                 LOG.warn("Loop task '{}' worktree cleanup failed on remove: {}", task.getId(), e.getMessage());
@@ -191,13 +185,13 @@ public class LoopScheduler {
 
         tasks.removeIf(t -> t.getId().equals(task.getId()));
 
-        saveToFile(sessionId, workspace, harnessSessions, tasks);
+        saveToFile(sessionId, tasks);
     }
 
     /**
      * 启用/停用任务（toggle enabled 字段）
      */
-    public void toggle(String sessionId, String workspace, String harnessSessions, String taskId) {
+    public void toggle(String sessionId, String taskId) {
         List<LoopTask> tasks = sessionTasks.get(sessionId);
         if (tasks == null) return;
 
@@ -208,7 +202,7 @@ public class LoopScheduler {
 
                 if (newEnabled) {
                     // 恢复：重新注册 Job（即时模式会被 registerJob 内部跳过）
-                    registerJob(sessionId, workspace, harnessSessions, t);
+                    registerJob(sessionId, t);
                 } else {
                     // 暂停：移除 Job，但不 cancel
                     String jobName = t.getJobName();
@@ -217,7 +211,7 @@ public class LoopScheduler {
                     }
                 }
 
-                saveToFile(sessionId, workspace, harnessSessions, tasks);
+                saveToFile(sessionId, tasks);
                 return;
             }
         }
@@ -226,7 +220,7 @@ public class LoopScheduler {
     /**
      * 更新任务定义（重建 Job）
      */
-    public void update(String sessionId, String workspace, String harnessSessions, String taskId, LoopTask newTask) {
+    public void update(String sessionId, String taskId, LoopTask newTask) {
         List<LoopTask> tasks = sessionTasks.get(sessionId);
         if (tasks == null) return;
 
@@ -244,10 +238,10 @@ public class LoopScheduler {
 
                 // 如果 enabled 且未取消，注册新 Job
                 if (newTask.isEnabled() && !newTask.isCancelled()) {
-                    registerJob(sessionId, workspace, harnessSessions, newTask);
+                    registerJob(sessionId, newTask);
                 }
 
-                saveToFile(sessionId, workspace, harnessSessions, tasks);
+                saveToFile(sessionId, tasks);
                 return;
             }
         }
@@ -256,14 +250,14 @@ public class LoopScheduler {
     /**
      * 手动触发一次执行（不走定时）
      */
-    public void trigger(String sessionId, String workspace, String harnessSessions, String taskId) {
+    public void trigger(String sessionId, String taskId) {
         List<LoopTask> tasks = sessionTasks.get(sessionId);
         if (tasks == null) return;
 
         for (LoopTask t : tasks) {
             if (t.getId().equals(taskId)) {
                 // 异步执行，避免阻塞 HTTP 请求
-                Thread thread = new Thread(() -> onTrigger(sessionId, workspace, harnessSessions, t), "loop-trigger-" + taskId);
+                Thread thread = new Thread(() -> onTrigger(sessionId, t), "loop-trigger-" + taskId);
                 thread.setDaemon(true);
                 thread.start();
                 return;
@@ -288,12 +282,12 @@ public class LoopScheduler {
     /**
      * 列出活跃任务（自动清理过期）
      */
-    public List<LoopTask> listActive(String sessionId, String workspace, String harnessSessions) {
+    public List<LoopTask> listActive(String sessionId) {
         List<LoopTask> tasks = sessionTasks.get(sessionId);
         if (tasks == null) return Collections.emptyList();
 
         // 清理过期任务
-        cleanExpired(sessionId, workspace, harnessSessions, tasks);
+        cleanExpired(sessionId, tasks);
 
         return new ArrayList<>(tasks);
     }
@@ -301,12 +295,12 @@ public class LoopScheduler {
     /**
      * 列出所有任务（含已停用的），自动清理过期
      */
-    public List<LoopTask> listAll(String sessionId, String workspace, String harnessSessions) {
+    public List<LoopTask> listAll(String sessionId) {
         List<LoopTask> tasks = sessionTasks.get(sessionId);
         if (tasks == null) return Collections.emptyList();
 
         // 清理过期任务
-        cleanExpired(sessionId, workspace, harnessSessions, tasks);
+        cleanExpired(sessionId, tasks);
 
         return new ArrayList<>(tasks);
     }
@@ -316,7 +310,7 @@ public class LoopScheduler {
     /**
      * 停止会话的所有任务
      */
-    public void stopAll(String sessionId, String workspace, String harnessSessions) {
+    public void stopAll(String sessionId) {
         List<LoopTask> tasks = sessionTasks.remove(sessionId);
         if (tasks != null) {
             tasks.forEach(t -> {
@@ -326,14 +320,13 @@ public class LoopScheduler {
                     jobManager.jobRemove(jobName);
                 }
                 // F6: 清理 worktree
-                if (t.isWorktreeEnabled() && t.getWorkspace() != null) {
-                    String wtWorkspace = t.getWorkspace();
-                    getWorktreeManager().cleanup(wtWorkspace);
+                if (t.isWorktreeEnabled() ) {
+                    getWorktreeManager().cleanup(engine.getWorkspace());
                 }
             });
         }
         // 删除 JSON 文件
-        deleteFile(sessionId, workspace, harnessSessions);
+        deleteFile(sessionId);
     }
 
     // ==================== 会话恢复 ====================
@@ -343,8 +336,8 @@ public class LoopScheduler {
      *
      * <p>在 CliShell.prepare() 或 ResumeCommand 中调用
      */
-    public void restore(String sessionId, String workspace, String harnessSessions) {
-        List<LoopTask> tasks = loadFromFile(sessionId, workspace, harnessSessions);
+    public void restore(String sessionId) {
+        List<LoopTask> tasks = loadFromFile(sessionId);
         if (tasks == null || tasks.isEmpty()) return;
 
         // 移除过期/已取消任务
@@ -357,7 +350,7 @@ public class LoopScheduler {
         }
 
         if (alive.isEmpty()) {
-            deleteFile(sessionId, workspace, harnessSessions);
+            deleteFile(sessionId);
             return;
         }
 
@@ -365,11 +358,11 @@ public class LoopScheduler {
 
         // 重新注册到 IJobManager（即时模式会被 registerJob 内部跳过）
         for (LoopTask t : alive) {
-            registerJob(sessionId, workspace, harnessSessions, t);
+            registerJob(sessionId, t);
         }
 
         // 回写（去掉过期任务）
-        saveToFile(sessionId, workspace, harnessSessions, alive);
+        saveToFile(sessionId, alive);
         LOG.info("Restored {} loop tasks for session {}", alive.size(), sessionId);
     }
 
@@ -380,7 +373,7 @@ public class LoopScheduler {
      *
      * <p>即时模式（intervalMinutes=0）不应调用此方法。
      */
-    private void registerJob(String sessionId, String workspace, String harnessSessions, LoopTask task) {
+    private void registerJob(String sessionId, LoopTask task) {
         String jobName = task.getJobName();
 
         ScheduledAnno scheduled;
@@ -398,7 +391,7 @@ public class LoopScheduler {
                 return;
             }
 
-            onTrigger(sessionId, workspace, harnessSessions, task);
+            onTrigger(sessionId, task);
         });
     }
 
@@ -407,7 +400,7 @@ public class LoopScheduler {
     /**
      * 定时触发 — 执行任务
      */
-    private void onTrigger(String sessionId, String workspace, String harnessSessions, LoopTask task) {
+    private void onTrigger(String sessionId, LoopTask task) {
         // 已禁用/过期/已取消则移除
         if (!task.isEnabled() || task.isExpired() || task.isCancelled()) {
             String jobName = task.getJobName();
@@ -420,7 +413,7 @@ public class LoopScheduler {
         // 达到最大迭代次数则自动移除
         if (task.isMaxIterationsReached()) {
             LOG.info("Loop task '{}' reached max iterations ({})", task.getId(), task.getMaxIterations());
-            remove(sessionId, workspace, harnessSessions, task);
+            remove(sessionId, task);
             return;
         }
 
@@ -431,13 +424,10 @@ public class LoopScheduler {
 
         try {
             // Phase 4: Worktree 隔离
-            String originalWorkspace = null;
             String worktreePath = null;
             if (task.isWorktreeEnabled()) {
-                String taskWorkspace = task.getWorkspace();
-                worktreePath = getWorktreeManager().create(taskWorkspace, task.getId());
+                worktreePath = getWorktreeManager().create(engine.getWorkspace(), task.getId());
                 if (worktreePath != null) {
-                    originalWorkspace = taskWorkspace;
                     LOG.info("Loop task '{}' executing in worktree: {}", task.getId(), worktreePath);
                 } else {
                     LOG.warn("Loop task '{}' worktree creation failed, falling back to main workspace", task.getId());
@@ -477,28 +467,28 @@ public class LoopScheduler {
                         (executionResult.isGoalAchieved() || executionResult.isCheckerPassed());
                 if (goalMet) {
                     LOG.info("Loop task '{}' goal achieved at iteration {}", task.getId(), iteration);
-                    if (task.getWorkspace() != null) {
-                        LoopStateManager.appendHistory(task.getWorkspace(), task.getId(), executionResult, iteration, "GOAL_ACHIEVED");
-                    }
-                    remove(sessionId, workspace, harnessSessions, task);
+
+                        LoopStateManager.appendHistory(engine.getWorkspace(), task.getId(), executionResult, iteration, "GOAL_ACHIEVED");
+
+                    remove(sessionId, task);
                     return;
                 }
 
                 if (task.isMaxIterationsReached()) {
                     LOG.info("Loop task '{}' reached max iterations ({})", task.getId(), task.getMaxIterations());
 
-                    if (task.getWorkspace() != null) {
-                        LoopStateManager.appendHistory(task.getWorkspace(), task.getId(), executionResult, iteration, "MAX_ITERATIONS_REACHED");
-                    }
 
-                    remove(sessionId, workspace, harnessSessions, task);
+                        LoopStateManager.appendHistory(engine.getWorkspace(), task.getId(), executionResult, iteration, "MAX_ITERATIONS_REACHED");
+
+
+                    remove(sessionId, task);
                     return;
                 }
 
                 // 写入执行历史
-                if (task.getWorkspace() != null) {
-                    LoopStateManager.appendHistory(task.getWorkspace(), task.getId(), executionResult, iteration, "NONE");
-                }
+
+                    LoopStateManager.appendHistory(engine.getWorkspace(), task.getId(), executionResult, iteration, "NONE");
+
 
             } finally {
                 // Phase 4: 清理 worktree（执行完毕后）
@@ -523,12 +513,9 @@ public class LoopScheduler {
         String prompt = task.getPrompt();
 
         // 1. 状态上下文注入
-        if (task.getWorkspace() != null) {
-            String workspace = task.getWorkspace();
-            String stateContext = LoopStateManager.buildStateContext(workspace, task.getId());
-            if (!stateContext.isEmpty()) {
-                prompt = prompt + stateContext;
-            }
+        String stateContext = LoopStateManager.buildStateContext(engine.getWorkspace(), task.getId());
+        if (!stateContext.isEmpty()) {
+            prompt = prompt + stateContext;
         }
 
         // 2. Goal 条件注入（从 goal_continuation.md 模板加载）
@@ -607,9 +594,8 @@ public class LoopScheduler {
         }
 
         // 将 checker 的评估结果写入状态
-        if (task.getWorkspace() != null && checkerResult != null) {
-            String workspace = task.getWorkspace();
-            LoopStateManager.appendDecision(workspace, task.getId(),
+        if (checkerResult != null) {
+            LoopStateManager.appendDecision(engine.getWorkspace(), task.getId(),
                     "Checker: " + (checkerResult.length() > 200 ? checkerResult.substring(0, 200) + "..." : checkerResult));
         }
 
@@ -621,7 +607,7 @@ public class LoopScheduler {
     /**
      * 清理内存列表中的过期/已取消任务，并同步 IJobManager 和 JSON
      */
-    private void cleanExpired(String sessionId, String workspace, String harnessSessions, List<LoopTask> tasks) {
+    private void cleanExpired(String sessionId, List<LoopTask> tasks) {
         boolean changed = tasks.removeIf(t -> {
             if (t.isExpired() || t.isCancelled()) {
                 String jobName = t.getJobName();
@@ -634,36 +620,8 @@ public class LoopScheduler {
         });
 
         if (changed) {
-            saveToFile(sessionId, workspace, harnessSessions, tasks);
+            saveToFile(sessionId, tasks);
         }
-    }
-
-    public void shutdown() {
-        for (Map.Entry<String, List<LoopTask>> entry : sessionTasks.entrySet()) {
-            for (LoopTask t : entry.getValue()) {
-                t.cancel();
-                String jobName = t.getJobName();
-                if (jobManager.jobExists(jobName)) {
-                    jobManager.jobRemove(jobName);
-                }
-            }
-        }
-
-        // Phase 4: 清理所有 loop worktree
-        if (worktreeManager != null) {
-            for (Map.Entry<String, List<LoopTask>> entry : sessionTasks.entrySet()) {
-                for (LoopTask t : entry.getValue()) {
-                    if (t.isWorktreeEnabled() && t.getWorkspace() != null) {
-                        String workspace = t.getWorkspace();
-                        worktreeManager.cleanup(workspace);
-                        break; // 每个 workspace 只需 cleanup 一次
-                    }
-                }
-            }
-        }
-
-        sessionTasks.clear();
-        LOG.info("LoopScheduler shutdown: all tasks cancelled and removed from IJobManager");
     }
 
     // ==================== JSON 持久化 ====================
@@ -672,15 +630,15 @@ public class LoopScheduler {
      * 获取任务 JSON 文件路径
      * 位于会话目录下：&lt;workspace&gt;/&lt;harnessSessions&gt;/&lt;sessionId&gt;/loop_tasks.json
      */
-    private Path getFilePath(String sessionId, String workspace, String harnessSessions) {
-        return Paths.get(workspace, harnessSessions, sessionId, TASKS_FILE);
+    private Path getTasksFilePath(String sessionId) {
+        return Paths.get(engine.getWorkspace(), engine.getHarnessSessions(), sessionId, TASKS_FILE);
     }
     /**
      * 将任务列表保存到 JSON 文件（原子写入：先写临时文件，再 rename）
      */
-    private void saveToFile(String sessionId, String workspace, String harnessSessions, List<LoopTask> tasks) {
+    private void saveToFile(String sessionId, List<LoopTask> tasks) {
         try {
-            Path filePath = getFilePath(sessionId, workspace, harnessSessions);
+            Path filePath = getTasksFilePath(sessionId);
             Files.createDirectories(filePath.getParent());
 
             ONode root = new ONode(Options.of(Feature.Write_PrettyFormat));
@@ -705,9 +663,9 @@ public class LoopScheduler {
     /**
      * 从 JSON 文件加载任务列表
      */
-    private List<LoopTask> loadFromFile(String sessionId, String workspace, String harnessSessions) {
+    private List<LoopTask> loadFromFile(String sessionId) {
         try {
-            Path filePath = getFilePath(sessionId, workspace, harnessSessions);
+            Path filePath = getTasksFilePath(sessionId);
             if (!Files.exists(filePath)) return null;
 
             String json = new String(Files.readAllBytes(filePath), StandardCharsets.UTF_8);
@@ -730,9 +688,9 @@ public class LoopScheduler {
     /**
      * 删除 JSON 文件
      */
-    private void deleteFile(String sessionId, String workspace, String harnessSessions) {
+    private void deleteFile(String sessionId) {
         try {
-            Path filePath = getFilePath(sessionId, workspace, harnessSessions);
+            Path filePath = getTasksFilePath(sessionId);
             Files.deleteIfExists(filePath);
         } catch (Exception ignored) {
             // ignored

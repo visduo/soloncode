@@ -178,7 +178,7 @@ public class Configurator {
         engine.getLspTalent().setEnabled(settings.getGeneral().getLspEnabled());
 
         // loop scheduler
-        this.loopScheduler = new LoopScheduler(AgentFlags.getHarnessLoopWorktrees());
+        this.loopScheduler = new LoopScheduler(engine, AgentFlags.getHarnessLoopWorktrees());
         engine.getCommandRegistry().register(new LoopCommand(loopScheduler));
 
 

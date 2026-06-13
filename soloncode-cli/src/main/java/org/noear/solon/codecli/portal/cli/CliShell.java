@@ -176,7 +176,7 @@ public class CliShell implements Runnable {
 
         if (loopScheduler != null) {
             // 恢复上次未过期的 loop 定时任务（如果有）
-            loopScheduler.restore(session.getSessionId(), engine.getWorkspace(), engine.getHarnessSessions());
+            loopScheduler.restore(session.getSessionId());
 
             // 注入任务执行器：loop 定时任务触发时，由主线程执行 agent 任务
             loopScheduler.addTaskExecutor((sessionId, prompt, agentName) -> {

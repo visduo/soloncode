@@ -219,7 +219,7 @@ public class WebController {
                     data.add(item);
 
                     //恢复定时任务
-                    loopScheduler.restore(sid, engine.getWorkspace(), engine.getHarnessSessions());
+                    loopScheduler.restore(sid);
                 }
             }
         }
@@ -746,7 +746,7 @@ public class WebController {
             return Result.failure(400, "Invalid sessionId");
         }
 
-        List<LoopTask> tasks = loopScheduler.listAll(sessionId, engine.getWorkspace(), engine.getHarnessSessions());
+        List<LoopTask> tasks = loopScheduler.listAll(sessionId);
         List<Map> data = new ArrayList<>();
         for (LoopTask t : tasks) {
             Map<String, Object> item = new LinkedHashMap<>();
@@ -784,7 +784,7 @@ public class WebController {
             return Result.failure(400, "taskId is required");
         }
 
-        List<LoopTask> tasks = loopScheduler.listAll(sessionId, engine.getWorkspace(), engine.getHarnessSessions());
+        List<LoopTask> tasks = loopScheduler.listAll(sessionId);
         for (LoopTask t : tasks) {
             if (t.getId().equals(taskId)) {
                 Map<String, Object> item = new LinkedHashMap<>();
@@ -839,8 +839,7 @@ public class WebController {
                 prompt, interval, cron,
                 goalCondition, makerAgent, checkerAgent,
                 worktreeEnabled != null ? worktreeEnabled : false,
-                maxIterations,
-                workspace
+                maxIterations
         );
 
         // 设置 enabled
@@ -848,7 +847,7 @@ public class WebController {
 
         try {
             LoopStateManager.init(workspace, task.getId(), prompt);
-            loopScheduler.schedule(sessionId, workspace, harnessSessions, task);
+            loopScheduler.schedule(sessionId, task);
         } catch (IllegalStateException e) {
             return Result.failure(400, e.getMessage());
         }
@@ -898,14 +897,13 @@ public class WebController {
                 makerAgent != null ? makerAgent : existing.getMakerAgent(),
                 checkerAgent != null ? checkerAgent : existing.getCheckerAgent(),
                 worktreeEnabled != null ? worktreeEnabled : existing.isWorktreeEnabled(),
-                maxIterations != null ? maxIterations : existing.getMaxIterations(),
-                existing.getWorkspace()
+                maxIterations != null ? maxIterations : existing.getMaxIterations()
         );
 
         // 保留 enabled
         newTask.setEnabled(existing.isEnabled());
 
-        loopScheduler.update(sessionId, workspace, harnessSessions, taskId, newTask);
+        loopScheduler.update(sessionId, taskId, newTask);
         return Result.succeed();
     }
 
@@ -927,7 +925,7 @@ public class WebController {
             return Result.failure(400, "the task does not exist.");
         }
 
-        loopScheduler.remove(sessionId, engine.getWorkspace(), engine.getHarnessSessions(), task);
+        loopScheduler.remove(sessionId, task);
         return Result.succeed();
     }
 
@@ -944,7 +942,7 @@ public class WebController {
             return Result.failure(400, "taskId is required");
         }
 
-        loopScheduler.toggle(sessionId, engine.getWorkspace(), engine.getHarnessSessions(), taskId);
+        loopScheduler.toggle(sessionId, taskId);
         return Result.succeed();
     }
 
@@ -961,7 +959,7 @@ public class WebController {
             return Result.failure(400, "taskId is required");
         }
 
-        loopScheduler.trigger(sessionId, engine.getWorkspace(), engine.getHarnessSessions(), taskId);
+        loopScheduler.trigger(sessionId, taskId);
         return Result.succeed();
     }
 
