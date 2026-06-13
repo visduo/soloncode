@@ -321,7 +321,7 @@ else
     echo -e "  ${CYAN}Usage:${NC}"
     echo "    1. Run: source ~/.${USER_SHELL}rc"
     echo "    2. Or restart your terminal"
-    echo "    3. Then run: 'soloncode' or 'soloncode web 0'"
+    echo "    3. Then run: 'soloncode cli' or 'soloncode web 0'"
 fi
 
 echo ""
