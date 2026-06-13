@@ -269,6 +269,14 @@ function connectWebGate() {
             }
 
             if (!sid) return; // 无 sessionId 的消息丢弃
+
+            // 即使 sess2 不存在，也优先处理 todowrite 动作（用于更新左侧 Sidebar 的 todo 进度）
+            if (chunk.type === 'action' && chunk.toolName === 'todowrite') {
+                if (window._todoChunkHandlers) {
+                    window._todoChunkHandlers.forEach(function(h) { h(chunk); });
+                }
+            }
+
             var sess2 = sessionMap[sid];
             if (!sess2) return; // 未知 session
 
