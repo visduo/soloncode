@@ -420,9 +420,6 @@ public class LoopScheduler {
         // 达到最大迭代次数则自动移除
         if (task.isMaxIterationsReached()) {
             LOG.info("Loop task '{}' reached max iterations ({})", task.getId(), task.getMaxIterations());
-            if (task.getWorkspace() != null) {
-                LoopStateManager.cleanup(task.getWorkspace(), task.getId());
-            }
             remove(sessionId, workspace, harnessSessions, task);
             return;
         }
@@ -482,7 +479,6 @@ public class LoopScheduler {
                     LOG.info("Loop task '{}' goal achieved at iteration {}", task.getId(), iteration);
                     if (task.getWorkspace() != null) {
                         LoopStateManager.appendHistory(task.getWorkspace(), task.getId(), executionResult, iteration, "GOAL_ACHIEVED");
-                        LoopStateManager.cleanup(task.getWorkspace(), task.getId());
                     }
                     remove(sessionId, workspace, harnessSessions, task);
                     return;
@@ -493,7 +489,6 @@ public class LoopScheduler {
 
                     if (task.getWorkspace() != null) {
                         LoopStateManager.appendHistory(task.getWorkspace(), task.getId(), executionResult, iteration, "MAX_ITERATIONS_REACHED");
-                        LoopStateManager.cleanup(task.getWorkspace(), task.getId());
                     }
 
                     remove(sessionId, workspace, harnessSessions, task);
