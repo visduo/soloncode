@@ -328,6 +328,9 @@
             case 'anthropic':
                 $ApiUrl.attr('placeholder', 'https://api.anthropic.com');
                 break;
+            case 'gemini':
+                $ApiUrl.attr('placeholder', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent');
+                break;
             case 'ollama':
                 $ApiUrl.attr('placeholder', 'http://127.0.0.1:11434/api/chat');
                 break;
