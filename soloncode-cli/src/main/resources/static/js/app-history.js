@@ -3,6 +3,33 @@
 /* 依赖：app-base.js */
 
 /* ===== History ===== */
+
+/* 记住“当前活动会话”，刷新或下次打开时自动恢复 */
+var ACTIVE_SESSION_KEY = 'soloncode-active-session';
+function rememberActiveSession(sessionId) {
+    try { if (sessionId) localStorage.setItem(ACTIVE_SESSION_KEY, sessionId); } catch (e) {}
+}
+function forgetActiveSession() {
+    try { localStorage.removeItem(ACTIVE_SESSION_KEY); } catch (e) {}
+}
+window.rememberActiveSession = rememberActiveSession;
+window.forgetActiveSession = forgetActiveSession;
+
+/* 历史列表加载完成后，尝试恢复上次的活动会话 */
+function restoreActiveSession() {
+    var saved = null;
+    try { saved = localStorage.getItem(ACTIVE_SESSION_KEY); } catch (e) {}
+    if (!saved) return;
+    for (var i = 0; i < chatHistory.length; i++) {
+        if (chatHistory[i].sessionId === saved) {
+            selectSession(i);
+            return;
+        }
+    }
+    /* 保存的会话已不存在，清理掉 */
+    forgetActiveSession();
+}
+
 function loadSessionHistory() {
     $.get('/web/chat/sessions', function(resp) {
         try {
@@ -12,12 +39,14 @@ function loadSessionHistory() {
                 chatHistory.push({ label: list[i].label, sessionId: list[i].sessionId });
             }
             updateHistoryUI();
+            restoreActiveSession();
         } catch (e) {}
     });
 }
 
 function saveChatToHistory(firstMsg) {
     ensureChatInHistory(SESSION_ID, firstMsg, true);
+    rememberActiveSession(SESSION_ID);
 }
 
 function ensureChatInHistory(sessionId, firstMsg, makeCurrent) {
@@ -180,6 +209,7 @@ function selectSession(idx) {
 
     currentChatIndex = idx;
     SESSION_ID = entry.sessionId;
+    rememberActiveSession(entry.sessionId);
     if (typeof closeDiffViewer === 'function') closeDiffViewer();
     if (!inChatMode) switchToChatMode();
     setActiveSession(entry.sessionId);

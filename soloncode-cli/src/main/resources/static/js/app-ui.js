@@ -311,6 +311,7 @@ function switchToChatMode() {
 }
 function switchToWelcomeMode() {
     inChatMode = false;
+    if (typeof forgetActiveSession === 'function') forgetActiveSession();
     SESSION_ID = 'web-' + Date.now().toString(36);
     setActiveSession(SESSION_ID);
     $(welcomeView).show();
