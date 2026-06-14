@@ -165,7 +165,15 @@ function formatMsgTime(ts) {
     if (isNaN(d.getTime())) return '';
     var hh = String(d.getHours()).padStart(2, '0');
     var mm = String(d.getMinutes()).padStart(2, '0');
-    return hh + ':' + mm;
+    var now = new Date();
+    var sameDay = d.getFullYear() === now.getFullYear()
+        && d.getMonth() === now.getMonth()
+        && d.getDate() === now.getDate();
+    if (sameDay) return hh + ':' + mm;
+    var yyyy = d.getFullYear();
+    var MM = String(d.getMonth() + 1).padStart(2, '0');
+    var dd = String(d.getDate()).padStart(2, '0');
+    return yyyy + '-' + MM + '-' + dd + ' ' + hh + ':' + mm;
 }
 
 function getInputText() {
