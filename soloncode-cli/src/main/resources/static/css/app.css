@@ -1161,7 +1161,7 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 }
 
 /* ===== 工具结果专用渲染：grep / glob / ls / bash ===== */
-.grep-summary {
+.tool-summary, .grep-summary {
     padding: 6px 14px;
     color: var(--text-secondary);
     font-size: 11px;
@@ -1207,25 +1207,31 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 }
 .file-entry-icon { opacity: 0.7; flex-shrink: 0; }
 .file-entry.is-dir .file-entry-path { color: var(--text-primary); font-weight: 500; }
-.bash-output { background: #1e1e1e; border-radius: 0; }
+.bash-output { background: var(--bg-code-block); border-radius: 0; }
 .bash-cmd {
     padding: 8px 14px;
-    color: #d4d4d4;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
     white-space: pre-wrap;
     word-break: break-all;
 }
-.bash-prompt { color: #4ec9b0; font-weight: 600; user-select: none; }
 .bash-stdout {
     margin: 0;
     padding: 10px 14px;
-    color: #cccccc;
-    background: #1e1e1e;
+    color: var(--text-primary);
+    background: var(--bg-code-block);
     white-space: pre-wrap;
     word-break: break-all;
     overflow-x: auto;
     line-height: 1.5;
 }
+/* 统一段头视觉语言：bash 的 $ 提示符与 edit 的结果标签共享字重/不可选节奏 */
+.bash-prompt, .edit-result-label {
+    flex-shrink: 0;
+    font-weight: 600;
+    user-select: none;
+}
+.bash-prompt { color: var(--git-line-add-text); }
 
 /* edit 两段式：输入(diff) 与 输出(result) 之间的分隔与结果样式 */
 .edit-result-sep {
@@ -1242,11 +1248,6 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-all;
-}
-.edit-result-label {
-    flex-shrink: 0;
-    font-weight: 600;
-    user-select: none;
 }
 .edit-result.is-ok { background: var(--git-line-add-bg, rgba(46,160,67,0.08)); }
 .edit-result.is-ok .edit-result-label { color: var(--git-line-add-text, #2ea043); }

@@ -315,7 +315,7 @@ window._toolRenderers.grep = function(bodyEl, text, args) {
     var html = '<div class="grep-result">';
     var totalHits = 0;
     groups.forEach(function(g) { totalHits += g.hits.length; });
-    html += '<div class="grep-summary">' + groups.length + ' \u4e2a\u6587\u4ef6 / ' + totalHits + ' \u5904\u5339\u914d</div>';
+    html += '<div class="tool-summary">' + groups.length + ' \u4e2a\u6587\u4ef6 / ' + totalHits + ' \u5904\u5339\u914d</div>';
     groups.forEach(function(g) {
         html += '<div class="grep-file"><span class="grep-file-icon">\u{1F4C4}</span>' + escapeHtml(g.path) + '</div>';
         g.hits.forEach(function(h) {
@@ -346,7 +346,7 @@ function renderFileListing(bodyEl, text, args) {
         else if (/[\u2502\u251c\u2514]/.test(raw)) { hasTree = true; break; }
     }
     if (hasTree || items.length === 0) return false;
-    var html = '<div class="file-listing"><div class="grep-summary">' + items.length + ' \u9879</div>';
+    var html = '<div class="file-listing"><div class="tool-summary">' + items.length + ' \u9879</div>';
     items.forEach(function(it) {
         var icon = it.dir ? '\u{1F4C1}' : '\u{1F4C4}';
         html += '<div class="file-entry' + (it.dir ? ' is-dir' : '') + '">'
