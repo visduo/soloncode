@@ -46,6 +46,7 @@
                 $('#generalOpenApiEnabled').prop('checked', d.openApiEnabled !== false);
                 $('#generalBashAsyncEnabled').prop('checked', !!d.bashAsyncEnabled);
                 $('#generalLspEnabled').prop('checked', !!d.lspEnabled);
+                $('#generalCliPrintSimplified').prop('checked', d.cliPrintSimplified !== false);
             }
         }).fail(function () { console.error('[Settings] Failed to load general settings'); });
     }
@@ -67,7 +68,8 @@
             mcpEnabled: $('#generalMcpEnabled').is(':checked'),
             openApiEnabled: $('#generalOpenApiEnabled').is(':checked'),
             bashAsyncEnabled: $('#generalBashAsyncEnabled').is(':checked'),
-            lspEnabled: $('#generalLspEnabled').is(':checked')
+            lspEnabled: $('#generalLspEnabled').is(':checked'),
+            cliPrintSimplified: $('#generalCliPrintSimplified').is(':checked')
         };
 
         $generalSaveBtn.prop('disabled', true);
