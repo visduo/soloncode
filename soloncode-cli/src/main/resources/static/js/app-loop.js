@@ -354,8 +354,8 @@
         html += '<div class="loop-form-group loop-form-inline">';
         html += '<div class="loop-form-inline-item"><label>Worktree 隔离</label><label class="loop-checkbox"><input type="checkbox" id="loopFormWorktree"/> 在独立分支执行</label></div>';
         html += '<div class="loop-form-inline-item"><label>首次立即执行</label><label class="loop-checkbox"><input type="checkbox" id="loopFormRunNow"/> 保存后立即执行一次</label></div>';
+        html += '<div class="loop-form-inline-item"><label>最大迭代</label><input type="number" class="loop-input loop-input-sm" id="loopFormMaxIter" value="20" min="1"/></div>';
         html += '</div>';
-        html += '<div class="loop-form-group"><label>最大迭代</label><input type="number" class="loop-input loop-input-sm" id="loopFormMaxIter" value="20" min="1"/></div>';
         html += '</div>';
         html += '<div class="loop-form-actions">';
         html += '<button class="loop-btn-secondary" id="loopFormTriggerBtn" style="display:' + (loopEditId ? 'inline-block' : 'none') + '">测试运行</button>';
