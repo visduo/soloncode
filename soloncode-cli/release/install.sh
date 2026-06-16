@@ -117,14 +117,21 @@ if [ -f "$SOURCE_AGENTS" ]; then
     echo "      Copied AGENTS.md"
 fi
 
-# 复制 skills 目录（覆盖更新）
+# 复制 skills 目录（仅同名目录替换，保留用户自行安装的 skill）
 if [ -d "$SOURCE_SKILLS_DIR" ]; then
-    # 如果目标 skills 目录存在，先删除再复制
-    if [ -d "$TARGET_SKILLS_DIR" ]; then
-        rm -rf "$TARGET_SKILLS_DIR"
-    fi
-    cp -R "$SOURCE_SKILLS_DIR" "$TARGET_DIR/" 2>/dev/null || true
-    echo "      Copied skills/ directory"
+    mkdir -p "$TARGET_SKILLS_DIR"
+    # 仅遍历安装包自带的 skill 子目录，逐个替换同名目录
+    for SKILL_PATH in "$SOURCE_SKILLS_DIR"/*/; do
+        # 防止没有匹配项时 glob 原样返回
+        [ -d "$SKILL_PATH" ] || continue
+        SKILL_NAME=$(basename "$SKILL_PATH")
+        # 删除目标中的同名 skill 目录后再复制（不影响其他用户 skill）
+        if [ -d "$TARGET_SKILLS_DIR/$SKILL_NAME" ]; then
+            rm -rf "$TARGET_SKILLS_DIR/$SKILL_NAME"
+        fi
+        cp -R "$SKILL_PATH" "$TARGET_SKILLS_DIR/$SKILL_NAME" 2>/dev/null || true
+        echo "      Updated skill: $SKILL_NAME"
+    done
 else
     echo "      No skills/ directory to copy"
 fi

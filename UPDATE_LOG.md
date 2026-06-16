@@ -1,5 +1,9 @@
 
 
+### v2026.6.17
+
+* 修复 soloncode 安装时，会清掉 `~/.soloncode/skills/` 技能的问题
+
 ### v2026.6.16
 
 * 添加 soloncode bash 输出大小限制机制

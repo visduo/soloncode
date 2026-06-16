@@ -100,13 +100,22 @@ if (Test-Path $SOURCE_AGENTS) {
     Copy-Item $SOURCE_AGENTS $TARGET_AGENTS -Force
     Write-Host "      Copied AGENTS.md" -ForegroundColor Gray
 }
-# 复制 skills 目录（如果目标存在，先删除再复制）
+# 复制 skills 目录（仅同名目录替换，保留用户自行安装的 skill）
 if (Test-Path $SOURCE_SKILLS_DIR) {
-    if (Test-Path $TARGET_SKILLS_DIR) {
-        Remove-Item -Path $TARGET_SKILLS_DIR -Recurse -Force
+    if (-not (Test-Path $TARGET_SKILLS_DIR)) {
+        New-Item -ItemType Directory -Path $TARGET_SKILLS_DIR | Out-Null
     }
-    Copy-Item -Path $SOURCE_SKILLS_DIR -Destination $TARGET_SKILLS_DIR -Recurse -Force
-    Write-Host "      Copied skills/ directory" -ForegroundColor Gray
+    # 仅遍历安装包自带的 skill 子目录，逐个替换同名目录
+    Get-ChildItem -Path $SOURCE_SKILLS_DIR -Directory | ForEach-Object {
+        $skillName = $_.Name
+        $targetSkillPath = Join-Path $TARGET_SKILLS_DIR $skillName
+        # 删除目标中的同名 skill 目录后再复制（不影响其他用户 skill）
+        if (Test-Path $targetSkillPath) {
+            Remove-Item -Path $targetSkillPath -Recurse -Force
+        }
+        Copy-Item -Path $_.FullName -Destination $targetSkillPath -Recurse -Force
+        Write-Host "      Updated skill: $skillName" -ForegroundColor Gray
+    }
 } else {
     Write-Host "      No skills/ directory to copy" -ForegroundColor Gray
 }
