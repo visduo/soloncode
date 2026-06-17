@@ -171,7 +171,8 @@ public class LoopScheduler {
         cleanExpired(sessionId, tasks);
 
         // 3. 注册到 IJobManager（cron 模式用 cron 表达式，否则 fixedDelay 串行）
-        registerJob(sessionId, task);
+        //    firstRegistration=true，使 runNow 生效
+        registerJob(sessionId, task, true);
 
         // 4. 加入内存列表
         tasks.add(task);
@@ -401,6 +402,15 @@ public class LoopScheduler {
      * 注册任务到 IJobManager（cron 模式使用 cron 表达式，否则使用 fixedDelay 串行策略）
      */
     private void registerJob(String sessionId, LoopTask task) {
+        registerJob(sessionId, task, false);
+    }
+
+    /**
+     * 注册任务到 IJobManager
+     *
+     * @param firstRegistration 是否为首次注册（首次注册时，runNow 才生效）
+     */
+    private void registerJob(String sessionId, LoopTask task, boolean firstRegistration) {
         String jobName = task.getJobName();
 
         ScheduledAnno scheduled;
@@ -408,7 +418,8 @@ public class LoopScheduler {
             scheduled = new ScheduledAnno().cron(task.getCron());
         } else {
             long intervalMs = (long) task.getIntervalMinutes() * 60_000L;
-            long initialDelay = task.isRunNow() ? 0 : intervalMs;
+            // isRunNow() 只对首次注册生效：重启恢复、切换启用、更新定义时均不应用
+            long initialDelay = (firstRegistration && task.isRunNow()) ? 0 : intervalMs;
             scheduled = new ScheduledAnno()
                     .fixedDelay(intervalMs)
                     .initialDelay(initialDelay);

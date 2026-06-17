@@ -126,20 +126,22 @@ function ensureAssistantBubble(sess) {
             }
         });
         // 重新运行 / 继续运行：复用后端已有的 /rerun、/continue 命令。
-        // 点击时同步删除当前这条 AI 消息行（旧回复），再静默发命令，
-        // 新回复会通过 WebSocket 流式渲染到新气泡。
+        // rerun：删除当前 AI 消息行（旧回复），新回复流式渲染到新气泡，与后端回退保持一致。
+        // continue：保留当前气泡，新内容自然追加到新气泡，呈现“接着往下写”的效果。
         var rerunBtn = $(row).find('.rerun-btn')[0];
         var continueBtn = $(row).find('.continue-btn')[0];
-        function triggerCommand(cmd) {
+        function triggerCommand(cmd, removeRow) {
             if (sess.isStreaming) return;
             if (typeof sendCommandSilent !== 'function') return;
             sendCommandSilent(cmd, function() {
-                // 同步删除当前 AI 消息行，与后端回退保持一致
-                $(row).remove();
+                if (removeRow) {
+                    // 仅 rerun 同步删除当前 AI 消息行
+                    $(row).remove();
+                }
             });
         }
-        if (rerunBtn) $(rerunBtn).on('click', function() { triggerCommand('/rerun'); });
-        if (continueBtn) $(continueBtn).on('click', function() { triggerCommand('/continue'); });
+        if (rerunBtn) $(rerunBtn).on('click', function() { triggerCommand('/rerun', true); });
+        if (continueBtn) $(continueBtn).on('click', function() { triggerCommand('/continue', false); });
         // 流式输出过程中隐藏复制按钮，待 finishStream 收尾后再显示；
         // 非流式（历史加载）保持原有显示逻辑。
         if (sess.isStreaming) {

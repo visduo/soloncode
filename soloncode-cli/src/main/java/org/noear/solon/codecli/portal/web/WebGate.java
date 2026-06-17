@@ -575,7 +575,7 @@ public class WebGate extends SimpleWebSocketListener {
      */
     private boolean isSessionBusy(AgentSession session) {
         Disposable disposable = (Disposable) session.attrs().get("disposable");
-        return disposable != null && !disposable.isDisposed();
+        return disposable != null;
     }
 
     /**
