@@ -794,6 +794,14 @@ function selectModel(modelName) {
     var sid = activeSessionId || SESSION_ID;
     sessionModelMap[sid] = modelName;
     renderModelUI();
+
+    // 立即通知服务端绑定模型选择，确保不走 /web/chat/input 的命令（如 /git、循环任务等）也能感知到模型变更
+    $.post('/web/chat/models/select', {
+        sessionId: sid,
+        modelName: modelName
+    }).fail(function(err) {
+        console.error('Failed to select model on server:', err);
+    });
 }
 
 // Toggle dropdown open/close
