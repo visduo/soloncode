@@ -205,7 +205,10 @@ function finishThinkingBlock(sess) {
                 sess.thinkingBodyMdEl.innerHTML = renderMd(sess.thinkingBuffer);
             }
         }
-        $(sess.thinkingBlockEl).removeClass('streaming expanded');
+        $(sess.thinkingBlockEl).removeClass('streaming');
+        if (window.cliPrintSimplified !== false) {
+            $(sess.thinkingBlockEl).removeClass('expanded');
+        }
         var elapsed = '';
         if (sess.thinkingBlockStartTime) {
             elapsed = ' (' + Math.floor((Date.now() - sess.thinkingBlockStartTime) / 1000) + 's)';
