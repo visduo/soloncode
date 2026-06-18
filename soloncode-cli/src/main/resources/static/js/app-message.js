@@ -87,6 +87,10 @@ function ensureAssistantBubble(sess) {
     if (!sess.currentBubbleEl) {
         removeThinking(sess);
         var row = $('<div>').addClass('msg-row assistant')[0];
+        // 存储当前 runId，用于后续删除同一运行的消息
+        if (sess.currentRunId) {
+            row.setAttribute('data-run-id', sess.currentRunId);
+        }
         row.innerHTML = '<div class="msg-bubble"><div class="md-content"></div>'
             + '<div class="msg-time" style="display:none"></div>'
             + '<div class="msg-actions">'
@@ -126,7 +130,7 @@ function ensureAssistantBubble(sess) {
             }
         });
         // 重新运行 / 继续运行：复用后端已有的 /rerun、/continue 命令。
-        // rerun：删除当前 AI 消息行（旧回复），新回复流式渲染到新气泡，与后端回退保持一致。
+        // rerun：删除同一 runId 的所有 AI 消息行（旧回复），新回复流式渲染到新气泡，与后端回退保持一致。
         // continue：保留当前气泡，新内容自然追加到新气泡，呈现“接着往下写”的效果。
         var rerunBtn = $(row).find('.rerun-btn')[0];
         var continueBtn = $(row).find('.continue-btn')[0];
@@ -135,8 +139,19 @@ function ensureAssistantBubble(sess) {
             if (typeof sendCommandSilent !== 'function') return;
             sendCommandSilent(cmd, function() {
                 if (removeRow) {
-                    // 仅 rerun 同步删除当前 AI 消息行
-                    $(row).remove();
+                    // 删除同一 runId 的所有元素（消息行、工具卡片、思考块等）
+                    var runId = row.getAttribute('data-run-id');
+                    if (runId) {
+                        // 删除所有具有相同 runId 的元素
+                        $(sess.container).find('[data-run-id="' + runId + '"]').remove();
+                    } else {
+                        // 兼容旧数据：如果没有 runId，只删除当前行
+                        $(row).remove();
+                    }
+                    // 重置会话状态
+                    sess.currentBubbleEl = null;
+                    sess.thinkingBlockEl = null;
+                    sess.pendingToolCard = null;
                 }
             });
         }
@@ -158,6 +173,10 @@ function ensureThinkingBlock(sess) {
         ensureAssistantBubble(sess);
         var parent = sess.currentBubbleEl.parentNode;
         var block = $('<div>').addClass('thinking-block streaming expanded')[0];
+        // 存储当前 runId，用于后续删除同一运行的消息
+        if (sess.currentRunId) {
+            block.setAttribute('data-run-id', sess.currentRunId);
+        }
         block.innerHTML = '<div class="thinking-block-header">'
             + '<span class="thinking-block-label">思考中</span>'
             + '<span class="thinking-timer-wrap" style="margin-left:4px">'
@@ -507,6 +526,10 @@ function appendActionStartChunk(sess, toolName, args, toolTitle) {
     var argsHtml = argsStr ? '<span class="tool-args">' + escapeHtml(argsStr) + '</span>' : '';
 
     var card = $('<div>').addClass('tool-card')[0];
+    // 存储当前 runId，用于后续删除同一运行的消息
+    if (sess.currentRunId) {
+        card.setAttribute('data-run-id', sess.currentRunId);
+    }
     if (window.cliPrintSimplified === false) $(card).addClass('expanded');
     card.innerHTML = '<div class="tool-card-header">'
         + '<span class="tool-status-icon loading"></span>'
@@ -615,6 +638,10 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle) {
     }
 
     var card = $('<div>').addClass('tool-card')[0];
+    // 存储当前 runId，用于后续删除同一运行的消息
+    if (sess.currentRunId) {
+        card.setAttribute('data-run-id', sess.currentRunId);
+    }
     if (window.cliPrintSimplified === false) $(card).addClass('expanded');
     card.innerHTML = '<div class="tool-card-header">'
         + '<span class="tool-status-icon loading"></span>'
@@ -800,6 +827,10 @@ function appendHitlCard(sess, toolName, command) {
     // 采用 tool-card 视觉体系：审批通过后原地复用为工具结果卡片
     var argsHtml = command ? '<span class="tool-args">' + escapeHtml(command) + '</span>' : '';
     var card = $('<div>').addClass('tool-card hitl-pending expanded')[0];
+    // 存储当前 runId，用于后续删除同一运行的消息
+    if (sess.currentRunId) {
+        card.setAttribute('data-run-id', sess.currentRunId);
+    }
     card.innerHTML = '<div class="tool-card-header">'
         + '<span class="tool-status-icon warn"><i class="layui-icon layui-icon-tips" style="font-size:13px"></i></span>'
         + '<span class="tool-name">\u9700\u8981\u6388\u6743\uff1a' + escapeHtml(toolName || 'unknown') + '</span>'

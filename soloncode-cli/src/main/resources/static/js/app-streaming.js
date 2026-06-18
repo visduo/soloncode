@@ -161,6 +161,11 @@ function onWebChunk(sess, chunk) {
 
         removeInlineThinking(sess);
 
+        // 存储当前 chunk 的 runId，用于后续消息渲染
+        if (chunk.runId) {
+            sess.currentRunId = chunk.runId;
+        }
+
         switch (chunk.type) {
             case 'command': finishThinkingBlock(sess); finishPendingTool(sess); appendCommandOutput(sess, chunk.text); break;
             case 'rewind': finishThinkingBlock(sess); finishPendingTool(sess); handleRewind(sess, parseInt(chunk.text) || 1); break;
