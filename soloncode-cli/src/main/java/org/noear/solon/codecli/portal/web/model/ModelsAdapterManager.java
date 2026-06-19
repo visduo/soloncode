@@ -13,7 +13,12 @@ public class ModelsAdapterManager {
 
 public ModelsAdapterManager() {
         OpenAIModelsAdapter openAIModelProvider = new OpenAIModelsAdapter();
+        AnthropicModelsAdapter anthropicModelsAdapter = new AnthropicModelsAdapter();
+        OllamaModelsAdapter ollamaModelsAdapter = new OllamaModelsAdapter();
+        
         providerMap.put(openAIModelProvider.getStandard(), openAIModelProvider);
+        providerMap.put(anthropicModelsAdapter.getStandard(), anthropicModelsAdapter);
+        providerMap.put(ollamaModelsAdapter.getStandard(), ollamaModelsAdapter);
         defaultProvider = openAIModelProvider;
     }
 

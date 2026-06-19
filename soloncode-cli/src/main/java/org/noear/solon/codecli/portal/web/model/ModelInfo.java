@@ -5,8 +5,11 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
+
 /**
- * 模型信息（OpenAI /v1/models 兼容格式）
+ * 模型信息
+ * 支持 OpenAI、Anthropic、Ollama 等多种格式
  */
 @Data
 @Builder
@@ -19,4 +22,10 @@ public class ModelInfo {
     private String ownedBy;
     /** 扩展字段：chat / image */
     private String type;
+    
+    // Anthropic 扩展字段
+    private String displayName;
+    private Long maxInputTokens;
+    private Long maxTokens;
+    private Map<String, Object> capabilities;
 }
