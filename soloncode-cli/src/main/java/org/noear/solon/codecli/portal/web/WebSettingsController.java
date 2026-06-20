@@ -48,6 +48,7 @@ import org.noear.solon.codecli.config.entity.ProviderDo;
 import org.noear.solon.codecli.portal.web.model.ModelInfo;
 import org.noear.solon.codecli.portal.web.model.ModelsAdapter;
 import org.noear.solon.codecli.portal.web.model.ModelsAdapterManager;
+import org.noear.solon.codecli.portal.web.model.ModelSpecService;
 import org.noear.solon.codecli.portal.web.market.Market;
 import org.noear.solon.codecli.portal.web.market.MarketManager;
 import org.noear.solon.core.handle.Context;
@@ -110,6 +111,11 @@ public class WebSettingsController {
     private final ModelsAdapterManager modelProviderFactory;
 
     /**
+     * 模型规格参考服务，用于从 models.json 获取上下文大小
+     */
+    private final ModelSpecService modelSpecService;
+
+    /**
      * 统一配置管理器，管理 LLM 模型、MCP 服务器、OpenApi 服务器的持久化数据
      */
     private final AgentSettings settings;
@@ -121,7 +127,7 @@ public class WebSettingsController {
      * @param settings 统一配置管理器（由 App.initAgentSettings 创建并注册到容器）
      */
     public WebSettingsController(HarnessEngine engine, AgentSettings settings) {
-        this(engine, settings, new MarketManager(), new ModelsAdapterManager());
+        this(engine, settings, new MarketManager(), new ModelsAdapterManager(), new ModelSpecService());
     }
 
     /**
@@ -132,7 +138,7 @@ public class WebSettingsController {
      * @param marketManager 技能市场管理器
      */
     public WebSettingsController(HarnessEngine engine, AgentSettings settings, MarketManager marketManager) {
-        this(engine, settings, marketManager, new ModelsAdapterManager());
+        this(engine, settings, marketManager, new ModelsAdapterManager(), new ModelSpecService());
     }
 
     /**
@@ -144,10 +150,18 @@ public class WebSettingsController {
      * @param modelProviderFactory 模型提供商工厂
      */
     public WebSettingsController(HarnessEngine engine, AgentSettings settings, MarketManager marketManager, ModelsAdapterManager modelProviderFactory) {
+        this(engine, settings, marketManager, modelProviderFactory, new ModelSpecService());
+    }
+
+    /**
+     * 构造函数：支持自定义所有依赖。
+     */
+    public WebSettingsController(HarnessEngine engine, AgentSettings settings, MarketManager marketManager, ModelsAdapterManager modelProviderFactory, ModelSpecService modelSpecService) {
         this.engine = engine;
         this.settings = settings;
         this.marketManager = marketManager;
         this.modelProviderFactory = modelProviderFactory;
+        this.modelSpecService = modelSpecService;
     }
 
     // ==================== 配置持久化 ====================
@@ -1720,11 +1734,17 @@ public class WebSettingsController {
                 modelDo.setProvider(providerName);
                 modelDo.setVisibled(provider.isEnabled());
                 
-                // 设置 contextLength：优先 maxInputTokens，其次 maxTokens
+                // 设置 contextLength：优先 maxInputTokens，其次 maxTokens，最后从 models.json 查询
                 if (modelInfo.getMaxInputTokens() != null && modelInfo.getMaxInputTokens() > 0) {
                     modelDo.setContextLength(modelInfo.getMaxInputTokens());
                 } else if (modelInfo.getMaxTokens() != null && modelInfo.getMaxTokens() > 0) {
                     modelDo.setContextLength(modelInfo.getMaxTokens());
+                } else {
+                    // 从 models.json 查询上下文大小
+                    Long contextLength = modelSpecService.getContextLength(modelId);
+                    if (contextLength != null) {
+                        modelDo.setContextLength(contextLength);
+                    }
                 }
                 
                 settings.getModels().put(modelName, modelDo);
@@ -1738,12 +1758,18 @@ public class WebSettingsController {
                         existingModel.setVisibled(provider.isEnabled());
                         syncCount++;
                     }
-                    // 更新 contextLength
+                    // 更新 contextLength：优先 maxInputTokens，其次 maxTokens，最后从 models.json 查询
                     long newContextLength = 0;
                     if (modelInfo.getMaxInputTokens() != null && modelInfo.getMaxInputTokens() > 0) {
                         newContextLength = modelInfo.getMaxInputTokens();
                     } else if (modelInfo.getMaxTokens() != null && modelInfo.getMaxTokens() > 0) {
                         newContextLength = modelInfo.getMaxTokens();
+                    } else {
+                        // 从 models.json 查询上下文大小
+                        Long contextLength = modelSpecService.getContextLength(modelId);
+                        if (contextLength != null) {
+                            newContextLength = contextLength;
+                        }
                     }
                     if (newContextLength > 0 && existingModel.getContextLength() != newContextLength) {
                         existingModel.setContextLength(newContextLength);
