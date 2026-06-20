@@ -1,9 +1,12 @@
 
 
-### v2026.6.19
+### v2026.6.20
 
+* 添加 soloncode web 设置 mcp 导入功能
+* 添加 soloncode web 设置 供应商功能
 * 优化 soloncode web 右侧面板的 emoji 图标改为 svg 图标（跨系统更稳定）
 * 优化 soloncode edit 工具匹配算法（同行号可以乎略缩进）
+* 细节优化
 
 ### v2026.6.18
 
