@@ -369,8 +369,8 @@ function applyCmdSelection(inputEl, completeEl) {
                 argsStr = textAfter.substring(spaceIndex);
             }
             
-            // 构建新的值
-            inputEl.value = textBefore + trigger + cmd.name + argsStr;
+            // 构建新的值（命令/技能/子代理名称后追加空格）
+            inputEl.value = textBefore + trigger + cmd.name + ' ' + argsStr;
             
             // 更新光标位置到命令后面
             var newCursorPos = textBefore.length + trigger.length + cmd.name.length;
@@ -467,11 +467,11 @@ function triggerCmdComplete(inputEl, completeEl, prefix) {
     var textBefore = inputEl.value.substring(0, cursorPos);
     var textAfter = inputEl.value.substring(cursorPos);
     
-    // 在光标位置插入前缀
-    inputEl.value = textBefore + prefix + textAfter;
+    // 在光标位置插入前缀（命令/子代理/技能符号后追加空格）
+    inputEl.value = textBefore + prefix + ' ' + textAfter;
     
-    // 更新光标位置到前缀后面
-    var newCursorPos = cursorPos + prefix.length;
+    // 更新光标位置到前缀和空格后面
+    var newCursorPos = cursorPos + prefix.length + 1;
     inputEl.setSelectionRange(newCursorPos, newCursorPos);
     
     inputEl.focus();
