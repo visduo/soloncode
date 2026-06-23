@@ -48,30 +48,30 @@ public class GoalTool extends AbsTalent {
      * 创建新的 Goal（Codex 签名对齐：objective + token_budget）
      */
     @ToolMapping(name = "create_goal",
-            description = "Create a new goal to guide the conversation towards a specific objective. " +
-                    "Every conversation can have at most one active goal at a time. " +
-                    "If there's already an active goal, this will fail.")
+            description = "创建一个新目标，引导对话朝向特定目标推进。" +
+                    "每次对话同一时间最多只能有一个活跃目标。" +
+                    "如果已存在活跃目标，此操作将失败。")
     public String createGoal(
-            @Param(name = "objective", description = "The objective to achieve") String objective,
-            @Param(name = "token_budget", description = "Token budget limit (optional)", required = false) Long tokenBudget,
+            @Param(name = "objective", description = "要达成的目标") String objective,
+            @Param(name = "token_budget", description = "Token 预算上限（可选）", required = false) Long tokenBudget,
             String __sessionId,
             String __cwd) {
 
         if (objective == null || objective.isEmpty()) {
-            return "ERROR: objective is required";
+            return "错误：objective 参数不能为空";
         }
 
         String sessionId = __sessionId;
         if (sessionId == null) {
-            return "ERROR: no active session found";
+            return "错误：未找到活跃会话";
         }
 
         LoopTask existing = scheduler.findActiveGoalAcrossSessions();
         if (existing != null) {
             GoalState gs = existing.getGoalState();
-            return "ERROR: a goal is already active (" + existing.getId()
+            return "错误：已有一个活跃目标（" + existing.getId()
                     + ": " + gs.getCondition()
-                    + "). Use update_goal or complete it first.";
+                    + "）。请先使用 update_goal 或完成当前目标。";
         }
 
         LoopTask task = new LoopTask(objective, 0, null,
@@ -84,11 +84,11 @@ public class GoalTool extends AbsTalent {
             scheduler.schedule(sessionId, task);
             GoalState gs = task.getGoalState();
 
-            return "OK: goal created — taskId='" + task.getId()
+            return "已创建目标 — taskId='" + task.getId()
                     + "', objective='" + objective
-                    + "'. Use get_goal to check status.";
+                    + "'. 可调用 get_goal 查看状态。";
         } catch (Exception e) {
-            return "ERROR: failed to create goal — " + e.getMessage();
+            return "错误：创建目标失败 — " + e.getMessage();
         }
     }
 
@@ -96,7 +96,7 @@ public class GoalTool extends AbsTalent {
      * 获取当前 goal 状态（无 goal 时返回 null，Codex 对齐）
      */
     @ToolMapping(name = "get_goal",
-            description = "Get the status of the current active goal, or null if no active goal.")
+            description = "获取当前活跃目标的状态，若无活跃目标则返回 null。")
     public String getGoal(String __sessionId,
                           String __cwd) {
         LoopTask task = scheduler.findActiveGoalAcrossSessions();
@@ -127,35 +127,35 @@ public class GoalTool extends AbsTalent {
      * 标记 goal 完成（Codex：仅接受 complete，blocked 由运行时自动检测）
      */
     @ToolMapping(name = "update_goal",
-            description = "Mark the current active goal as complete. " +
-                    "Only call this when the objective has been successfully achieved. " +
-                    "If blocked, do NOT call this — the system will detect it automatically.")
+            description = "将当前活跃目标标记为已完成。" +
+                    "仅当目标已成功达成时才调用此工具。" +
+                    "如果遇到阻塞，请勿调用 — 系统会自动检测并暂停。")
     public String updateGoal(
-            @Param(name = "status", description = "Status: complete") String status,
+            @Param(name = "status", description = "状态值：complete") String status,
             String __sessionId,
             String __cwd) {
 
         if (status == null) {
-            return "ERROR: status is required (complete)";
+            return "错误：status 参数必填（complete）";
         }
 
         if (!"complete".equals(status)) {
-            return "ERROR: unknown status '" + status + "'. Only 'complete' is supported.";
+            return "错误：未知状态 '" + status + "'. 仅支持 'complete'.";
         }
 
         LoopTask task = scheduler.findActiveGoalAcrossSessions();
         if (task == null) {
-            return "ERROR: no active goal found";
+            return "错误：未找到活跃目标";
         }
 
         GoalState gs = task.getGoalState();
         if (!gs.getStatus().isActive()) {
-            return "WARN: goal is not in an active state (" + gs.getStatus() + "), cannot mark complete";
+            return "警告：目标不在活跃状态（" + gs.getStatus() + "），无法标记为完成";
         }
 
         String sessionId = __sessionId;
         if (sessionId == null) {
-            return "ERROR: no active session";
+            return "错误：无活跃会话";
         }
 
         gs.achieve();
@@ -163,8 +163,8 @@ public class GoalTool extends AbsTalent {
 
         long used = gs.getConsumedTokens();
         String tokenReport = gs.getMaxTokens() > 0
-                ? used + "/" + gs.getMaxTokens() + " tokens used"
-                : used > 0 ? used + " tokens used" : "token tracking N/A";
-        return "OK: goal '" + gs.getCondition() + "' marked as complete (" + tokenReport + ")";
+                ? used + "/" + gs.getMaxTokens() + " tokens 已消耗"
+                : used > 0 ? used + " tokens 已消耗" : "token 统计不可用";
+        return "已完成目标 '" + gs.getCondition() + "' 已标记为完成（" + tokenReport + "）";
     }
 }
