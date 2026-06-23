@@ -429,10 +429,10 @@
         html += '<div class="loop-cron-examples" id="loopCronExamples">';
         html += '<span class="loop-cron-hint">示例:</span> ';
         html += '<a class="loop-cron-link" data-cron="0 */5 * * * ?">每5分钟</a> ';
+        html += '<a class="loop-cron-link" data-cron="0 */2 * * *">每2小时</a>';
         html += '<a class="loop-cron-link" data-cron="0 9 * * *">每天9点</a> ';
         html += '<a class="loop-cron-link" data-cron="0 22 * * *">每天22点</a> ';
         html += '<a class="loop-cron-link" data-cron="0 0 * * 1">每周一</a> ';
-        html += '<a class="loop-cron-link" data-cron="0 */2 * * *">每2小时</a>';
         html += '</div>';
         html += '</div>';
         html += '</div>';  // 结束 loop-form-schedule
