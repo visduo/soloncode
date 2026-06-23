@@ -29,7 +29,6 @@ import java.util.UUID;
  * <ul>
  *   <li>Automations — 定时/cron 触发（intervalMinutes / cron）</li>
  *   <li>Skills — AI 根据 prompt 自动匹配可用技能</li>
- *   <li>Worktrees — worktreeEnabled 在独立分支执行</li>
  *   <li>Connectors — channelNotify 结果通知</li>
  *   <li>State — stateDir 持久状态目录 (.soloncode/loops/&lt;id&gt;/)</li>
  * </ul>

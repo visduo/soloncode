@@ -39,11 +39,11 @@ class LoopExecutionResultTest {
 
     @Test
     void copyWithUpdateShouldKeepIdentityAndRuntimeState() {
-        LoopTask task = new LoopTask("old prompt", 1, null, null, false, 2);
+        LoopTask task = new LoopTask("old prompt", 1, null, null, 2);
         task.updateLastExecution("last");
         task.incrementIteration();
 
-        LoopTask updated = task.copyWithUpdate("new prompt", 5, null, LoopTask.TaskType.GOAL, true, 3, false, null, null);
+        LoopTask updated = task.copyWithUpdate("new prompt", 5, null, LoopTask.TaskType.GOAL, 3, false, null, null);
 
         assertEquals(task.getId(), updated.getId());
         assertEquals(task.getCreatedAt(), updated.getCreatedAt());
@@ -51,13 +51,12 @@ class LoopExecutionResultTest {
         assertEquals("last", updated.getLastResult());
         assertEquals("new prompt", updated.getPrompt());
         assertEquals(LoopTask.TaskType.GOAL, updated.getType());
-        assertTrue(updated.isWorktreeEnabled());
         assertFalse(updated.isMaxIterationsReached());
     }
 
     @Test
     void maxIterationsShouldWorkWithoutGoal() {
-        LoopTask task = new LoopTask("prompt", 1, null, null, false, 2);
+        LoopTask task = new LoopTask("prompt", 1, null, null, 2);
 
         assertFalse(task.isMaxIterationsReached());
         task.incrementIteration();
@@ -69,7 +68,7 @@ class LoopExecutionResultTest {
     @Test
     void appendHistoryShouldWriteStructuredResult() throws Exception {
         Path workspace = Files.createTempDirectory("loop-state-test-");
-        LoopTask task = new LoopTask("prompt", 1, null, LoopTask.TaskType.GOAL, false, 2);
+        LoopTask task = new LoopTask("prompt", 1, null, LoopTask.TaskType.GOAL, 2);
 
         LoopStateManager.init(workspace.toString(), task.getId(), task.getPrompt());
         LoopStateManager.appendHistory(workspace.toString(), task.getId(),

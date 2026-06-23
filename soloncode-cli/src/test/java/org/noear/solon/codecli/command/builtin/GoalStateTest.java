@@ -188,7 +188,7 @@ class GoalStateTest {
 
     @Test
     void goalModeShouldBeTrueWhenTypeIsGoal() {
-        LoopTask task = new LoopTask("prompt", 0, null, LoopTask.TaskType.GOAL, false, 0, true);
+        LoopTask task = new LoopTask("prompt", 0, null, LoopTask.TaskType.GOAL, 0, true);
         assertTrue(task.isGoalMode());
         assertNotNull(task.getGoalState());
         assertEquals("prompt", task.getGoalState().getCondition());
@@ -196,14 +196,14 @@ class GoalStateTest {
 
     @Test
     void goalModeShouldBeFalseWithoutGoalCondition() {
-        LoopTask task = new LoopTask("prompt", 1, null, null, false, 0);
+        LoopTask task = new LoopTask("prompt", 1, null, null, 0);
         assertFalse(task.isGoalMode());
         assertNull(task.getGoalState());
     }
 
     @Test
     void goalTaskSerializationRoundTripShouldPreserveGoalState() {
-        LoopTask task = new LoopTask("test prompt", 0, null, LoopTask.TaskType.GOAL, false, 0, true);
+        LoopTask task = new LoopTask("test prompt", 0, null, LoopTask.TaskType.GOAL, 0, true);
         task.getGoalState().addTokens(5000);
         task.incrementIteration();
         task.incrementIteration();
@@ -219,7 +219,7 @@ class GoalStateTest {
 
     @Test
     void goalTaskWithBlockedStateSerializationRoundTrip() {
-        LoopTask task = new LoopTask("test prompt", 0, null, LoopTask.TaskType.GOAL, false, 0, true);
+        LoopTask task = new LoopTask("test prompt", 0, null, LoopTask.TaskType.GOAL, 0, true);
         task.getGoalState().markBlocked();
 
         ONode node = task.toONode();
