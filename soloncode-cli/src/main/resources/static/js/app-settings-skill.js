@@ -117,7 +117,7 @@
             if (!_installedSkillsCache) {
                 _installedSkillsCache = {};
                 commandList.forEach(function (item) {
-                    if (item.type === 'skill') _installedSkillsCache[item.name] = true;
+                    if (item.type === 'skill') _installedSkillsCache[item.name] = item.mountAlias || true;
                 });
             }
             callback(_installedSkillsCache);
@@ -126,7 +126,7 @@
         $.get('/web/chat/hints', function (resp) {
             _installedSkillsCache = {};
             (resp.data || []).forEach(function (item) {
-                if (item.type === 'skill') _installedSkillsCache[item.name] = true;
+                if (item.type === 'skill') _installedSkillsCache[item.name] = item.mountAlias || true;
             });
             callback(_installedSkillsCache);
         }).fail(function () {
@@ -247,9 +247,11 @@
                 + (skillUrl ? '<span class="skill-item-detail-link" title="查看详情">↗</span>' : '')
                 + '</div></div>'
                 + '<div class="skill-item-actions">'
-                + (isInstalled
-                    ? ''
-                    : '<div class="skill-install-wrap">'
+                    + (isInstalled
+                        ? '<div class="skill-install-wrap">'
+                    +   '<button class="skill-install-btn skill-reinstall-btn installed" data-slug="' + escapeAttr(name) + '" data-display="' + escapeAttr(displayName) + '" data-market="' + escapeAttr(_currentMarketName) + '" data-mount-alias="' + escapeAttr(installedMap[name]) + '" title="重新安装（升级）"><svg class="skill-install-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>'
+                    + '</div>'
+                        : '<div class="skill-install-wrap">'
                     +   '<button class="skill-install-btn" data-slug="' + escapeAttr(name) + '" data-display="' + escapeAttr(displayName) + '" data-market="' + escapeAttr(_currentMarketName) + '" title="安装到"><svg class="skill-install-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>'
                     +   '<div class="skill-install-dropdown" data-slug="' + escapeAttr(name) + '" data-display="' + escapeAttr(displayName) + '" data-market="' + escapeAttr(_currentMarketName) + '">'
                     +     '<div class="skill-install-dropdown-loading">加载中...</div>'
@@ -334,6 +336,74 @@
         } else {
             $dropdown.toggleClass('active');
         }
+    });
+
+    // 点击重新安装按钮，直接使用原挂载点升级（不需要选下拉）
+    $skillsList.on('click', '.skill-reinstall-btn', function (e) {
+        e.stopPropagation();
+        var $btn = $(this);
+        var slug = $btn.attr('data-slug');
+        var displayName = $btn.attr('data-display') || slug;
+        var marketUrl = $btn.attr('data-market') || '';
+        var mountAlias = $btn.attr('data-mount-alias');
+
+        if (!mountAlias || mountAlias === 'true') {
+            if (typeof layer !== 'undefined' && layer.msg) {
+                layer.msg('无法获取原安装位置，请尝试卸载后重新安装', {icon: 2, time: 3000, offset: '120px'});
+            }
+            return;
+        }
+
+        // 开始安装（覆盖升级）
+        $btn.addClass('installing').html('<svg class="skill-install-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>').prop('disabled', true);
+
+        var postData = { slug: slug, mountAlias: mountAlias };
+        if (marketUrl) postData.marketName = marketUrl;
+
+        $.ajax({
+            url: '/web/settings/skills/install',
+            method: 'POST',
+            data: postData,
+            timeout: 60000,
+            dataType: 'json'
+        })
+        .done(function (resp) {
+            var isSuccess = resp && resp.code === 200 && resp.data;
+            if (isSuccess) {
+                var skillName = (resp.data || slug) + '';
+                if (typeof layer !== 'undefined' && layer.msg) {
+                    layer.msg('技能「' + escapeHtml(skillName) + '」升级成功！', {icon: 1, time: 2500, offset: '120px'});
+                } else {
+                    alert('技能「' + skillName + '」升级成功！');
+                }
+                $btn.removeClass('installing').html('<svg class="skill-install-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>').prop('disabled', false);
+                if (typeof loadCommands === 'function') loadCommands();
+            } else {
+                var msg = (resp && resp.description) ? resp.description : '升级失败，请稍后重试';
+                $btn.removeClass('installing').html('<svg class="skill-install-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>').prop('disabled', false);
+                if (typeof layer !== 'undefined' && layer.msg) {
+                    layer.msg(msg, {icon: 2, time: 3000, offset: '120px'});
+                } else {
+                    alert(msg);
+                }
+            }
+        })
+        .fail(function (jqXHR) {
+            $btn.removeClass('installing').html('<svg class="skill-install-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>').prop('disabled', false);
+            var msg = '升级失败，请稍后重试';
+            try {
+                var err = JSON.parse(jqXHR.responseText);
+                if (err && err.description) msg = err.description;
+                else if (err && err.data) msg = err.data;
+            } catch (e) {
+                if (jqXHR.status) msg = '升级失败 (HTTP ' + jqXHR.status + ')';
+            }
+            if (typeof layer !== 'undefined' && layer.msg) {
+                layer.msg(msg, {icon: 2, time: 3000, offset: '120px'});
+            } else {
+                alert(msg);
+            }
+        });
     });
 
     // 点击挂载选项，执行安装

@@ -7,6 +7,7 @@
 * 添加 soloncode web 输入面板的模型选择添加搜索功能
 * 添加 soloncode web 对话消息 mermaid 渲染支持
 * 添加 soloncode web WWW-Authenticate 认证
+* 添加 soloncode web 技能市场重新安装支持（达到更新升级效果）
 * 优化 soloncode WebGate 允许中断命令通过忙碌检查
 * 优化 soloncode web 面板拖拽性能；延迟消息流代码高亮；为滚动区域和面板添加contain布局
 * 优化 soloncode web 任务面板数据显示
