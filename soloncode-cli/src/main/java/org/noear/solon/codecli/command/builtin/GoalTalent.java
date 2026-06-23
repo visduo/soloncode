@@ -37,13 +37,13 @@ import org.slf4j.LoggerFactory;
  * @author noear
  * @since 3.9.3
  */
-public class GoalTool extends AbsTalent {
+public class GoalTalent extends AbsTalent {
 
-    private static final Logger log = LoggerFactory.getLogger(GoalTool.class);
+    private static final Logger log = LoggerFactory.getLogger(GoalTalent.class);
 
     private final LoopScheduler scheduler;
 
-    public GoalTool(LoopScheduler scheduler) {
+    public GoalTalent(LoopScheduler scheduler) {
         this.scheduler = scheduler;
     }
 
@@ -65,12 +65,11 @@ public class GoalTool extends AbsTalent {
             return "错误：objective 参数不能为空";
         }
 
-        String sessionId = __sessionId;
-        if (sessionId == null) {
+        if (__sessionId == null) {
             return "错误：未找到活跃会话";
         }
 
-        LoopTask existing = scheduler.findActiveGoalAcrossSessions();
+        LoopTask existing = scheduler.findActiveGoalAcrossSessions(__sessionId);
         if (existing != null) {
             GoalState gs = existing.getGoalState();
             return "错误：已有一个活跃目标（" + existing.getId()
@@ -85,7 +84,7 @@ public class GoalTool extends AbsTalent {
         task.setMaxTokens(maxTokens);
 
         try {
-            scheduler.schedule(sessionId, task);
+            scheduler.schedule(__sessionId, task);
             GoalState gs = task.getGoalState();
 
             return "已创建目标 — taskId='" + task.getId()
@@ -103,7 +102,7 @@ public class GoalTool extends AbsTalent {
             description = "获取当前活跃目标的状态，若无活跃目标则返回 null。")
     public String getGoal(String __sessionId,
                           String __cwd) {
-        LoopTask task = scheduler.findActiveGoalAcrossSessions();
+        LoopTask task = scheduler.findActiveGoalAcrossSessions(__sessionId);
         if (task == null) {
             return "null";
         }
@@ -146,7 +145,7 @@ public class GoalTool extends AbsTalent {
             return "错误：status 参数必填（complete 或 blocked）";
         }
 
-        LoopTask task = scheduler.findActiveGoalAcrossSessions();
+        LoopTask task = scheduler.findActiveGoalAcrossSessions(__sessionId);
         if (task == null) {
             return "错误：未找到活跃目标";
         }
@@ -156,8 +155,7 @@ public class GoalTool extends AbsTalent {
             return "警告：目标不在活跃状态（" + gs.getStatus() + "），无法更新";
         }
 
-        String sessionId = __sessionId;
-        if (sessionId == null) {
+        if (__sessionId == null) {
             return "错误：无活跃会话";
         }
 
@@ -167,7 +165,7 @@ public class GoalTool extends AbsTalent {
             LoopConfig config = new LoopConfig();
             if (config.isValidatorEnabled()) {
                 GoalValidator validator = ValidatorFactory.forCondition(gs.getCondition());
-                GoalValidator.ValidationResult vr = validator.validate(gs.getCondition(), sessionId);
+                GoalValidator.ValidationResult vr = validator.validate(gs.getCondition(), __sessionId);
                 if (!vr.isPassed()) {
                     log.warn("updateGoal: 验证失败 for goal '{}': {}", task.getId(), vr.detail());
                     return "目标尚未完成：验证失败 - " + vr.detail()
@@ -176,7 +174,7 @@ public class GoalTool extends AbsTalent {
             }
 
             gs.achieve();
-            scheduler.clearGoal(sessionId, task.getId());
+            scheduler.clearGoal(__sessionId, task.getId());
 
             long used = gs.getConsumedTokens();
             String tokenReport = gs.getMaxTokens() > 0
@@ -188,7 +186,7 @@ public class GoalTool extends AbsTalent {
         // ---- blocked ----
         if ("blocked".equals(status)) {
             gs.markBlocked();
-            scheduler.pauseGoal(sessionId, task.getId());
+            scheduler.pauseGoal(__sessionId, task.getId());
             log.info("updateGoal: goal '{}' marked as BLOCKED by model", task.getId());
             return "目标已标记为阻塞 — 目标暂停，等待 resume。";
         }

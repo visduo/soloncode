@@ -14,25 +14,19 @@ import org.noear.solon.ai.harness.agent.AgentDefinition;
  * @since 3.9.2
  */
 public class GoalExtension implements HarnessExtension {
-    private final GoalTool goalTool;
-    private final boolean goalsEnabled;
+    private final GoalTalent goalTool;
 
     public GoalExtension(LoopScheduler loopScheduler) {
-        this(loopScheduler, true);
+        this.goalTool = new GoalTalent(loopScheduler);
     }
 
-    public GoalExtension(LoopScheduler loopScheduler, boolean goalsEnabled) {
-        this.goalTool = new GoalTool(loopScheduler);
-        this.goalsEnabled = goalsEnabled;
-    }
-
-    public GoalTool getGoalTool() {
+    public GoalTalent getGoalTalent() {
         return goalTool;
     }
 
     @Override
     public void configure(String agentName, ReActAgent.Builder agentBuilder) {
-        if (goalsEnabled && AgentDefinition.AGENT_MAIN.equals(agentName)) {
+        if (AgentDefinition.AGENT_MAIN.equals(agentName)) {
             agentBuilder.defaultTalentAdd(goalTool);
         }
     }

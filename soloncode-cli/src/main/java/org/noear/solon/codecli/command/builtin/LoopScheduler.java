@@ -100,29 +100,24 @@ public class LoopScheduler {
         }
     }
 
-    public String getFirstSessionId() {
-        if (sessionTasks.isEmpty()) return null;
-        return sessionTasks.keySet().iterator().next();
-    }
-
     /**
      * 跨会话查找活跃 goal（PURSUING 优先，PAUSED/BLOCKED 次之）
      */
-    public LoopTask findActiveGoalAcrossSessions() {
-        for (Map.Entry<String, List<LoopTask>> entry : sessionTasks.entrySet()) {
-            for (LoopTask t : entry.getValue()) {
-                if (t.isGoalMode() && t.getGoalState().getStatus().isActive()) {
-                    return t;
-                }
+    public LoopTask findActiveGoalAcrossSessions(String sessionId) {
+        List<LoopTask> taskList = sessionTasks.get(sessionId);
+
+        for (LoopTask t : taskList) {
+            if (t.isGoalMode() && t.getGoalState().getStatus().isActive()) {
+                return t;
             }
         }
-        for (Map.Entry<String, List<LoopTask>> entry : sessionTasks.entrySet()) {
-            for (LoopTask t : entry.getValue()) {
-                if (t.isGoalMode() && t.getGoalState().getStatus().isResumable()) {
-                    return t;
-                }
+
+        for (LoopTask t : taskList) {
+            if (t.isGoalMode() && t.getGoalState().getStatus().isResumable()) {
+                return t;
             }
         }
+
         return null;
     }
 
