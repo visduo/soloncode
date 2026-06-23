@@ -100,9 +100,9 @@ public class LoopScheduler {
     }
 
     /**
-     * 跨会话查找活跃 goal（PURSUING 优先，PAUSED/BLOCKED 次之）
+     * 查找指定会话中的活跃 goal（PURSUING 优先，PAUSED/BLOCKED 次之）
      */
-    public LoopTask findActiveGoalAcrossSessions(String sessionId) {
+    public LoopTask findActiveGoalInSession(String sessionId) {
         if (sessionId == null) {
             return null;
         }

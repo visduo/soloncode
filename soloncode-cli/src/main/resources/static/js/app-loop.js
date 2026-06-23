@@ -363,8 +363,6 @@
                         layer.close(index);
                         doRemove();
                     });
-                } else {
-                    if (confirm('确定要删除该循环任务吗？')) doRemove();
                 }
             } else if (action === 'edit') {
                 loopEditId = id;

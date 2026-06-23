@@ -179,9 +179,9 @@ function deleteSession(idx) {
     var entry = chatHistory[idx];
     if (!entry) return;
 
-    if (!confirm('确定删除对话 "' + (entry.label || '未命名') + '"？')) return;
-
-    $.post('/web/chat/sessions/delete?sessionId=' + encodeURIComponent(entry.sessionId), function() {
+    layer.confirm('确定删除对话 "' + (entry.label || '未命名') + '"？', { title: '确认删除', btn: ['删除', '取消'], icon: 3, offset: '120px' }, function(index) {
+        layer.close(index);
+        $.post('/web/chat/sessions/delete?sessionId=' + encodeURIComponent(entry.sessionId), function() {
         /* Clean up session state after server confirms */
         var sess = sessionMap[entry.sessionId];
         if (sess) {
@@ -209,6 +209,7 @@ function deleteSession(idx) {
         } else {
             alert('删除对话失败，请重试');
         }
+    });
     });
 }
 

@@ -251,12 +251,13 @@
     $mountsSkillsList.on('click', '.mcp-action-btn.delete', function (e) {
         e.stopPropagation();
         var skillName = $(this).attr('data-skill');
-        if (confirm('确定删除技能包 "' + skillName + '"？此操作不可恢复。')) {
+        layer.confirm('确定删除技能包 "' + skillName + '"？此操作不可恢复。', { title: '确认删除', btn: ['删除', '取消'], icon: 3, offset: '120px' }, function(index) {
+            layer.close(index);
             postJson('/web/settings/mounts/skills/remove', { alias: mountsCurrentAlias, skillName: skillName }, function (resp) {
                 if (resp.code === 200) { showToast('删除成功'); loadMountsContent(mountsCurrentAlias, mountsCurrentType); }
                 else showToast('删除失败: ' + (resp.message || ''), 'error');
             });
-        }
+        });
     });
 
     // 点击技能/子代理条目 → 打开其所在目录
@@ -301,12 +302,13 @@
     $('#mountsFormDeleteBtn').on('click', function () {
         var alias = mountsEditAlias;
         if (!alias) return;
-        if (confirm('确定移除挂载 "' + alias + '"？（磁盘文件不会被删除）')) {
+        layer.confirm('确定移除挂载 "' + alias + '"？（磁盘文件不会被删除）', { title: '确认移除', btn: ['移除', '取消'], icon: 3, offset: '120px' }, function(index) {
+            layer.close(index);
             $.post('/web/settings/mounts/remove', { alias: alias }, function (resp) {
                 if (resp && resp.code === 200) { showToast('已移除'); mountsEditAlias = null; showMountsListView(); loadMountsList(); }
                 else showToast('移除失败: ' + ((resp && resp.message) || '未知错误'), 'error');
             }, 'json').fail(function () { showToast('网络错误', 'error'); });
-        }
+        });
     });
 
     // 添加/返回/保存按钮

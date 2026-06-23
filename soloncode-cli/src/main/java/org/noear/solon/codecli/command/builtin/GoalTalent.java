@@ -56,7 +56,7 @@ public class GoalTalent extends AbsTalent {
         String __sessionId = prompt.attrAs(ChatSession.ATTR_SESSIONID);
 
         if (__sessionId != null) {
-            LoopTask existing = scheduler.findActiveGoalAcrossSessions(__sessionId);
+            LoopTask existing = scheduler.findActiveGoalInSession(__sessionId);
             return existing != null;
         }
 
@@ -70,7 +70,7 @@ public class GoalTalent extends AbsTalent {
             description = "获取当前活跃目标的状态，若无活跃目标则返回 null。")
     public String goal_get(String __sessionId,
                           String __cwd) {
-        LoopTask task = scheduler.findActiveGoalAcrossSessions(__sessionId);
+        LoopTask task = scheduler.findActiveGoalInSession(__sessionId);
 
         // isSupported 保证有活跃 goal 时才暴露此工具，task 不会为 null
         GoalState gs = task.getGoalState();
@@ -115,7 +115,7 @@ public class GoalTalent extends AbsTalent {
             return errJson("NO_SESSION", "无活跃会话");
         }
 
-        LoopTask task = scheduler.findActiveGoalAcrossSessions(__sessionId);
+        LoopTask task = scheduler.findActiveGoalInSession(__sessionId);
         if (task == null) {
             return errJson("NO_GOAL", "未找到活跃目标");
         }

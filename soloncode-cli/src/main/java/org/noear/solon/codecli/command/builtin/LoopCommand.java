@@ -444,7 +444,7 @@ public class LoopCommand implements Command {
     // ===== Goal 预算扩容 =====
 
     private void doExtend(CommandContext ctx, String sessionId, String tokenArg) {
-        LoopTask task = scheduler.findActiveGoalAcrossSessions(sessionId);
+        LoopTask task = scheduler.findActiveGoalInSession(sessionId);
         if (task == null || !task.isGoalMode()) {
             ctx.println(ctx.color(RED + "没有活跃的 Goal 任务" + RESET));
             return;

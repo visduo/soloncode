@@ -451,9 +451,11 @@ wechatHeaderBtn.on('click', function() {
     if (!activeSessionId) return;
     // If already bound, unbind
     if (wechatHeaderBtn.hasClass('bound')) {
-        if (!confirm('确定要断开微信连接吗？')) return;
-        $.post('/web/chat/wechat/unbind?sessionId=' + encodeURIComponent(activeSessionId)).always(function() {
-            updateWechatUI();
+        layer.confirm('确定要断开微信连接吗？', { title: '确认断开', btn: ['断开', '取消'], icon: 3, offset: '120px' }, function(index) {
+            layer.close(index);
+            $.post('/web/chat/wechat/unbind?sessionId=' + encodeURIComponent(activeSessionId)).always(function() {
+                updateWechatUI();
+            });
         });
         return;
     }
@@ -582,9 +584,11 @@ feishuHeaderBtn.on('click', function() {
     if (!activeSessionId) return;
     // If already bound, unbind
     if (feishuHeaderBtn.hasClass('bound')) {
-        if (!confirm('确定要断开飞书连接吗？')) return;
-        $.post('/web/chat/feishu/unbind?sessionId=' + encodeURIComponent(activeSessionId)).always(function() {
-            updateFeishuUI();
+        layer.confirm('确定要断开飞书连接吗？', { title: '确认断开', btn: ['断开', '取消'], icon: 3, offset: '120px' }, function(index) {
+            layer.close(index);
+            $.post('/web/chat/feishu/unbind?sessionId=' + encodeURIComponent(activeSessionId)).always(function() {
+                updateFeishuUI();
+            });
         });
         return;
     }
@@ -749,9 +753,11 @@ dingtalkHeaderBtn.on('click', function() {
     if (!activeSessionId) return;
     // If already bound, unbind
     if (dingtalkHeaderBtn.hasClass('bound')) {
-        if (!confirm('确定要断开钉钉连接吗？')) return;
-        $.post('/web/chat/dingtalk/unbind?sessionId=' + encodeURIComponent(activeSessionId)).always(function() {
-            updateDingTalkUI();
+        layer.confirm('确定要断开钉钉连接吗？', { title: '确认断开', btn: ['断开', '取消'], icon: 3, offset: '120px' }, function(index) {
+            layer.close(index);
+            $.post('/web/chat/dingtalk/unbind?sessionId=' + encodeURIComponent(activeSessionId)).always(function() {
+                updateDingTalkUI();
+            });
         });
         return;
     }
