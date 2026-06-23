@@ -60,15 +60,9 @@ public class LoopCommand implements Command {
     private static final String RESET = "\033[0m";
 
     private final LoopScheduler scheduler;
-    private final GoalTool goalTool; // 可为 null（goalsEnabled=false 时）
 
     public LoopCommand(LoopScheduler scheduler) {
-        this(scheduler, null);
-    }
-
-    public LoopCommand(LoopScheduler scheduler, GoalTool goalTool) {
         this.scheduler = scheduler;
-        this.goalTool = goalTool;
     }
 
     @Override
@@ -101,11 +95,6 @@ public class LoopCommand implements Command {
         HarnessEngine engine = ctx.getEngine();
         String workspace = engine.getWorkspace();
         String harnessSessions = engine.getHarnessSessions();
-
-        // 同步 sessionId 到 GoalTool（使 create_goal / update_goal 等工具能准确定位会话）
-        if (goalTool != null) {
-            goalTool.setCurrentSessionId(sessionId);
-        }
 
         String sub = ctx.argAt(0);
 

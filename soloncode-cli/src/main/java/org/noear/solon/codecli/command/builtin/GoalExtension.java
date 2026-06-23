@@ -1,7 +1,6 @@
 package org.noear.solon.codecli.command.builtin;
 
 import org.noear.solon.ai.agent.react.ReActAgent;
-import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.HarnessExtension;
 import org.noear.solon.ai.harness.agent.AgentDefinition;
 

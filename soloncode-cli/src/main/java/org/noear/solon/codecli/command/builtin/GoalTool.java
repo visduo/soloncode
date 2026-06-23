@@ -22,9 +22,6 @@ import org.noear.solon.ai.annotation.ToolMapping;
 import org.noear.solon.ai.chat.talent.AbsTalent;
 import org.noear.solon.annotation.Param;
 
-import java.time.Duration;
-import java.time.Instant;
-
 /**
  * Goal 工具 — 模型侧 Goal 生命周期控制（100% Codex CLI 对齐）
  *
@@ -41,26 +38,11 @@ import java.time.Instant;
 public class GoalTool extends AbsTalent {
 
     private final LoopScheduler scheduler;
-    private volatile String currentSessionId; // 由 LoopCommand 每次执行前同步
 
     public GoalTool(LoopScheduler scheduler) {
         this.scheduler = scheduler;
     }
 
-    /**
-     * 设置当前会话 ID（由 LoopCommand 在 execute 时同步）
-     */
-    public void setCurrentSessionId(String sessionId) {
-        this.currentSessionId = sessionId;
-    }
-
-    /**
-     * 获取当前会话 ID：优先使用显式设置的，fallback 到 scheduler 推断
-     */
-    private String resolveSessionId() {
-        if (currentSessionId != null) return currentSessionId;
-        return scheduler.getFirstSessionId();
-    }
 
     /**
      * 创建新的 Goal（Codex 签名对齐：objective + token_budget）
@@ -71,13 +53,15 @@ public class GoalTool extends AbsTalent {
                     "If there's already an active goal, this will fail.")
     public String createGoal(
             @Param(name = "objective", description = "The objective to achieve") String objective,
-            @Param(name = "token_budget", description = "Token budget limit (optional)", required = false) Long tokenBudget) {
+            @Param(name = "token_budget", description = "Token budget limit (optional)", required = false) Long tokenBudget,
+            String __sessionId,
+            String __cwd) {
 
         if (objective == null || objective.isEmpty()) {
             return "ERROR: objective is required";
         }
 
-        String sessionId = resolveSessionId();
+        String sessionId = __sessionId;
         if (sessionId == null) {
             return "ERROR: no active session found";
         }
@@ -113,7 +97,8 @@ public class GoalTool extends AbsTalent {
      */
     @ToolMapping(name = "get_goal",
             description = "Get the status of the current active goal, or null if no active goal.")
-    public String getGoal() {
+    public String getGoal(String __sessionId,
+                          String __cwd) {
         LoopTask task = scheduler.findActiveGoalAcrossSessions();
         if (task == null) {
             return "null";
@@ -146,7 +131,9 @@ public class GoalTool extends AbsTalent {
                     "Only call this when the objective has been successfully achieved. " +
                     "If blocked, do NOT call this — the system will detect it automatically.")
     public String updateGoal(
-            @Param(name = "status", description = "Status: complete") String status) {
+            @Param(name = "status", description = "Status: complete") String status,
+            String __sessionId,
+            String __cwd) {
 
         if (status == null) {
             return "ERROR: status is required (complete)";
@@ -166,7 +153,7 @@ public class GoalTool extends AbsTalent {
             return "WARN: goal is not in an active state (" + gs.getStatus() + "), cannot mark complete";
         }
 
-        String sessionId = resolveSessionId();
+        String sessionId = __sessionId;
         if (sessionId == null) {
             return "ERROR: no active session";
         }

@@ -171,7 +171,7 @@ public class Configurator {
 
         // LoopCommand 统一管理循环任务与 Goal（pause/resume 需 GoalTool 同步 sessionId）
         engine.getCommandRegistry().register(
-                new LoopCommand(loopScheduler, goalsEnabled ? goalExtension.getGoalTool() : null));
+                new LoopCommand(loopScheduler));
 
         engine.addExtension(new ManagerExtension(engine, agentSettings));
 
