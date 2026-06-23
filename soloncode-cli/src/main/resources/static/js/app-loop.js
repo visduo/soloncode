@@ -417,10 +417,11 @@
         html += '<div class="loop-form-schedule">';
         html += '<div class="loop-form-group">';
         html += '<label>调度方式</label>';
-        html += '<div class="loop-interval-row">';
+        html += '<div class="loop-interval-row" style="flex-wrap:wrap;">';
         html += '<label class="loop-radio"><input type="radio" name="loopScheduleType" value="interval" checked/> 固定间隔</label>';
         html += '<input type="number" class="loop-input loop-input-sm" id="loopFormInterval" value="5" min="1" max="1440"/>';
         html += '<select class="loop-input loop-input-sm" id="loopFormIntervalUnit"><option value="m" selected>分钟</option><option value="h">小时</option></select>';
+        html += '<label class="loop-checkbox" style="margin-left:8px;white-space:nowrap;"><input type="checkbox" id="loopFormRunNow" checked/> 首次立即执行</label>';
         html += '</div>';
         html += '<div class="loop-interval-row">';
         html += '<label class="loop-radio"><input type="radio" name="loopScheduleType" value="cron"/> Cron 表达式</label>';
@@ -437,10 +438,7 @@
         html += '</div>';
         html += '</div>';  // 结束 loop-form-schedule
 
-        // ★ 首次立即执行（从高级选项移到调度方式下面）
-        html += '<div class="loop-form-runnow-item" style="margin-top:4px;padding:4px 0 0 0;">';
-        html += '<label class="loop-checkbox"><input type="checkbox" id="loopFormRunNow" checked/> 首次立即执行 <span class="loop-form-hint">保存后立即执行一次，后续仍按调度间隔执行</span></label>';
-        html += '</div>';
+
 
         html += '</div>';  // 结束 heartbeat section
 
@@ -542,13 +540,19 @@
             $panel.find('#loopFormPrompt').closest('.loop-form-group').find('label').html('任务描述 <span class="loop-required">*</span>');
         }
         $panel.find('#loopFormWorktree').prop('checked', !!t.worktreeEnabled);
-        $panel.find('#loopFormRunNow').prop('checked', !!t.runNow);
+        // ★ cron 模式：runNow 不勾选且禁用（后端不支持）
+        if (t.cron) {
+            $panel.find('#loopFormRunNow').prop('checked', false);
+        } else {
+            $panel.find('#loopFormRunNow').prop('checked', !!t.runNow);
+        }
 
         // ★ 预算字段
         if (t.maxTokens) $panel.find('#loopFormMaxTokens').val(t.maxTokens);
         if (t.maxDurationMs) $panel.find('#loopFormMaxDuration').val(Math.floor(t.maxDurationMs / 60000));
 
-
+        // ★ 触发联动：radio change -> disabled 状态刷新
+        $panel.find('input[name=loopScheduleType]:checked').trigger('change');
     }
 
     // ========== 表单事件绑定 ==========
@@ -591,6 +595,7 @@
             var isCron = $(this).val() === 'cron';
             $panel.find('#loopFormInterval').prop('disabled', isCron);
             $panel.find('#loopFormIntervalUnit').prop('disabled', isCron);
+            $panel.find('#loopFormRunNow').prop('disabled', isCron);
             $panel.find('#loopFormCron').prop('disabled', !isCron);
         });
 
@@ -664,8 +669,10 @@
                     var num = parseInt($panel.find('#loopFormInterval').val()) || 5;
                     var unit = $panel.find('#loopFormIntervalUnit').val();
                     effectiveInterval = unit === 'h' ? num * 60 : num;
+                    effectiveRunNow = $panel.find('#loopFormRunNow').is(':checked');
+                } else {
+                    effectiveRunNow = false;
                 }
-                effectiveRunNow = $panel.find('#loopFormRunNow').is(':checked');
             }
 
             var params = {
