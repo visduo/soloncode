@@ -15,18 +15,22 @@
         fetch('/web/chat/todos?sessionId=' + encodeURIComponent(sid))
             .then(function(r) { return r.json(); })
             .then(function(res) {
-                renderTodos(res && res.data ? res.data : {});
+                renderTodos(sid, res && res.data ? res.data : {});
             })
             .catch(function() {
                 renderError();
             });
     }
 
-    function renderTodos(data) {
+    function renderTodos(requestSid, data) {
+        // 异步请求返回时可能已切换会话，若 session 不符则丢弃本次渲染
+        var currentSid = typeof SESSION_ID !== 'undefined' ? SESSION_ID : null;
+        if (requestSid && currentSid && requestSid !== currentSid) return;
+
         var items = data.items || [];
         var stats = data.stats || {};
 
-        // badge
+        // badge（使用请求时的 sessionId 写缓存，而非当前 SESSION_ID）
         if (todoBadge) {
             var pending = (stats.pending || 0) + (stats.inProgress || 0);
             todoBadge.textContent = pending;
@@ -40,8 +44,7 @@
             todoEmpty.textContent = data.exists ? '暂无任务' : '当前会话暂无任务清单';
             todoStats.style.display = 'none';
             // 清理会话级缓存
-            var sid = typeof SESSION_ID !== 'undefined' ? SESSION_ID : null;
-            if (sid) delete (window.sessionTodoMap || {})[sid];
+            if (requestSid) delete (window.sessionTodoMap || {})[requestSid];
             if (typeof updateHistoryUI === 'function') updateHistoryUI();
             return;
         }
@@ -50,11 +53,10 @@
         todoStats.style.display = '';
         todoStats.textContent = '(' + stats.done + ' / ' + stats.total + ')';
 
-        // 写入会话级缓存，驱动侧边栏 badge 更新
+        // 写入会话级缓存，驱动侧边栏 badge 更新（使用请求时的 sessionId）
         window.sessionTodoMap = window.sessionTodoMap || {};
-        var sid = typeof SESSION_ID !== 'undefined' ? SESSION_ID : null;
-        if (sid) {
-            window.sessionTodoMap[sid] = { done: stats.done || 0, total: stats.total || 0 };
+        if (requestSid) {
+            window.sessionTodoMap[requestSid] = { done: stats.done || 0, total: stats.total || 0 };
             if (typeof updateHistoryUI === 'function') updateHistoryUI();
         }
 
@@ -174,17 +176,6 @@
                 };
             }
 
-            // 更新右侧面板统计
-            if (todoBadge) {
-                var pending = (stats.pending || 0) + (stats.inProgress || 0);
-                todoBadge.textContent = pending;
-                todoBadge.style.display = pending > 0 ? '' : 'none';
-            }
-            if (todoStats && stats.total > 0) {
-                todoStats.style.display = '';
-                todoStats.textContent = '(' + stats.done + ' / ' + stats.total + ')';
-            }
-
             // 写入会话级缓存，驱动侧边栏 badge 更新（使用 chunk.sessionId 而非 SESSION_ID）
             window.sessionTodoMap = window.sessionTodoMap || {};
             var sid = chunk.sessionId;
@@ -193,9 +184,19 @@
                 if (typeof updateHistoryUI === 'function') updateHistoryUI();
             }
 
-            // 实时重渲染右侧任务面板条目列表（仅当 chunk 属于当前展示的会话时）
+            // 仅当 chunk 属于当前展示的会话时，更新右侧面板 UI 并渲染条目
             var currentSid = typeof SESSION_ID !== 'undefined' ? SESSION_ID : null;
             if (sid && currentSid && sid === currentSid) {
+                // 更新右侧面板统计
+                if (todoBadge) {
+                    var pending = (stats.pending || 0) + (stats.inProgress || 0);
+                    todoBadge.textContent = pending;
+                    todoBadge.style.display = pending > 0 ? '' : 'none';
+                }
+                if (todoStats && stats.total > 0) {
+                    todoStats.style.display = '';
+                    todoStats.textContent = '(' + stats.done + ' / ' + stats.total + ')';
+                }
                 renderTodoItems(parseTodoMarkdown(rawText));
             }
         }
