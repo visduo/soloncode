@@ -82,7 +82,6 @@ public class LoopCommand implements Command {
                 "/loop stop-all",
                 "/loop pause <id>",
                 "/loop resume <id>",
-
                 "/loop goal <objective>",
                 "/loop 5m <prompt>",
                 "/loop cron:\"<expr>\" <prompt> ",
