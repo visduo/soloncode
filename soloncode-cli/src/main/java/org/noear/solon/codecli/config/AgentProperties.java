@@ -114,6 +114,7 @@ public class AgentProperties implements Serializable {
 
     private boolean thinkPrinted = false;
     private boolean cliPrintSimplified = true;
+    private boolean goalsEnabled = true;
 
 
     //---------------

@@ -148,6 +148,10 @@ public class AgentSettings implements Serializable {
             general.setCliPrintSimplified(props.isCliPrintSimplified());
         }
 
+        if(general.getGoalsEnabled() == null){
+            general.setGoalsEnabled(props.isGoalsEnabled());
+        }
+
         if(general.getCliThinkPrinted() == null){
             general.setCliThinkPrinted(props.isThinkPrinted());
         }

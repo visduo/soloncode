@@ -214,6 +214,19 @@ public class LoopCommand implements Command {
             return;
         }
 
+        // ★ L6: 单会话单活跃 Goal 校验
+        if (goalCondition != null) {
+            List<LoopTask> existing = scheduler.listActive(sessionId);
+            for (LoopTask t : existing) {
+                if (t.isGoalMode() && t.getGoalState().getStatus().isActive()) {
+                    ctx.println(ctx.color(YELLOW + "WARN: A goal is already active in this session (" + t.getId() + ")." + RESET));
+                    ctx.println(ctx.color(DIM + "  Active: " + t.getGoalState().getCondition() + RESET));
+                    ctx.println(ctx.color(DIM + "  Use /goal clear " + t.getId() + " first to replace the goal." + RESET));
+                    return;
+                }
+            }
+        }
+
         // Create task
         LoopTask task = new LoopTask(
                 prompt, intervalMinutes, cronExpr,
@@ -290,25 +303,22 @@ public class LoopCommand implements Command {
 
                 line.append(" ").append(goalColor).append(goalIcon).append("goal").append(RESET);
                 line.append(" ").append(DIM)
-                        .append("iter:").append(gs.getCurrentIteration())
-                        .append("/").append(gs.getMaxIterations())
+                        .append("iter:").append(t.getCurrentIteration())
                         .append(RESET);
 
                 // 状态标签
-                if (gs.getStatus() == GoalStatus.PAUSED) {
+                if (gs.getStatus() == GoalState.Status.PAUSED) {
                     line.append(" ").append(YELLOW).append("[paused]").append(RESET);
-                } else if (gs.getStatus() == GoalStatus.ACHIEVED) {
+                } else if (gs.getStatus() == GoalState.Status.ACHIEVED) {
                     line.append(" ").append(GREEN).append("[achieved]").append(RESET);
-                } else if (gs.getStatus() == GoalStatus.UNMET) {
-                    line.append(" ").append(RED).append("[unmet]").append(RESET);
-                } else if (gs.getStatus() == GoalStatus.BUDGET_LIMITED) {
+                } else if (gs.getStatus() == GoalState.Status.BUDGET_LIMITED) {
                     line.append(" ").append(YELLOW).append("[budget]").append(RESET);
                 }
 
                 // 运行时长
-                if (gs.getStartedAt() != null && gs.getStatus().isActive()) {
+                if (gs.getStartEpochMs() > 0 && gs.getStatus().isActive()) {
                     line.append(" ").append(DIM)
-                            .append("(").append(formatElapsed(gs.getStartedAt())).append(")")
+                            .append("(").append(formatElapsed(gs.getStartEpochMs())).append(")")
                             .append(RESET);
                 }
             } else {
@@ -334,9 +344,9 @@ public class LoopCommand implements Command {
             // ★ P0: Goal 任务展示最近评估 reason
             if (t.isGoalMode()) {
                 GoalState gs = t.getGoalState();
-                if (gs.getLastEvaluationReason() != null && gs.getStatus().isActive()) {
+                if (t.getGoalLastEvalReason() != null && gs.getStatus().isActive()) {
                     line.append("\n    ").append(DIM)
-                            .append("  reason: ").append(abbreviate(gs.getLastEvaluationReason(), 80))
+                            .append("  reason: ").append(abbreviate(t.getGoalLastEvalReason(), 80))
                             .append(RESET);
                 }
             }
@@ -348,35 +358,29 @@ public class LoopCommand implements Command {
 
     // ★ P0: Goal 辅助方法
 
-    private String goalStatusIcon(GoalStatus status) {
+    private String goalStatusIcon(GoalState.Status status) {
         switch (status) {
             case PURSUING: return "●";
             case PAUSED: return "◌";
             case ACHIEVED: return "✓";
-            case UNMET: return "✗";
             case BUDGET_LIMITED: return "⚠";
-            case TERMINATED: return "○";
-            case CREATING: return "○";
             default: return "?";
         }
     }
 
-    private String goalStatusColor(GoalStatus status) {
+    private String goalStatusColor(GoalState.Status status) {
         switch (status) {
             case PURSUING: return MAGENTA;
             case PAUSED: return YELLOW;
             case ACHIEVED: return GREEN;
-            case UNMET: return RED;
             case BUDGET_LIMITED: return YELLOW;
-            case TERMINATED: return DIM;
-            case CREATING: return DIM;
             default: return RESET;
         }
     }
 
-    private String formatElapsed(Instant start) {
-        if (start == null) return "-";
-        long seconds = Duration.between(start, Instant.now()).getSeconds();
+    private String formatElapsed(long startEpochMs) {
+        if (startEpochMs <= 0) return "-";
+        long seconds = (System.currentTimeMillis() - startEpochMs) / 1000;
         if (seconds < 60) return seconds + "s";
         if (seconds < 3600) return (seconds / 60) + "m " + (seconds % 60) + "s";
         return (seconds / 3600) + "h " + ((seconds % 3600) / 60) + "m";

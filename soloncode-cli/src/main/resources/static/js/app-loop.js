@@ -117,51 +117,19 @@
         }
     }
 
-    function formatDuration(startedAt) {
-        if (!startedAt) return '';
-        try {
-            var diffMs = Date.now() - new Date(startedAt).getTime();
-            if (diffMs < 0) return '';
-            var totalSec = Math.floor(diffMs / 1000);
-            var m = Math.floor(totalSec / 60);
-            var s = totalSec % 60;
-            if (m >= 60) {
-                var h = Math.floor(m / 60);
-                m = m % 60;
-                return h + 'h ' + m + 'm';
-            }
-            return m + 'm ' + s + 's';
-        } catch (e) {
-            return '';
-        }
-    }
-
-    // Goal 状态中文映射
+    // Goal 状态中文映射（4 态，与 GoalState.Status 对齐）
     var GOAL_STATUS_LABEL = {
-        CREATING: '创建中',
         PURSUING: '执行中',
         PAUSED: '已暂停',
         ACHIEVED: '已达成',
-        UNMET: '未达成',
-        BUDGET_LIMITED: '预算耗尽',
-        BLOCKED: '已阻塞',
-        TERMINATED: '已结束'
+        BUDGET_LIMITED: '预算耗尽'
     };
 
-    // Goal 状态 CSS class 映射（转为小写）
-    function goalStatusClass(status) {
-        return (status || '').toLowerCase();
-    }
-
-    // 生成 goal 状态徽章 HTML
+    // 生成 goal 状态标签
     function renderGoalBadge(g) {
         if (!g) return '';
-        var cls = goalStatusClass(g.status);
         var label = GOAL_STATUS_LABEL[g.status] || g.status;
-        var iterInfo = ' (' + (g.currentIteration || 0) + '/' + (g.maxIterations || '∞') + ')';
-        return '<span class="loop-goal-badge ' + cls + '">' +
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>' +
-            label + iterInfo + '</span>';
+        return '<span class="loop-goal-badge">' + label + '</span>';
     }
 
     // ========== 面板开关 ==========
@@ -288,20 +256,12 @@
             lastInfo += '<span class="loop-item-meta">第' + t.currentIteration + '次</span>';
         }
 
-        // ★ Goal 行内标签（替代原卡片）
+        // Goal 行内标签
         var goalInlineHtml = '';
         var g = t.goal;
         if (g) {
-            var cls = goalStatusClass(g.status);
             var label = GOAL_STATUS_LABEL[g.status] || g.status;
-            var iterInfo = ' (' + (g.currentIteration || 0) + '/' + (g.maxIterations || '∞') + ')';
-            var elapsed = formatDuration(g.startedAt);
-            var elapsedHtml = elapsed ?
-                '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:1px;flex-shrink:0;vertical-align:-1px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
-                elapsed : '';
-            goalInlineHtml = '<span class="loop-item-goal-inline ' + cls + '">' +
-                label + iterInfo +
-                (elapsedHtml ? ' ' + elapsedHtml : '') + '</span>';
+            goalInlineHtml = '<span class="loop-item-goal-inline">' + label + '</span>';
         }
 
         // 拼装完整 item

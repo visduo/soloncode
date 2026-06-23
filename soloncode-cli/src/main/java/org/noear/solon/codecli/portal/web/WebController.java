@@ -40,6 +40,7 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.util.*;
 
 /**
@@ -792,34 +793,11 @@ public class WebController {
             Map<String, Object> goalMap = new LinkedHashMap<>();
             goalMap.put("condition", gs.getCondition());
             goalMap.put("status", gs.getStatus().name());
-            goalMap.put("currentIteration", gs.getCurrentIteration());
-            goalMap.put("maxIterations", gs.getMaxIterations());
-            if (gs.getLastEvaluationReason() != null) {
-                goalMap.put("lastEvaluationReason", gs.getLastEvaluationReason());
-            }
-            if (gs.getStartedAt() != null) {
-                goalMap.put("startedAt", gs.getStartedAt().toString());
-            }
-            if (gs.getLastEvaluatedAt() != null) {
-                goalMap.put("lastEvaluatedAt", gs.getLastEvaluatedAt().toString());
-            }
-
-            // 评估历史（最近 5 条）
-            List<GoalEvaluation> history = gs.getHistory();
-            if (!history.isEmpty()) {
-                List<Map<String, Object>> historyList = new ArrayList<>();
-                int start = Math.max(0, history.size() - 5);
-                for (int i = start; i < history.size(); i++) {
-                    GoalEvaluation eval = history.get(i);
-                    Map<String, Object> evalMap = new LinkedHashMap<>();
-                    evalMap.put("iteration", eval.getIteration());
-                    evalMap.put("achieved", eval.isAchieved());
-                    if (eval.getReason() != null) evalMap.put("reason", eval.getReason());
-                    if (eval.getEvaluatedAt() != null) evalMap.put("evaluatedAt", eval.getEvaluatedAt().toString());
-                    evalMap.put("evaluatorType", eval.getEvaluatorType());
-                    historyList.add(evalMap);
-                }
-                goalMap.put("history", historyList);
+            goalMap.put("iteration", t.getCurrentIteration());
+            goalMap.put("consumedTokens", gs.getConsumedTokens());
+            goalMap.put("maxTokens", gs.getMaxTokens());
+            if (gs.getStartEpochMs() > 0) {
+                goalMap.put("startedAt", Instant.ofEpochMilli(gs.getStartEpochMs()).toString());
             }
 
             item.put("goal", goalMap);
@@ -978,7 +956,7 @@ public class WebController {
         }
 
         GoalState gs = task.getGoalState();
-        if (!gs.getStatus().isPausable()) {
+        if (gs.getStatus() != GoalState.Status.PURSUING) {
             return Result.failure(400, "Goal cannot be paused in state: " + gs.getStatus());
         }
 
@@ -1009,8 +987,7 @@ public class WebController {
         }
 
         GoalState gs = task.getGoalState();
-        // BLOCKED 状态也可恢复（模型声明阻塞后用户解除阻塞时）
-        if (!gs.getStatus().isResumable()) {
+        if (gs.getStatus() != GoalState.Status.PAUSED) {
             return Result.failure(400, "Goal cannot be resumed in state: " + gs.getStatus()
                     + " (only PAUSED or BLOCKED can be resumed)");
         }
@@ -1071,33 +1048,13 @@ public class WebController {
         Map<String, Object> goalMap = new LinkedHashMap<>();
         goalMap.put("condition", gs.getCondition());
         goalMap.put("status", gs.getStatus().name());
-        goalMap.put("currentIteration", gs.getCurrentIteration());
-        goalMap.put("maxIterations", gs.getMaxIterations());
-        if (gs.getLastEvaluationReason() != null) {
-            goalMap.put("lastEvaluationReason", gs.getLastEvaluationReason());
-        }
-        if (gs.getStartedAt() != null) {
-            goalMap.put("startedAt", gs.getStartedAt().toString());
-        }
-        if (gs.getLastEvaluatedAt() != null) {
-            goalMap.put("lastEvaluatedAt", gs.getLastEvaluatedAt().toString());
-        }
+        goalMap.put("iteration", task.getCurrentIteration());
+        goalMap.put("consumedTokens", gs.getConsumedTokens());
+        goalMap.put("maxTokens", gs.getMaxTokens());
 
-        // 完整评估历史
-        List<GoalEvaluation> history = gs.getHistory();
-        List<Map<String, Object>> historyList = new ArrayList<>();
-        for (GoalEvaluation eval : history) {
-            Map<String, Object> evalMap = new LinkedHashMap<>();
-            evalMap.put("iteration", eval.getIteration());
-            evalMap.put("achieved", eval.isAchieved());
-            if (eval.getReason() != null) evalMap.put("reason", eval.getReason());
-            if (eval.getSummary() != null) evalMap.put("summary", eval.getSummary());
-            if (eval.getEvaluatedAt() != null) evalMap.put("evaluatedAt", eval.getEvaluatedAt().toString());
-            evalMap.put("evaluatorType", eval.getEvaluatorType());
-            historyList.add(evalMap);
+        if (gs.getStartEpochMs() > 0) {
+            goalMap.put("startedAt", Instant.ofEpochMilli(gs.getStartEpochMs()).toString());
         }
-        goalMap.put("history", historyList);
-        goalMap.put("historyCount", history.size());
 
         return Result.succeed(goalMap);
     }

@@ -22,8 +22,6 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
-import static org.noear.solon.codecli.command.builtin.GoalStatus.*;
-
 /**
  * 定时循环任务模型，用于 /loop 命令
  *
@@ -73,6 +71,14 @@ public class LoopTask {
     private volatile int currentIteration;
     private volatile boolean enabled = true; // 启用/停用
     private volatile boolean wrapUpPending = false; // 即将收尾（最后一次 wrap-up turn）
+    private volatile boolean lastHadToolCalls = true; // L5: 上一轮是否有工具调用
+    private volatile boolean suppressed = false;        // L5: 是否被抑制（跳过自动续行）
+    private volatile int continuationCount = 0;          // D1: 连续事件驱动续行深度
+    private volatile long lastContinuationTime = 0;       // D1: 上次续行时间戳（毫秒）
+
+    // ---- 运行时 Blocked 检测（不持久化） ----
+    private transient volatile int goalBlockedStreak;
+    private transient volatile String goalLastEvalReason;
 
     /**
      * 固定间隔构造
@@ -97,7 +103,8 @@ public class LoopTask {
                      boolean enabled,
                      String goalCondition, boolean worktreeEnabled, String worktreeBranch,
                      int maxIterations, boolean runNow, Long maxTokens, Long maxDurationMs,
-                     boolean cancelled, String lastResult, Instant lastExecutedAt, int currentIteration) {
+                     boolean cancelled, String lastResult, Instant lastExecutedAt, int currentIteration,
+                     boolean lastHadToolCalls, boolean suppressed) {
         this.id = id;
         this.prompt = prompt;
         this.intervalMinutes = intervalMinutes;
@@ -117,10 +124,15 @@ public class LoopTask {
         this.lastResult = lastResult;
         this.lastExecutedAt = lastExecutedAt;
         this.currentIteration = currentIteration;
+        this.lastHadToolCalls = lastHadToolCalls;
+        this.suppressed = suppressed;
+        this.continuationCount = 0;
+        this.lastContinuationTime = 0;
 
         // Goal 状态初始化：如果存在 goalCondition 但无 goalState，自动构造
         if (goalCondition != null && !goalCondition.isEmpty()) {
-            this.goalState = new GoalState(goalCondition, PURSUING, maxIterations);
+            this.goalState = new GoalState(goalCondition,
+                    maxTokens != null ? maxTokens : 0);
         }
     }
 
@@ -154,10 +166,14 @@ public class LoopTask {
         this.runNow = runNow;
         this.currentIteration = 0;
         this.enabled = true;
+        this.lastHadToolCalls = true;
+        this.suppressed = false;
+        this.continuationCount = 0;
+        this.lastContinuationTime = 0;
 
-        // Goal 状态初始化
         if (goalCondition != null && !goalCondition.isEmpty()) {
-            this.goalState = new GoalState(goalCondition, PURSUING, this.maxIterations);
+            this.goalState = new GoalState(goalCondition,
+                    maxTokens != null ? maxTokens : 0);
         }
     }
 
@@ -187,7 +203,9 @@ public class LoopTask {
                 this.cancelled,
                 this.lastResult,
                 this.lastExecutedAt,
-                this.currentIteration
+                this.currentIteration,
+                this.lastHadToolCalls,
+                this.suppressed
         );
         task.running = false;
         return task;
@@ -305,6 +323,51 @@ public class LoopTask {
 
     public void setCurrentIteration(int currentIteration) { this.currentIteration = currentIteration; }
 
+    // ★ L5: 工具调用状态追踪
+    public boolean isLastHadToolCalls() { return lastHadToolCalls; }
+    public void setLastHadToolCalls(boolean lastHadToolCalls) { this.lastHadToolCalls = lastHadToolCalls; }
+
+    // ★ L5: 抑制状态（跳过自动续行）
+    public boolean isSuppressed() { return suppressed; }
+    public void setSuppressed(boolean suppressed) { this.suppressed = suppressed; }
+
+    // ★ D1: 事件驱动续行深度追踪
+    public int getContinuationCount() { return continuationCount; }
+    public void setContinuationCount(int count) { this.continuationCount = count; }
+    public void incrementContinuationCount() { this.continuationCount++; }
+    public void resetContinuationCount() { this.continuationCount = 0; }
+    public long getLastContinuationTime() { return lastContinuationTime; }
+    public void setLastContinuationTime(long time) { this.lastContinuationTime = time; }
+
+    // ---- 运行时 Blocked 检测（不持久化，resume 后自动重置） ----
+
+    /**
+     * 记录评估原因并更新 blocked streak。
+     * 连续 3 次相同原因 → isGoalBlocked() 返回 true。
+     */
+    public void recordGoalEvaluation(String reason) {
+        String safe = reason != null ? reason : "";
+        if (safe.equals(goalLastEvalReason)) {
+            goalBlockedStreak++;
+        } else {
+            goalBlockedStreak = 0;
+            goalLastEvalReason = safe;
+        }
+    }
+
+    /** 连续 3 轮相同评估原因即视为 blocked */
+    public boolean isGoalBlocked() {
+        return goalBlockedStreak >= 3;
+    }
+
+    /** resume 时重置 blocked 审计（Codex 对齐） */
+    public void resetGoalBlockedAudit() {
+        goalBlockedStreak = 0;
+        goalLastEvalReason = null;
+    }
+
+    public String getGoalLastEvalReason() { return goalLastEvalReason; }
+
     /**
      * 序列化为 ONode
      */
@@ -332,6 +395,9 @@ public class LoopTask {
             node.set("lastExecutedAt", lastExecutedAt.toString());
         }
         node.set("currentIteration", currentIteration);
+        node.set("lastHadToolCalls", lastHadToolCalls);
+        node.set("suppressed", suppressed);
+        node.set("continuationCount", continuationCount);
 
         // Loop Engineering 扩展字段
         if (goalCondition != null) node.set("goalCondition", goalCondition);
@@ -391,14 +457,26 @@ public class LoopTask {
         Long maxDurationMsVal = node.getOrNull("maxDurationMs") != null
                 ? (long) node.get("maxDurationMs").getInt() : null;
 
+        // L5: 读取 lastHadToolCalls（默认 true，向后兼容旧 JSON）
+        boolean lastHadToolCallsVal = node.getOrNull("lastHadToolCalls") == null
+                || node.get("lastHadToolCalls").getBoolean();
+
+        // L5: 读取 suppressed（默认 false，向后兼容旧 JSON）
+        boolean suppressedVal = node.getOrNull("suppressed") != null
+                && node.get("suppressed").getBoolean();
+
+        // D1: 读取 continuationCount（默认 0，向后兼容旧 JSON）
+        int continuationCountVal = node.getOrNull("continuationCount") != null
+                ? node.get("continuationCount").getInt() : 0;
+
         // 读取 GoalState（新格式）
         GoalState goalStateVal = null;
         if (node.getOrNull("goalState") != null) {
             goalStateVal = GoalState.fromONode(node.get("goalState"));
         } else if (goalConditionVal != null) {
             // 向后兼容：只有 goalCondition 字符串，自动构造 GoalState
-            goalStateVal = new GoalState(goalConditionVal, GoalStatus.PURSUING, maxIterationsVal);
-            goalStateVal.setCurrentIteration(currentIterationVal);
+            goalStateVal = new GoalState(goalConditionVal,
+                    maxTokensVal != null ? maxTokensVal : 0);
         }
 
         LoopTask task = new LoopTask(
@@ -421,13 +499,18 @@ public class LoopTask {
                         ? node.get("cancelled").getBoolean() : false,
                 lastResultVal,
                 lastExecutedAtVal,
-                currentIterationVal
+                currentIterationVal,
+                lastHadToolCallsVal,
+                suppressedVal
         );
 
         // 覆盖构造函数中自动创建的 GoalState（保留 JSON 中的完整状态）
         if (goalStateVal != null) {
             task.goalState = goalStateVal;
         }
+
+        // D1: 从 JSON 恢复 continuationCount
+        task.continuationCount = continuationCountVal;
 
         return task;
     }

@@ -156,6 +156,18 @@ public class Configurator {
         this.loopScheduler = new LoopScheduler(engine, AgentFlags.getHarnessLoopWorktrees());
         engine.getCommandRegistry().register(new LoopCommand(loopScheduler));
 
+        // ★ Goal 模式（受 feature flag 控制）
+        boolean goalsEnabled = settings.getGeneral().getGoalsEnabled() != null
+                ? settings.getGeneral().getGoalsEnabled() : true;
+        if (goalsEnabled) {
+            GoalExtension goalExtension = new GoalExtension(loopScheduler, true);
+            engine.getCommandRegistry().register(new GoalCommand(loopScheduler, goalExtension.getGoalTool()));
+            engine.addExtension(goalExtension);
+            LOG.info("Goal mode enabled (L3 tools + L5 suppression + L6 single-session)");
+        } else {
+            engine.addExtension(new GoalExtension(loopScheduler, false));
+            LOG.info("Goal mode disabled via features.goalsEnabled");
+        }
 
         engine.addExtension(new ManagerExtension(engine, agentSettings));
 

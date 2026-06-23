@@ -68,4 +68,7 @@ public class GeneralGroupDo implements Serializable {
     private Boolean cliThinkPrinted; //true
     //控制台打印是否简化
     private Boolean cliPrintSimplified; //true
+
+    //是否启用 Goal 模式（Codex CLI 对齐的长任务目标模式）
+    private Boolean goalsEnabled; // true
 }
