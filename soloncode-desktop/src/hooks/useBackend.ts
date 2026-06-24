@@ -10,27 +10,46 @@ export function useBackend() {
   const [backendPort, setBackendPortState] = useState<number | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('connecting');
   const wsRef = useRef<WebSocket | null>(null);
+  const lastConnectedAtRef = useRef<number>(0);
+  const failedProbeCountRef = useRef<number>(0);
+  const httpProbeInFlightRef = useRef(false);
 
   const markConnected = useCallback((port: number) => {
+    lastConnectedAtRef.current = Date.now();
+    failedProbeCountRef.current = 0;
     backendPortRef.current = port;
     setBackendPortState(port);
     setBackendStatus('connected');
     setChatBackendPort(port);
   }, []);
 
+  const markProbeFailed = useCallback(() => {
+    failedProbeCountRef.current += 1;
+    const lastConnectedAt = lastConnectedAtRef.current;
+    const hasRecentSuccess = lastConnectedAt > 0 && Date.now() - lastConnectedAt < 90_000;
+
+    if (failedProbeCountRef.current >= 3 && !hasRecentSuccess) {
+      setBackendStatus(prev => prev === 'connecting' ? 'connecting' : 'disconnected');
+    }
+  }, []);
+
   useEffect(() => {
     let disposed = false;
 
     const checkViaHttp = async (port: number) => {
+      if (httpProbeInFlightRef.current) return;
+      httpProbeInFlightRef.current = true;
       try {
         const resp = await fetch(`http://localhost:${port}/version`, { cache: 'no-store' });
-        if (resp.ok) {
+        if (!disposed && resp.ok) {
           markConnected(port);
-        } else {
-          setBackendStatus(prev => prev === 'connecting' ? 'connecting' : 'disconnected');
+        } else if (!disposed) {
+          markProbeFailed();
         }
       } catch {
-        setBackendStatus(prev => prev === 'connecting' ? 'connecting' : 'disconnected');
+        if (!disposed) markProbeFailed();
+      } finally {
+        httpProbeInFlightRef.current = false;
       }
     };
 
@@ -78,7 +97,7 @@ export function useBackend() {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [markConnected]);
+  }, [markConnected, markProbeFailed]);
 
   const startBackend = useCallback(async (cliPort: number, onSettingsUpdate?: (updater: (prev: any) => any) => void) => {
     setBackendStatus('connecting');
