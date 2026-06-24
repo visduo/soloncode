@@ -480,7 +480,7 @@
         // 任务描述
         html += '<div class="loop-form-group">';
         html += '<label>任务描述 <span class="loop-required">*</span></label>';
-        html += '<input type="text" class="loop-input" id="loopFormPrompt" placeholder=""/>';
+        html += '<textarea class="loop-input loop-textarea" id="loopFormPrompt" rows="2" placeholder=""></textarea>';
         html += '<div class="loop-form-goal-hint" id="loopFormGoalHint" style="display:none;">设定目标后，AI 将自动循环执行直至达成目标，无需配置调度计划</div>';
         html += '</div>';
 
