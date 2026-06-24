@@ -42,6 +42,7 @@ import org.noear.solon.codecli.config.AgentProperties;
 import org.noear.solon.codecli.util.AiApiUrlAdapter;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLTask;
+import org.noear.solon.codecli.command.builtin.GoalTalent;
 import org.noear.solon.codecli.config.AgentFlags;
 import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.core.util.Assert;
@@ -371,7 +372,8 @@ public class WsGate extends SimpleWebSocketListener {
 
         if (TaskTalent.TOOL_MULTITASK.equals(chunk.getToolName()) ||
                 TaskTalent.TOOL_TASK.equals(chunk.getToolName()) ||
-                MemoryTalent.isMemoryTool(chunk.getToolName())) {
+                MemoryTalent.isMemoryTool(chunk.getToolName()) ||
+                GoalTalent.isGoalTool(chunk.getToolName())) {
             return null;
         }
 
@@ -405,7 +407,8 @@ public class WsGate extends SimpleWebSocketListener {
 
         if (TaskTalent.TOOL_MULTITASK.equals(chunk.getToolName()) ||
                 TaskTalent.TOOL_TASK.equals(chunk.getToolName()) ||
-                MemoryTalent.isMemoryTool(chunk.getToolName())) {
+                MemoryTalent.isMemoryTool(chunk.getToolName()) ||
+                GoalTalent.isGoalTool(chunk.getToolName())) {
             return null;
         }
 

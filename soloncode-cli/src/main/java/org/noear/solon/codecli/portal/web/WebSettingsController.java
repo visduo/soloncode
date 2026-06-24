@@ -40,6 +40,7 @@ import org.noear.solon.annotation.*;
 import org.noear.solon.codecli.config.AgentFlags;
 import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.codecli.config.entity.GeneralGroupDo;
+import org.noear.solon.codecli.config.entity.LoopGroupDo;
 import org.noear.solon.codecli.config.entity.PermissionGroupDo;
 import org.noear.solon.codecli.config.entity.ApiSourceDo;
 import org.noear.solon.ai.talents.lsp.LspServerParameters;
@@ -197,6 +198,14 @@ public class WebSettingsController {
         if (tmp.isObject()) {
             tmp.bindTo(settings.getGeneral());
 
+            // 处理 webAuthUser/webAuthPass 清空：bindTo 遇到 null 值会跳过，需要手动处理
+            if (tmp.get("webAuthUser").isNull()) {
+                settings.getGeneral().setWebAuthUser(null);
+            }
+            if (tmp.get("webAuthPass").isNull()) {
+                settings.getGeneral().setWebAuthPass(null);
+            }
+
             engine.setCompressionThreshold(settings.getGeneral().getSummaryWindowSize(), settings.getGeneral().getSummaryWindowToken());
             engine.setSessionWindowSize(settings.getGeneral().getSessionWindowSize());
 
@@ -218,6 +227,31 @@ public class WebSettingsController {
             engine.getLspTalent().setEnabled(settings.getGeneral().getLspEnabled());
         }
 
+        saveSettings();
+        return Result.succeed();
+    }
+
+    // ==================== 设置：Loop Goal 配置 ====================
+
+    /**
+     * 获取 Loop Goal 配置
+     */
+    @Get
+    @Mapping("/web/settings/loop")
+    public Result<LoopGroupDo> loopGet() {
+        return Result.succeed(settings.getLoop());
+    }
+
+    /**
+     * 保存 Loop Goal 配置
+     */
+    @Post
+    @Mapping("/web/settings/loop/save")
+    public Result loopSave(@Body String json) throws Exception {
+        ONode tmp = ONode.ofJson(json);
+        if (tmp.isObject()) {
+            tmp.bindTo(settings.getLoop());
+        }
         saveSettings();
         return Result.succeed();
     }

@@ -29,7 +29,6 @@ import java.util.UUID;
  * <ul>
  *   <li>Automations — 定时/cron 触发（intervalMinutes / cron）</li>
  *   <li>Skills — AI 根据 prompt 自动匹配可用技能</li>
- *   <li>Worktrees — worktreeEnabled 在独立分支执行</li>
  *   <li>Connectors — channelNotify 结果通知</li>
  *   <li>State — stateDir 持久状态目录 (.soloncode/loops/&lt;id&gt;/)</li>
  * </ul>
@@ -39,6 +38,16 @@ import java.util.UUID;
  */
 @Getter
 public class LoopTask {
+
+    /**
+     * 循环任务类型枚举
+     */
+    public enum TaskType {
+        HEARTBEAT,   // 心跳循环（定时/cron 触发）
+        GOAL         // 目标驱动模式（Goal）
+    }
+
+    private static final TaskType DEFAULT_TYPE = TaskType.HEARTBEAT;
     private static final int MIN_INTERVAL = 0; // 0 = 即时模式（goal 专用）
     private static final int MAX_INTERVAL = 1440; // 24h
     private static final int EXPIRE_DAYS = 7;
@@ -52,13 +61,14 @@ public class LoopTask {
     private final Instant createdAt;
     private final Instant expireAt;
     private final boolean autoInterval;
+    private final TaskType type;  // 任务类型（LOOP / GOAL），方便识别
 
     // ---- Loop Engineering 扩展字段 ----
-    private final String goalCondition;      // 目标条件，如 "all tests pass"
-    private final boolean worktreeEnabled;   // 是否在独立 worktree 中执行
-    private final String worktreeBranch;     // worktree 分支名（运行时分配）
+    private GoalState goalState;             // Goal 状态模型（P0）
     private final int maxIterations;         // 最大迭代次数
     private final boolean runNow;            // 注册后立即执行首次（initialDelay=0）
+    private Long maxTokens;            // Token 预算（null = 不限制）
+    private Long maxDurationMs;        // 时间预算毫秒（null = 不限制）
 
     // ---- 运行时状态 ----
     private volatile boolean running;
@@ -69,18 +79,25 @@ public class LoopTask {
     private volatile boolean enabled = true; // 启用/停用
     private volatile boolean wrapUpPending = false; // 即将收尾（最后一次 wrap-up turn）
 
+    // ---- 运行时兜底：无进展检测 ----
+    private volatile int stagnationCount;       // 连续无进展轮次
+    private volatile String lastFingerprint;     // 上一轮执行指纹
+
+    // ---- 运行时兜底：连续异常检测 ----
+    private volatile int consecutiveErrors;      // 连续异常计数
+
     /**
      * 固定间隔构造
      */
     public LoopTask(String prompt, int intervalMinutes) {
-        this(prompt, intervalMinutes, null, null, false, null);
+        this(prompt, intervalMinutes, null, null, null, false);
     }
 
     /**
      * cron 表达式构造
      */
     public LoopTask(String prompt, String cron) {
-        this(prompt, 0, cron, null, false, null);
+        this(prompt, 0, cron, null, null, false);
     }
 
 
@@ -90,9 +107,9 @@ public class LoopTask {
     LoopTask(String id, String prompt, int intervalMinutes, String cron,
                      Instant createdAt, Instant expireAt, boolean autoInterval,
                      boolean enabled,
-                     String goalCondition, boolean worktreeEnabled, String worktreeBranch,
-                     int maxIterations, boolean runNow,
-                     boolean cancelled, String lastResult, Instant lastExecutedAt, int currentIteration) {
+                     int maxIterations, boolean runNow, Long maxTokens, Long maxDurationMs,
+                     boolean cancelled, String lastResult, Instant lastExecutedAt, int currentIteration,
+                     TaskType type) {
         this.id = id;
         this.prompt = prompt;
         this.intervalMinutes = intervalMinutes;
@@ -101,32 +118,36 @@ public class LoopTask {
         this.expireAt = expireAt;
         this.autoInterval = autoInterval;
         this.enabled = enabled;
-        this.goalCondition = goalCondition;
-        this.worktreeEnabled = worktreeEnabled;
-        this.worktreeBranch = worktreeBranch;
         this.maxIterations = maxIterations;
         this.runNow = runNow;
+        this.maxTokens = maxTokens;
+        this.maxDurationMs = maxDurationMs;
         this.cancelled = cancelled;
         this.lastResult = lastResult;
         this.lastExecutedAt = lastExecutedAt;
         this.currentIteration = currentIteration;
+        this.type = type != null ? type : DEFAULT_TYPE;
+
+        // Goal 状态初始化：GOAL 类型自动构造 GoalState（使用 prompt 作为条件）
+        if (type == TaskType.GOAL) {
+            this.goalState = new GoalState(prompt,
+                    maxTokens != null ? maxTokens : 0);
+        }
     }
 
     /**
      * 便捷构造（固定间隔 + 扩展参数）
      */
     public LoopTask(String prompt, int intervalMinutes, String cron,
-                    String goalCondition, Boolean worktreeEnabled,
-                    Integer maxIterations) {
-        this(prompt, intervalMinutes, cron, goalCondition, worktreeEnabled, maxIterations, false);
+                    TaskType type, Integer maxIterations) {
+        this(prompt, intervalMinutes, cron, type, maxIterations, false);
     }
 
     /**
      * 便捷构造（固定间隔 + 扩展参数 + runNow）
      */
     public LoopTask(String prompt, int intervalMinutes, String cron,
-                    String goalCondition, Boolean worktreeEnabled,
-                    Integer maxIterations, boolean runNow) {
+                    TaskType type, Integer maxIterations, boolean runNow) {
         this.id = UUID.randomUUID().toString().substring(0, 8);
         this.prompt = prompt;
         // 间隔钒在 [MIN_INTERVAL, MAX_INTERVAL]，不存在 0 间隔；goal 模式通过 fixedDelay 串行调度逐轮触发
@@ -135,21 +156,27 @@ public class LoopTask {
         this.createdAt = Instant.now();
         this.expireAt = createdAt.plus(EXPIRE_DAYS, ChronoUnit.DAYS);
         this.autoInterval = false;
-        this.goalCondition = goalCondition;
-        this.worktreeEnabled = worktreeEnabled != null ? worktreeEnabled : false;
-        this.worktreeBranch = null; // 运行时分配
         this.maxIterations = maxIterations != null ? maxIterations : DEFAULT_MAX_ITERATIONS;
         this.runNow = runNow;
         this.currentIteration = 0;
         this.enabled = true;
+        this.type = type != null ? type : TaskType.HEARTBEAT;
+
+        if (this.type == TaskType.GOAL) {
+            this.goalState = new GoalState(prompt, 0);
+        }
     }
 
     /**
      * 基于当前任务复制出一份更新后的任务定义，保留任务身份和运行时状态。
      */
     public LoopTask copyWithUpdate(String prompt, int intervalMinutes, String cron,
-                                    String goalCondition, Boolean worktreeEnabled,
-                                    Integer maxIterations, Boolean runNow) {
+                                    TaskType type,
+                                    Integer maxIterations, Boolean runNow,
+                                    Long maxTokens, Long maxDurationMs) {
+        // 使用新类型（如果提供），否则保留原类型
+        TaskType newType = type != null ? type : this.type;
+
         LoopTask task = new LoopTask(
                 this.id,
                 prompt,
@@ -159,15 +186,15 @@ public class LoopTask {
                 this.expireAt,
                 this.autoInterval,
                 this.enabled,
-                goalCondition,
-                worktreeEnabled != null ? worktreeEnabled : false,
-                this.worktreeBranch,
                 maxIterations != null ? maxIterations : DEFAULT_MAX_ITERATIONS,
                 runNow != null ? runNow : this.runNow,
+                maxTokens != null ? maxTokens : this.maxTokens,
+                maxDurationMs != null ? maxDurationMs : this.maxDurationMs,
                 this.cancelled,
                 this.lastResult,
                 this.lastExecutedAt,
-                this.currentIteration
+                this.currentIteration,
+                newType
         );
         task.running = false;
         return task;
@@ -256,14 +283,61 @@ public class LoopTask {
      * 是否为 goal 模式（有目标条件定义）
      */
     public boolean isGoalMode() {
-        return goalCondition != null && !goalCondition.isEmpty();
+        return goalState != null;
     }
 
+    /**
+     * 获取 GoalState（可能为 null）
+     */
+    public GoalState getGoalState() {
+        return goalState;
+    }
+
+    /**
+     * 设置 GoalState（用于恢复/测试）
+     */
+    public void setGoalState(GoalState goalState) {
+        this.goalState = goalState;
+    }
+
+    public void setMaxTokens(Long maxTokens) {
+        this.maxTokens = maxTokens;
+        // 同步到 GoalState（便捷构造函数中 GoalState 用的是 0，需在此补同步）
+        if (goalState != null && maxTokens != null) {
+            goalState.setMaxTokens(maxTokens);
+        }
+    }
+
+    public void setMaxDurationMs(Long maxDurationMs) { this.maxDurationMs = maxDurationMs; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
 
     public void setWrapUpPending(boolean wrapUpPending) { this.wrapUpPending = wrapUpPending; }
 
     public boolean isWrapUpPending() { return wrapUpPending; }
+
+    public void setLastResult(String lastResult) { this.lastResult = lastResult; }
+
+    public void setCurrentIteration(int currentIteration) { this.currentIteration = currentIteration; }
+
+    // ===== 无进展检测 =====
+
+    public int getStagnationCount() { return stagnationCount; }
+
+    public void recordStagnation() { this.stagnationCount++; }
+
+    public void resetStagnation() { this.stagnationCount = 0; }
+
+    public String getLastFingerprint() { return lastFingerprint; }
+
+    public void setLastFingerprint(String fingerprint) { this.lastFingerprint = fingerprint; }
+
+    // ===== 连续异常检测 =====
+
+    public int getConsecutiveErrors() { return consecutiveErrors; }
+
+    public int incrementConsecutiveErrors() { return ++consecutiveErrors; }
+
+    public void resetConsecutiveErrors() { this.consecutiveErrors = 0; }
 
     /**
      * 序列化为 ONode
@@ -283,6 +357,7 @@ public class LoopTask {
         node.set("cancelled", cancelled);
         node.set("running", running);
         node.set("enabled", enabled);
+        node.set("type", type.name());
 
         // 运行时状态
         if (lastResult != null) {
@@ -294,12 +369,22 @@ public class LoopTask {
         node.set("currentIteration", currentIteration);
 
         // Loop Engineering 扩展字段
-        if (goalCondition != null) node.set("goalCondition", goalCondition);
-        if (worktreeEnabled) node.set("worktreeEnabled", worktreeEnabled);
-        if (worktreeBranch != null) node.set("worktreeBranch", worktreeBranch);
 
         if (maxIterations != DEFAULT_MAX_ITERATIONS) node.set("maxIterations", maxIterations);
         if (runNow) node.set("runNow", true);
+
+        // ★ P0: 写入 GoalState
+        if (goalState != null) {
+            node.set("goalState", goalState.toONode());
+        }
+
+        // ★ P1: 预算字段
+        if (maxTokens != null) node.set("maxTokens", maxTokens);
+        if (maxDurationMs != null) node.set("maxDurationMs", maxDurationMs);
+
+        // ★ 运行时兜底字段（持久化以支持重启恢复）
+        if (stagnationCount > 0) node.set("stagnationCount", stagnationCount);
+        if (consecutiveErrors > 0) node.set("consecutiveErrors", consecutiveErrors);
 
         return node;
     }
@@ -322,12 +407,6 @@ public class LoopTask {
         boolean enabledVal = node.getOrNull("enabled") != null
                 ? node.get("enabled").getBoolean() : true;
 
-        String goalConditionVal = node.getOrNull("goalCondition") != null
-                ? node.get("goalCondition").getString() : null;
-        boolean worktreeEnabledVal = node.getOrNull("worktreeEnabled") != null
-                && node.get("worktreeEnabled").getBoolean();
-        String worktreeBranchVal = node.getOrNull("worktreeBranch") != null
-                ? node.get("worktreeBranch").getString() : null;
         int maxIterationsVal = node.getOrNull("maxIterations") != null
                 ? node.get("maxIterations").getInt() : DEFAULT_MAX_ITERATIONS;
         int currentIterationVal = node.getOrNull("currentIteration") != null
@@ -336,7 +415,29 @@ public class LoopTask {
         boolean runNowVal = node.getOrNull("runNow") != null
                 && node.get("runNow").getBoolean();
 
-        return new LoopTask(
+        // ★ P1: 读取预算字段
+        Long maxTokensVal = node.getOrNull("maxTokens") != null
+                ? (long) node.get("maxTokens").getInt() : null;
+        Long maxDurationMsVal = node.getOrNull("maxDurationMs") != null
+                ? (long) node.get("maxDurationMs").getInt() : null;
+
+        // ★ 读取运行时兜底字段
+        int stagnationCountVal = node.getOrNull("stagnationCount") != null
+                ? node.get("stagnationCount").getInt() : 0;
+        int consecutiveErrorsVal = node.getOrNull("consecutiveErrors") != null
+                ? node.get("consecutiveErrors").getInt() : 0;
+
+        // 读取 TaskType（默认 HEARTBEAT）
+        TaskType typeVal = node.getOrNull("type") != null
+                ? TaskType.valueOf(node.get("type").getString())
+                : TaskType.HEARTBEAT;
+
+        // 读取 GoalState
+        GoalState goalStateVal = node.getOrNull("goalState") != null
+                ? GoalState.fromONode(node.get("goalState"))
+                : null;
+
+        LoopTask task = new LoopTask(
                 node.get("id").getString(),
                 node.get("prompt").getString(),
                 node.get("intervalMinutes").getInt(),
@@ -345,16 +446,27 @@ public class LoopTask {
                 Instant.parse(node.get("expireAt").getString()),
                 node.get("autoInterval").getBoolean(),
                 enabledVal,
-                goalConditionVal,
-                worktreeEnabledVal,
-                worktreeBranchVal,
                 maxIterationsVal,
                 runNowVal,
+                maxTokensVal,
+                maxDurationMsVal,
                 node.getOrNull("cancelled") != null
                         ? node.get("cancelled").getBoolean() : false,
                 lastResultVal,
                 lastExecutedAtVal,
-                currentIterationVal
+                currentIterationVal,
+                typeVal
         );
+
+        // 覆盖构造函数中自动创建的 GoalState（保留 JSON 中的完整状态）
+        if (goalStateVal != null) {
+            task.goalState = goalStateVal;
+        }
+
+        // 恢复运行时兜底字段
+        task.stagnationCount = stagnationCountVal;
+        task.consecutiveErrors = consecutiveErrorsVal;
+
+        return task;
     }
 }

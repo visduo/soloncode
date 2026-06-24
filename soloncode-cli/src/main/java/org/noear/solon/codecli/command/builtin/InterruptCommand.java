@@ -15,39 +15,44 @@
  */
 package org.noear.solon.codecli.command.builtin;
 
-
 import org.noear.solon.ai.agent.AgentSession;
+import org.noear.solon.ai.chat.message.ChatMessage;
 import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.harness.command.CommandContext;
 import org.noear.solon.core.util.Assert;
+import reactor.core.Disposable;
 
 /**
- * /clear 命令
+ * /interrupt 命令 - 中断当前正在执行的任务。
+ *
+ * <p>在 CLI 中用户可通过 ESC 键中断，在 Web 前端可通过停止按钮中断，
+ * 但在 IM 渠道（微信/飞书/钉钉）中缺少中断途径。此命令为 IM 场景提供
+ * 统一的中断能力，也适用于所有终端。</p>
  *
  * @author noear
- * @since 2026.4.28
+ * @since 2026.5.15
  */
-public class ClearCommand implements Command {
+public class InterruptCommand implements Command {
     @Override
     public String name() {
-        return "clear";
+        return "interrupt";
     }
 
     @Override
     public String description() {
-        return "清空会话记录";
+        return "中断当前正在执行的任务";
     }
 
     @Override
     public String[] examples() {
         return new String[]{
-                "/clear",
-                "/clear <sessionId>"
+                "/interrupt",
+                "/interrupt <sessionId>"
         };
     }
 
     @Override
-    public void execute(CommandContext ctx) {
+    public void execute(CommandContext ctx) throws Exception {
         String sessionId = ctx.argAt(0);
         AgentSession session;
 
@@ -62,6 +67,13 @@ public class ClearCommand implements Command {
             return;
         }
 
-        session.clear();
+        Disposable disposable = (Disposable) session.attrs().remove("disposable");
+        if (disposable != null) {
+            disposable.dispose();
+            session.addMessage(ChatMessage.ofAssistant("用户已取消任务."));
+            ctx.println("用户已取消任务（或中断）");
+        } else {
+            ctx.println("当前没有正在执行的任务");
+        }
     }
 }

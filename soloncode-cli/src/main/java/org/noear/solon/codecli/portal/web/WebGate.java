@@ -33,6 +33,7 @@ import org.noear.solon.ai.harness.command.Command;
 import org.noear.solon.ai.util.CmdUtil;
 import org.noear.solon.codecli.command.WebCommandContext;
 import org.noear.solon.codecli.command.builtin.LoopExecutionResult;
+import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.core.handle.UploadedFile;
 import org.noear.solon.core.util.Assert;
 import org.noear.solon.core.util.RunUtil;
@@ -45,6 +46,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
@@ -87,8 +89,11 @@ public class WebGate extends SimpleWebSocketListener {
      *
      * @param engine     AI 引擎，提供会话、模型、Agent、命令等核心服务
      */
-    public WebGate(HarnessEngine engine) {
+    private final AgentSettings settings;
+
+    public WebGate(HarnessEngine engine, AgentSettings settings) {
         this.engine = engine;
+        this.settings = settings;
         this.streamBuilder = new WebStreamBuilder(engine);
     }
 
@@ -282,13 +287,13 @@ public class WebGate extends SimpleWebSocketListener {
                     String fileName = attachment.getName();
                     if (fileName != null && !fileName.contains("..") && !fileName.contains("/") && !fileName.contains("\\")) {
                         String ext = "." + attachment.getExtension();
-                        java.nio.file.Path savePath = java.nio.file.Paths.get(engine.getWorkspace(), fileName).toAbsolutePath().normalize();
+                        Path savePath = Paths.get(engine.getWorkspace(), fileName).toAbsolutePath().normalize();
 
-                        if (savePath.startsWith(java.nio.file.Paths.get(engine.getWorkspace()).toAbsolutePath().normalize())) {
-                            java.nio.file.Files.copy(attachment.getContent(), savePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        if (savePath.startsWith(Paths.get(engine.getWorkspace()).toAbsolutePath().normalize())) {
+                            Files.copy(attachment.getContent(), savePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
                             if (isImageAttachment(ext, attachmentTypes != null && i < attachmentTypes.length ? attachmentTypes[i] : null)) {
-                                byte[] bytes = java.nio.file.Files.readAllBytes(savePath);
+                                byte[] bytes = Files.readAllBytes(savePath);
                                 String base64 = Base64.getEncoder().encodeToString(bytes);
                                 String mime = extensionToMime(ext);
                                 imageBlocks.add(ImageBlock.ofBase64(base64, mime));
@@ -537,14 +542,10 @@ public class WebGate extends SimpleWebSocketListener {
                     text = "命令执行完成";
                 }
 
-                if (streamBuilder.getWeChatLink() != null) {
-                    //命令执行后也通知给微信
-                    if (streamBuilder.getWeChatLink().isBound(session.getSessionId())) {
-                        streamBuilder.getWeChatLink().sendReply(session.getSessionId(), text, true);
-                    }
-                }
-
                 emitToClient(session.getSessionId(), WebChunk.ofCommand(text));
+
+                // 命令执行后通知所有绑定的 IM 通道（微信/飞书/钉钉等）
+                streamBuilder.replyToBoundChannel(session.getSessionId(), text, true);
             }
 
             emitToClient(session.getSessionId(), WebChunk.ofDone());
@@ -599,6 +600,17 @@ public class WebGate extends SimpleWebSocketListener {
         try {
             AgentSession session = engine.getSession(sessionId);
             if (isSessionBusy(session)) {
+                // 检查是否为暂停/中断命令：允许在任务执行中穿过忙碌检查
+                if (input != null && input.startsWith("/")) {
+                    List<String> parts = CmdUtil.parseArguments(input.trim().substring(1));
+                    String cmdName = parts.get(0).toLowerCase();
+                    if ("interrupt".equals(cmdName) || "exit".equals(cmdName)) {
+                        emitToClient(sessionId, WebChunk.ofUserInput(input, source));
+                        onChatInput(sessionId, null, input, null, null, null, null);
+                        return;
+                    }
+                }
+
                 LOG.warn("[WebGate] {} event skipped for session {}: task in progress", source, sessionId);
                 return;
             }

@@ -92,7 +92,12 @@
                             <span class="model-name" id="welcomeModelName">加载中...</span>
                             <i class="layui-icon layui-icon-down model-arrow"></i>
                         </div>
-                        <div class="model-dropdown" id="welcomeModelDropdown"></div>
+                        <div class="model-dropdown" id="welcomeModelDropdown">
+                            <div class="model-search-wrap">
+                                <input type="text" class="model-search-input" placeholder="搜索模型..."/>
+                            </div>
+                            <div class="model-dropdown-items"></div>
+                        </div>
                     </div>
                     <button class="attach-btn" id="welcomeAttachBtn" title="添加文件附件">
                         <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
@@ -158,7 +163,12 @@
                                 <span class="model-name" id="chatModelName">加载中...</span>
                                 <i class="layui-icon layui-icon-down model-arrow"></i>
                             </div>
-                            <div class="model-dropdown" id="chatModelDropdown"></div>
+                            <div class="model-dropdown" id="chatModelDropdown">
+                                <div class="model-search-wrap">
+                                    <input type="text" class="model-search-input" placeholder="搜索模型..."/>
+                                </div>
+                                <div class="model-dropdown-items"></div>
+                            </div>
                         </div>
                         <button class="attach-btn" id="chatAttachBtn" title="添加文件附件">
                             <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
@@ -399,15 +409,21 @@
                                     <div class="general-field-row">
                                         <div class="general-field">
                                             <label class="general-field-label">历史窗口大小</label>
-                                            <input type="text" inputmode="numeric" class="general-input" id="generalSessionWindowSize" placeholder="默认 8"/>
+                                            <input type="text" inputmode="numeric" class="general-input" id="generalSessionWindowSize" placeholder="8（默认）"/>
                                         </div>
                                         <div class="general-field">
                                             <label class="general-field-label">压缩触发消息数</label>
-                                            <input type="text" inputmode="numeric" class="general-input" id="generalSummaryWindowSize" placeholder="默认"/>
+                                            <input type="text" inputmode="numeric" class="general-input" id="generalSummaryWindowSize" placeholder="40（默认）"/>
                                         </div>
                                         <div class="general-field">
                                             <label class="general-field-label">压缩触发词元数</label>
-                                            <input type="text" inputmode="numeric" class="general-input" id="generalSummaryWindowToken" placeholder="默认"/>
+                                            <input type="text" inputmode="numeric" class="general-input" id="generalSummaryWindowToken" placeholder="64k（默认）" list="summaryTokenList" autocomplete="off"/>
+                                            <datalist id="summaryTokenList">
+                                                <option value="32k">
+                                                <option value="64k">
+                                                <option value="128k">
+                                                <option value="256k">
+                                            </datalist>
                                         </div>
                                     </div>
                                     <div class="general-toggle-desc settings-gap-top-sm">历史窗口控制新指令时使用几条历史消息；压缩策略控制对话上下文的自动压缩，防止超出模型窗口限制</div>
@@ -528,6 +544,32 @@
                                 </div>
                             </div>
 
+                            <!-- ============ 配置卡片: 访问认证 ============ -->
+                            <div class="general-card">
+                                <div class="general-card-header">
+                                    <div class="general-card-text">
+                                        <div class="general-card-title">访问认证</div>
+                                    </div>
+                                </div>
+                                <div class="general-card-body">
+                                    <div class="general-field-row">
+                                        <div class="general-field" style="flex:1">
+                                            <label class="general-field-label">用户名</label>
+                                            <input type="text" class="general-input" id="generalWebAuthUser"
+                                                   placeholder="留空=不启用"/>
+                                        </div>
+                                        <div class="general-field" style="flex:1">
+                                            <label class="general-field-label">密码</label>
+                                            <input type="password" class="general-input" id="generalWebAuthPass"
+                                                   placeholder="留空=不启用"/>
+                                        </div>
+                                    </div>
+                                    <div class="general-toggle-desc settings-gap-top-sm">
+                                        启用后，访问页面会弹出浏览器登录框，输入账号密码才能进入
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- 功能开关 -->
                             <div class="general-card">
                                 <div class="general-card-header">
@@ -588,8 +630,72 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
+                            <!-- ============ 配置卡片: Loop Goal ============ -->
+                            <div class="general-card">
+                                <div class="general-card-header">
+                                    <div class="general-card-text">
+                                        <div class="general-card-title">循环目标（Loop Goal）</div>
+                                    </div>
+                                </div>
+                                <div class="general-card-body">
+                                    <div class="general-field-row">
+                                        <div class="general-field">
+                                            <label class="general-field-label">默认 Token 预算</label>
+                                            <input type="text" inputmode="numeric" class="general-input"
+                                                   id="generalLoopDefaultMaxTokens" placeholder="0（不限制）"/>
+                                        </div>
+                                        <div class="general-field">
+                                            <label class="general-field-label">默认时间预算（分钟）</label>
+                                            <input type="text" inputmode="numeric" class="general-input"
+                                                   id="generalLoopDefaultMaxDuration" placeholder="0（不限制）"/>
+                                        </div>
+                                        <div class="general-field">
+                                            <label class="general-field-label">停滞检测阈值（轮）</label>
+                                            <input type="text" inputmode="numeric" class="general-input"
+                                                   id="generalLoopStagnationThreshold" placeholder="默认 3"/>
+                                        </div>
+                                    </div>
+                                    <div class="general-field-row settings-gap-top-md">
+                                        <div class="general-field">
+                                            <label class="general-field-label">连续异常阈值（次）</label>
+                                            <input type="text" inputmode="numeric" class="general-input"
+                                                   id="generalLoopMaxConsecutiveErrors" placeholder="默认 3"/>
+                                        </div>
+                                        <div class="general-field">
+                                            <label class="general-field-label">暂停超时放弃（小时）</label>
+                                            <input type="text" inputmode="numeric" class="general-input"
+                                                   id="generalLoopPauseAutoAbandonHours" placeholder="默认 24"/>
+                                        </div>
+                                        <div class="general-field">
+                                            <label class="general-field-label">预算警告百分比</label>
+                                            <input type="text" inputmode="numeric" class="general-input"
+                                                   id="generalLoopBudgetWarningPercent" placeholder="默认 70"/>
+                                        </div>
+                                    </div>
+                                    <div class="general-field-row settings-gap-top-md">
+                                        <div class="general-field">
+                                            <label class="general-field-label">预算紧急百分比</label>
+                                            <input type="text" inputmode="numeric" class="general-input"
+                                                   id="generalLoopBudgetCriticalPercent" placeholder="默认 85"/>
+                                        </div>
+                                    </div>
+                                    <div class="general-toggle-row settings-gap-top-md">
+                                        <div class="general-toggle-info">
+                                            <span class="general-toggle-name">启用验证器</span>
+                                            <span class="general-toggle-desc">目标完成时运行构建/测试验证，未通过则拒绝标记完成</span>
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="generalLoopValidatorEnabled"/>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                    <div class="general-toggle-desc settings-gap-top-sm">
+                                        Loop Goal 是长任务目标模式。Token/时间预算设为 0 表示不限制；停滞检测在连续 N 轮无进展时提醒模型；连续异常达阈值时自动标记阻塞
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         <div class="form-actions form-actions-end settings-actions-spacious">
                             <button class="btn-primary" id="generalSaveBtn">保存</button>
                         </div>
@@ -1285,6 +1391,7 @@
 <script>window.$ = layui.$;</script>
 <script src="/js/marked.min.js"></script>
 <script src="/js/qrcode.min.js"></script>
+<script src="/js/mermaid.min.js"></script>
 <script src="/highlight/highlight.min.js"></script>
 
 <script>

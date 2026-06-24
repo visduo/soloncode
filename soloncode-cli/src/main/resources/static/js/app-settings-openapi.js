@@ -320,9 +320,10 @@
     $('#openapiFormDeleteBtn').on('click', function () {
         var name = openapiEditName;
         if (!name) return;
-        if (confirm('确定删除 OpenApi 服务器 "' + name + '"？')) {
+        layer.confirm('确定删除 OpenApi 服务器 "' + name + '"？', { title: '确认删除', btn: ['删除', '取消'], icon: 3, offset: '120px' }, function(index) {
+            layer.close(index);
             openapiRemoveServer(name);
-        }
+        });
     });
 
 

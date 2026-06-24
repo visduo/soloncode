@@ -345,9 +345,10 @@
     $('#mcpFormDeleteBtn').on('click', function () {
         var name = mcpEditName;
         if (!name) return;
-        if (confirm('确定删除 MCP 服务器 "' + name + '"？')) {
+        layer.confirm('确定删除 MCP 服务器 "' + name + '"？', { title: '确认删除', btn: ['删除', '取消'], icon: 3, offset: '120px' }, function(index) {
+            layer.close(index);
             mcpRemoveServer(name);
-        }
+        });
     });
 
 
@@ -636,13 +637,15 @@
         // 回滚逻辑
         if (hasImported) {
             $('#importRollbackBtn').on('click', function() {
-                if (!confirm('确定要撤销刚刚导入的 ' + result.imported.length + ' 个 MCP 服务器吗？')) return;
                 var $btn = $(this);
-                $btn.prop('disabled', true).text('撤销中...');
-                rollbackImport(result.imported, function(successCount) {
-                    $overlay.remove();
-                    loadMcpList();
-                    showToast('已撤销 ' + successCount + ' 个服务器', 'info');
+                layer.confirm('确定要撤销刚刚导入的 ' + result.imported.length + ' 个 MCP 服务器吗？', { title: '确认撤销', btn: ['撤销', '取消'], icon: 3, offset: '120px' }, function(index) {
+                    layer.close(index);
+                    $btn.prop('disabled', true).text('撤销中...');
+                    rollbackImport(result.imported, function(successCount) {
+                        $overlay.remove();
+                        loadMcpList();
+                        showToast('已撤销 ' + successCount + ' 个服务器', 'info');
+                    });
                 });
             });
         }

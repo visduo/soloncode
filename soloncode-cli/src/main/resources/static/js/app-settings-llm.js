@@ -278,9 +278,10 @@
     $('#llmFormDeleteBtn').on('click', function () {
         var currentName = llmEditName;
         if (!currentName) return;
-        if (confirm('确定删除模型 "' + currentName + '"？')) {
+        layer.confirm('确定删除模型 "' + currentName + '"？', { title: '确认删除', btn: ['删除', '取消'], icon: 3, offset: '120px' }, function(index) {
+            layer.close(index);
             llmRemoveModel(currentName);
-        }
+        });
     });
 
 

@@ -151,12 +151,13 @@
     $('#lspFormDeleteBtn').on('click', function () {
         var name = lspEditName;
         if (!name) return;
-        if (confirm('确定删除 LSP 服务器 "' + name + '"？')) {
+        layer.confirm('确定删除 LSP 服务器 "' + name + '"？', { title: '确认删除', btn: ['删除', '取消'], icon: 3, offset: '120px' }, function(index) {
+            layer.close(index);
             postJson('/web/settings/lsp/servers/remove', { name: name }, function (resp) {
                 if (resp.code === 200) { showLspListView(); loadLspList(); }
                 else showToast('删除失败: ' + (resp.message || '未知错误'), 'error');
             });
-        }
+        });
     });
 
     $lspSaveBtn.on('click', function () {

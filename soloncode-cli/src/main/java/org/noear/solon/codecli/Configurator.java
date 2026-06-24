@@ -130,10 +130,10 @@ public class Configurator {
                     .build());
         }
 
-        engine.addMount(MountDir.builder().alias("@global-skills").type(MountType.SKILLS).path("~/" + engine.getHarnessSkills()).primary(true).build());
+        engine.addMount(MountDir.builder().alias("@user-skills").type(MountType.SKILLS).path("~/" + engine.getHarnessSkills()).primary(true).build());
         engine.addMount(MountDir.builder().alias("@workspace-skills").type(MountType.SKILLS).path("./" + engine.getHarnessSkills()).primary(true).build());
 
-        engine.addMount(MountDir.builder().alias("@global-agents").type(MountType.AGENTS).path("~/" + engine.getHarnessAgents()).primary(true).build());
+        engine.addMount(MountDir.builder().alias("@user-agents").type(MountType.AGENTS).path("~/" + engine.getHarnessAgents()).primary(true).build());
         engine.addMount(MountDir.builder().alias("@workspace-agents").type(MountType.AGENTS).path("./" + engine.getHarnessAgents()).primary(true).build());
 
 
@@ -143,6 +143,7 @@ public class Configurator {
         engine.getCommandRegistry().register(new ExitCommand());
         engine.getCommandRegistry().register(new ClearCommand());
         engine.getCommandRegistry().register(new ContinueCommand());
+        engine.getCommandRegistry().register(new InterruptCommand());
         engine.getCommandRegistry().register(new RerunCommand());
         engine.getCommandRegistry().register(new RewindCommand());
         engine.getCommandRegistry().register(new ModelCommand());
@@ -152,9 +153,21 @@ public class Configurator {
         RunUtil.async(() -> addServers(engine));
 
         // loop scheduler
-        this.loopScheduler = new LoopScheduler(engine, AgentFlags.getHarnessLoopWorktrees());
-        engine.getCommandRegistry().register(new LoopCommand(loopScheduler));
+        this.loopScheduler = new LoopScheduler(engine, agentSettings);
 
+        // ★ 初始化 Goal 验证器（在 LoopScheduler 创建之后，GoalExtension 注册之前）
+        ValidatorFactory.initDefaults(workspace);
+
+        // ★ Goal 模式（受 feature flag 控制）
+        boolean goalsEnabled = settings.getGeneral().getGoalsEnabled() != null
+                ? settings.getGeneral().getGoalsEnabled() : true;
+        GoalExtension goalExtension = new GoalExtension(loopScheduler);
+        goalExtension.getGoalTalent().setEnabled(goalsEnabled);
+        engine.addExtension(goalExtension);
+
+        // LoopCommand 统一管理循环任务与 Goal（pause/resume 需 GoalTool 同步 sessionId）
+        engine.getCommandRegistry().register(
+                new LoopCommand(loopScheduler));
 
         engine.addExtension(new ManagerExtension(engine, agentSettings));
 
@@ -266,7 +279,7 @@ public class Configurator {
         Solon.app().router().add(webBean);
 
         //注册第三方渠道（HTTP 端点 + 后台线程）
-        WebGate webGate = new WebGate(agentRuntime);
+        WebGate webGate = new WebGate(agentRuntime, settings);
         WebStreamBuilder streamBuilder = new WebStreamBuilder(agentRuntime);
         WebChannel webChannel = new WebChannel(agentRuntime, webGate);
         // 将渠道绑定到 streamBuilder，使 IM 回复能同步
@@ -290,7 +303,7 @@ public class Configurator {
 
     private void runWeb(HarnessEngine agentRuntime, AgentSettings settings, CliShell cliShell) {
         //web ws gate
-        WebGate webGate = new WebGate(agentRuntime);
+        WebGate webGate = new WebGate(agentRuntime, settings);
         WebSocketRouter.getInstance().of("/web/gate", webGate);
 
         //web

@@ -19,6 +19,8 @@ import org.noear.snack4.Feature;
 import org.noear.snack4.ONode;
 import org.noear.snack4.Options;
 import org.noear.solon.ai.harness.HarnessEngine;
+import org.noear.solon.codecli.config.AgentSettings;
+import org.noear.solon.codecli.config.entity.LoopGroupDo;
 import org.noear.solon.scheduling.ScheduledAnno;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;
 import org.noear.solon.scheduling.simple.JobManager;
@@ -31,6 +33,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 定时循环任务调度管理器
@@ -50,82 +55,53 @@ public class LoopScheduler {
     private static final int MAX_TASKS_PER_SESSION = 50;
     private static final String TASKS_FILE = "loop-tasks.json";
 
+    private static volatile boolean interruptHandlerInstalled = false;
+
+    private final LoopGroupDo loop;
     private final HarnessEngine engine;
-
-    // Solon 原生调度管理器
     private final IJobManager jobManager;
-
-    // 会话级任务列表：sessionId -> list of LoopTask
     private final ConcurrentHashMap<String, List<LoopTask>> sessionTasks = new ConcurrentHashMap<>();
 
-    // CLI 端任务执行回调：sessionId, prompt, agentName -> void（同步阻塞）
-    private volatile List<TaskExecutor> taskExecutors = new ArrayList<>();
+    // 共享线程池：续行调度 + 异常重试
+    private final ScheduledExecutorService asyncExecutor = Executors.newScheduledThreadPool(2, r -> {
+        Thread t = new Thread(r, "loop-async");
+        t.setDaemon(true);
+        return t;
+    });
 
-    // 会话繁忙检查器：用于在定时触发时判断会话是否正在执行任务（由各端口注入）。
-    // 用列表而非单值：Web 与 CLI 两端口会各自注入一个，单值会被后注入者覆盖，
-    // 导致先注入端口的繁忙守卫失效。各 checker 已按 sessionId 前缀自过滤，OR 合并即可。
+    private volatile List<TaskExecutor> taskExecutors = new ArrayList<>();
     private volatile List<BusyChecker> busyCheckers = new ArrayList<>();
 
-    // Worktree 管理器（lazy init）
-    private volatile WorktreeManager worktreeManager;
-
-    // Worktree 目录名
-    private final String worktreeDir;
-
-    /**
-     * CLI 端任务执行器（同步阻塞）
-     *
-     * <p>支持指定 agent 名称。
-     * 若 agentName 为 null，则使用默认主 agent。
-     *
-     * <p>返回 AI 的响应文本摘要，用于 goal 条件检查。
-     * 若无法获取响应（如会话不匹配），返回 null。
-     */
     @FunctionalInterface
     public interface TaskExecutor {
-        /**
-         * @param sessionId 会话 ID
-         * @param prompt    提示词
-         * @param agentName 代理名称（可为 null，表示主 agent）
-         * @return AI 响应文本摘要，无法获取时返回 null
-         */
         String execute(String sessionId, String prompt, String agentName);
     }
 
-    /**
-     * 会话繁忙检查器
-     *
-     * <p>用于在 loop 定时触发时判断目标会话是否有任务正在执行。
-     * 若会话繁忙，则跳过本次触发，避免与前台任务并发冲突、向前端推送多余消息。
-     */
     @FunctionalInterface
     public interface BusyChecker {
-        /**
-         * @param sessionId 会话 ID
-         * @return true 表示会话正在执行任务
-         */
         boolean isBusy(String sessionId);
     }
 
-
-    /**
-     * @param worktreeDir worktree 目录名（如 ".soloncode/loop-worktrees"），null 时使用默认值
-     */
-    public LoopScheduler(HarnessEngine engine, String worktreeDir) {
+    public LoopScheduler(HarnessEngine engine, AgentSettings agentSettings) {
         this.engine = engine;
         this.jobManager = JobManager.getInstance();
-        this.worktreeDir = worktreeDir;
+        this.loop = agentSettings.getLoop();
+        // 同步预算阈值到 GoalState 静态配置
+        GoalState.configure(
+                loop.getBudgetWarningPercentOrDefault(),
+                loop.getBudgetCriticalPercentOrDefault(),
+                loop.getPauseAutoAbandonMsOrDefault()
+        );
+    }
+
+    public LoopGroupDo getLoopConfig() {
+        return loop;
     }
 
     public void addTaskExecutor(TaskExecutor executor) {
         this.taskExecutors.add(executor);
     }
 
-    /**
-     * 注册会话繁忙检查器（由 WebController / CliShell 各自注入）。
-     *
-     * <p>采用追加语义而非覆盖：多个端口的 checker 共存，任一报告繁忙即视为繁忙。</p>
-     */
     public void addBusyChecker(BusyChecker busyChecker) {
         if (busyChecker != null) {
             this.busyCheckers.add(busyChecker);
@@ -133,61 +109,91 @@ public class LoopScheduler {
     }
 
     /**
-     * 获取或创建 WorktreeManager（lazy init）
+     * 查找指定会话中的 goal（优先返回活跃(PURSUING)，其次返回可恢复态(PAUSED/BLOCKED)）
      */
-    private WorktreeManager getWorktreeManager() {
-        if (worktreeManager == null) {
-            synchronized (this) {
-                if (worktreeManager == null) {
-                    worktreeManager = worktreeDir != null
-                            ? new WorktreeManager(worktreeDir)
-                            : new WorktreeManager();
+    public LoopTask findActiveGoalInSession(String sessionId) {
+        if (sessionId == null) {
+            return null;
+        }
+
+        List<LoopTask> taskList = sessionTasks.get(sessionId);
+        if (taskList == null) {
+            return null;
+        }
+
+        for (LoopTask t : taskList) {
+            if (t.isGoalMode() && t.getGoalState().getStatus().isActive()) {
+                return t;
+            }
+        }
+
+        for (LoopTask t : taskList) {
+            if (t.isGoalMode() && t.getGoalState().getStatus().isResumable()) {
+                return t;
+            }
+        }
+
+        return null;
+    }
+
+    // ==================== ShutdownHook ====================
+
+    private void installInterruptHandler() {
+        if (interruptHandlerInstalled) {
+            return;
+        }
+        interruptHandlerInstalled = true;
+
+        try {
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                LOG.info("JVM shutting down, pausing active goals");
+                pauseAllGoals();
+                asyncExecutor.shutdown();
+            }, "goal-shutdown-hook"));
+            LOG.info("ShutdownHook installed for auto-pausing active goals");
+        } catch (Throwable e) {
+            LOG.warn("Cannot install ShutdownHook: {}", e.getMessage());
+        }
+    }
+
+    private void pauseAllGoals() {
+        for (Map.Entry<String, List<LoopTask>> entry : sessionTasks.entrySet()) {
+            for (LoopTask task : entry.getValue()) {
+                if (task.isGoalMode()) {
+                    GoalState gs = task.getGoalState();
+                    if (gs.getStatus() == GoalState.Status.PURSUING) {
+                        gs.pause();
+                        disableGoalScheduling(entry.getKey(), task);
+                        LOG.info("goal '{}' paused due to JVM shutdown", task.getId());
+                    }
                 }
             }
         }
-        return worktreeManager;
     }
 
     // ==================== 任务注册 ====================
 
-    /**
-     * 注册循环任务
-     *
-     * <p>流程：创建 LoopTask -> 注册到 IJobManager（cron / fixedDelay）-> 加入内存列表 -> 持久化到 JSON
-     *
-     * @param sessionId      会话 ID
-     * @param task           待注册的任务
-     * @return 已注册的任务
-     */
     public LoopTask schedule(String sessionId, LoopTask task) {
-        // 1. 检查最大任务数
         List<LoopTask> tasks = sessionTasks.computeIfAbsent(sessionId,
                 k -> Collections.synchronizedList(new ArrayList<>()));
         if (tasks.size() >= MAX_TASKS_PER_SESSION) {
             throw new IllegalStateException("Max tasks reached: " + MAX_TASKS_PER_SESSION);
         }
 
-        // 2. 清理过期任务
         cleanExpired(sessionId, tasks);
-
-        // 3. 注册到 IJobManager（cron 模式用 cron 表达式，否则 fixedDelay 串行）
-        //    firstRegistration=true，使 runNow 生效
         registerJob(sessionId, task, true);
-
-        // 4. 加入内存列表
         tasks.add(task);
-
-        // 5. 持久化到 JSON
         saveToFile(sessionId, tasks);
+
+        if (task.isGoalMode()) {
+            installInterruptHandler();
+        }
 
         return task;
     }
 
     // ==================== 任务移除 ====================
 
-    /**
-     * 停止指定任务
-     */
     public void remove(String sessionId, LoopTask task) {
         LOG.info("Removing loop task '{}' from session '{}'", task.getId(), sessionId);
 
@@ -197,30 +203,78 @@ public class LoopScheduler {
             jobManager.jobRemove(jobName);
         }
 
-        // P1-fix: 清理 worktree
-        if (task.isWorktreeEnabled()) {
-            try {
-                getWorktreeManager().cleanup(engine.getWorkspace());
-                LOG.info("Loop task '{}' worktree cleaned up on remove", task.getId());
-            } catch (Exception e) {
-                LOG.warn("Loop task '{}' worktree cleanup failed on remove: {}", task.getId(), e.getMessage());
-            }
-        }
-
         List<LoopTask> tasks = sessionTasks.get(sessionId);
-        if (tasks == null) {
-            LOG.warn("Loop task '{}' remove failed: no tasks found for session '{}'", task.getId(), sessionId);
-            return;
-        }
+        if (tasks == null) return;
 
         tasks.removeIf(t -> t.getId().equals(task.getId()));
-
         saveToFile(sessionId, tasks);
     }
 
+    // ==================== Goal 生命周期管理 ====================
+
     /**
-     * 启用/停用任务（toggle enabled 字段）
+     * 暂停 goal（PURSUING → PAUSED），移除调度但保留任务
      */
+    public void pauseGoal(String sessionId, String taskId) {
+        LoopTask task = getTaskById(sessionId, taskId);
+        if (task == null || !task.isGoalMode()) {
+            LOG.warn("pauseGoal: task '{}' not found or not goal mode", taskId);
+            return;
+        }
+
+        GoalState gs = task.getGoalState();
+        if (!gs.pause()) {
+            LOG.warn("pauseGoal: task '{}' cannot be paused (status={})", taskId, gs.getStatus());
+            return;
+        }
+
+        disableGoalScheduling(sessionId, task);
+        LOG.info("Goal paused for task '{}'", taskId);
+    }
+
+    /**
+     * 恢复 goal（PAUSED/BLOCKED → PURSUING），重新注册调度
+     */
+    public void resumeGoal(String sessionId, String taskId) {
+        LoopTask task = getTaskById(sessionId, taskId);
+        if (task == null || !task.isGoalMode()) {
+            LOG.warn("resumeGoal: task '{}' not found or not goal mode", taskId);
+            return;
+        }
+
+        GoalState gs = task.getGoalState();
+        if (!gs.resume()) {
+            LOG.warn("resumeGoal: task '{}' cannot be resumed (status={})", taskId, gs.getStatus());
+            return;
+        }
+
+        registerJob(sessionId, task);
+        saveToFile(sessionId, sessionTasks.get(sessionId));
+        LOG.info("Goal resumed for task '{}'", taskId);
+    }
+
+    /**
+     * 清除 goal（任务保留，调度停止）
+     */
+    public void clearGoal(String sessionId, String taskId) {
+        LoopTask task = getTaskById(sessionId, taskId);
+        if (task == null || !task.isGoalMode()) {
+            LOG.warn("clearGoal: task '{}' not found or not goal mode", taskId);
+            return;
+        }
+
+        disableGoalScheduling(sessionId, task);
+        LOG.info("Goal cleared for task '{}'", taskId);
+    }
+
+    private void disableGoalScheduling(String sessionId, LoopTask task) {
+        String jobName = task.getJobName();
+        if (jobManager.jobExists(jobName)) {
+            jobManager.jobRemove(jobName);
+        }
+        saveToFile(sessionId, sessionTasks.get(sessionId));
+    }
+
     public void toggle(String sessionId, String taskId) {
         List<LoopTask> tasks = sessionTasks.get(sessionId);
         if (tasks == null) return;
@@ -231,10 +285,8 @@ public class LoopScheduler {
                 t.setEnabled(newEnabled);
 
                 if (newEnabled) {
-                    // 恢复：重新注册 Job（即时模式会被 registerJob 内部跳过）
                     registerJob(sessionId, t);
                 } else {
-                    // 暂停：移除 Job，但不 cancel
                     String jobName = t.getJobName();
                     if (jobManager.jobExists(jobName)) {
                         jobManager.jobRemove(jobName);
@@ -247,9 +299,6 @@ public class LoopScheduler {
         }
     }
 
-    /**
-     * 更新任务定义（重建 Job）
-     */
     public void update(String sessionId, String taskId, LoopTask newTask) {
         List<LoopTask> tasks = sessionTasks.get(sessionId);
         if (tasks == null) return;
@@ -257,16 +306,13 @@ public class LoopScheduler {
         for (int i = 0; i < tasks.size(); i++) {
             LoopTask t = tasks.get(i);
             if (t.getId().equals(taskId)) {
-                // 移除旧 Job
                 String jobName = t.getJobName();
                 if (jobManager.jobExists(jobName)) {
                     jobManager.jobRemove(jobName);
                 }
 
-                // 替换为新任务
                 tasks.set(i, newTask);
 
-                // 如果 enabled 且未取消，注册新 Job
                 if (newTask.isEnabled() && !newTask.isCancelled()) {
                     registerJob(sessionId, newTask);
                 }
@@ -277,27 +323,18 @@ public class LoopScheduler {
         }
     }
 
-    /**
-     * 手动触发一次执行（不走定时）
-     */
     public void trigger(String sessionId, String taskId) {
         List<LoopTask> tasks = sessionTasks.get(sessionId);
         if (tasks == null) return;
 
         for (LoopTask t : tasks) {
             if (t.getId().equals(taskId)) {
-                // 异步执行，避免阻塞 HTTP 请求
-                Thread thread = new Thread(() -> onTrigger(sessionId, t), "loop-trigger-" + taskId);
-                thread.setDaemon(true);
-                thread.start();
+                asyncExecutor.submit(() -> onTrigger(sessionId, t));
                 return;
             }
         }
     }
 
-    /**
-     * 根据 ID 获取任务
-     */
     public LoopTask getTaskById(String sessionId, String taskId) {
         List<LoopTask> tasks = sessionTasks.get(sessionId);
         if (tasks == null) return null;
@@ -309,37 +346,22 @@ public class LoopScheduler {
 
     // ==================== 任务列表 ====================
 
-    /**
-     * 列出活跃任务（自动清理过期）
-     */
     public List<LoopTask> listActive(String sessionId) {
         List<LoopTask> tasks = sessionTasks.get(sessionId);
         if (tasks == null) return Collections.emptyList();
-
-        // 清理过期任务
         cleanExpired(sessionId, tasks);
-
         return new ArrayList<>(tasks);
     }
 
-    /**
-     * 列出所有任务（含已停用的），自动清理过期
-     */
     public List<LoopTask> listAll(String sessionId) {
         List<LoopTask> tasks = sessionTasks.get(sessionId);
         if (tasks == null) return Collections.emptyList();
-
-        // 清理过期任务
         cleanExpired(sessionId, tasks);
-
         return new ArrayList<>(tasks);
     }
 
     // ==================== 批量停止 ====================
 
-    /**
-     * 停止会话的所有任务
-     */
     public void stopAll(String sessionId) {
         List<LoopTask> tasks = sessionTasks.remove(sessionId);
         if (tasks != null) {
@@ -349,28 +371,17 @@ public class LoopScheduler {
                 if (jobManager.jobExists(jobName)) {
                     jobManager.jobRemove(jobName);
                 }
-                // F6: 清理 worktree
-                if (t.isWorktreeEnabled() ) {
-                    getWorktreeManager().cleanup(engine.getWorkspace());
-                }
             });
         }
-        // 删除 JSON 文件
         deleteFile(sessionId);
     }
 
     // ==================== 会话恢复 ====================
 
-    /**
-     * 从 JSON 恢复任务 — 过滤过期任务，重新注册到 IJobManager
-     *
-     * <p>在 CliShell.prepare() 或 ResumeCommand 中调用
-     */
     public void restore(String sessionId) {
         List<LoopTask> tasks = loadFromFile(sessionId);
         if (tasks == null || tasks.isEmpty()) return;
 
-        // 移除过期/已取消任务
         List<LoopTask> alive = new ArrayList<>();
         for (LoopTask t : tasks) {
             if (t.isExpired() || t.isCancelled()) {
@@ -386,30 +397,32 @@ public class LoopScheduler {
 
         sessionTasks.put(sessionId, Collections.synchronizedList(alive));
 
-        // 重新注册到 IJobManager
         for (LoopTask t : alive) {
             registerJob(sessionId, t);
         }
 
-        // 回写（去掉过期任务）
+        // 自动恢复因 SIGINT 中断而暂停的 goal
+        for (LoopTask t : alive) {
+            if (t.isGoalMode()) {
+                GoalState gs = t.getGoalState();
+                if (gs.getStatus().isResumable()) {
+                    LOG.info("Auto-resuming paused/blocked goal '{}'", t.getId());
+                    gs.resume();
+                    registerJob(sessionId, t);
+                }
+            }
+        }
+
         saveToFile(sessionId, alive);
         LOG.info("Restored {} loop tasks for session {}", alive.size(), sessionId);
     }
 
     // ==================== IJobManager 注册 ====================
 
-    /**
-     * 注册任务到 IJobManager（cron 模式使用 cron 表达式，否则使用 fixedDelay 串行策略）
-     */
     private void registerJob(String sessionId, LoopTask task) {
         registerJob(sessionId, task, false);
     }
 
-    /**
-     * 注册任务到 IJobManager
-     *
-     * @param firstRegistration 是否为首次注册（首次注册时，runNow 才生效）
-     */
     private void registerJob(String sessionId, LoopTask task, boolean firstRegistration) {
         String jobName = task.getJobName();
 
@@ -418,7 +431,11 @@ public class LoopScheduler {
             scheduled = new ScheduledAnno().cron(task.getCron());
         } else {
             long intervalMs = (long) task.getIntervalMinutes() * 60_000L;
-            // isRunNow() 只对首次注册生效：重启恢复、切换启用、更新定义时均不应用
+            // Goal 模式 intervalMinutes=0 时，设为 5 秒保底间隔
+            if (intervalMs == 0) {
+                intervalMs = 5_000L;
+            }
+
             long initialDelay = (firstRegistration && task.isRunNow()) ? 0 : intervalMs;
             scheduled = new ScheduledAnno()
                     .fixedDelay(intervalMs)
@@ -426,10 +443,9 @@ public class LoopScheduler {
         }
 
         jobManager.jobAdd(jobName, scheduled, ctx -> {
-            if(task.isEnabled() == false) {
+            if (!task.isEnabled()) {
                 return;
             }
-
             onTrigger(sessionId, task);
         });
     }
@@ -438,6 +454,9 @@ public class LoopScheduler {
 
     /**
      * 定时触发 — 执行任务
+     *
+     * <p>Goal 模式下，执行完成后若 goal 仍活跃则事件驱动续行（submit 下一轮）。
+     * 续行无深度限制、无冷却期 — 靠 tryStart() CAS 防重叠 + BusyChecker 防冲突。
      */
     private void onTrigger(String sessionId, LoopTask task) {
         // 已禁用/过期/已取消则移除
@@ -449,8 +468,7 @@ public class LoopScheduler {
             return;
         }
 
-        // 会话正在执行任务时跳过本次触发：不消耗迭代、不创建 worktree、不向前端推送消息。
-        // 任一端口的 checker 报告繁忙即跳过（OR 合并）。
+        // 会话繁忙时跳过
         for (BusyChecker checker : busyCheckers) {
             if (checker.isBusy(sessionId)) {
                 LOG.info("Loop task '{}' skipped: session '{}' is busy", task.getId(), sessionId);
@@ -458,45 +476,66 @@ public class LoopScheduler {
             }
         }
 
-        // 达到最大迭代次数则自动移除
-        if (task.isMaxIterationsReached()) {
-            LOG.info("Loop task '{}' reached max iterations ({})", task.getId(), task.getMaxIterations());
-            remove(sessionId, task);
-            return;
+        // Goal 模式预算检查
+        if (task.isGoalMode()) {
+            GoalState gs = task.getGoalState();
+
+            // 时间预算
+            Long maxDurationMs = task.getMaxDurationMs();
+            if (maxDurationMs != null && maxDurationMs > 0) {
+                long elapsed = System.currentTimeMillis() - gs.getStartEpochMs();
+                if (elapsed >= maxDurationMs) {
+                    LOG.info("Loop task '{}' goal duration exceeded ({}ms >= {}ms), executing wrap-up turn",
+                            task.getId(), elapsed, maxDurationMs);
+                    executeBudgetLimitWrapUp(sessionId, task, gs);
+                    gs.markBudgetLimited();
+                    LoopStateManager.appendHistory(engine.getWorkspace(), task.getId(),
+                            (String) null, task.getCurrentIteration(), "BUDGET_LIMITED");
+                    disableGoalScheduling(sessionId, task);
+                    return;
+                }
+            }
+
+            // Token 预算
+            if (gs.isBudgetExceeded()) {
+                LOG.info("Loop task '{}' goal budget exceeded at iteration {}, executing wrap-up turn",
+                        task.getId(), task.getCurrentIteration());
+                executeBudgetLimitWrapUp(sessionId, task, gs);
+                gs.markBudgetLimited();
+                LoopStateManager.appendHistory(engine.getWorkspace(), task.getId(),
+                        (String) null, task.getCurrentIteration(), "BUDGET_LIMITED");
+                disableGoalScheduling(sessionId, task);
+                return;
+            }
+
+            // 非活跃状态跳过
+            if (!gs.getStatus().isActive()) {
+                return;
+            }
+        } else {
+            // 非 Goal 模式
+            if (task.isMaxIterationsReached()) {
+                LOG.info("Loop task '{}' reached max iterations ({})", task.getId(), task.getMaxIterations());
+                remove(sessionId, task);
+                return;
+            }
         }
 
-        // 防重入：上一个还没执行完则跳过
+        // 防重入
         if (!task.tryStart()) {
             return;
         }
 
         try {
-            // Phase 4: Worktree 隔离
-            String worktreePath = null;
-            if (task.isWorktreeEnabled()) {
-                worktreePath = getWorktreeManager().create(engine.getWorkspace(), task.getId());
-                if (worktreePath != null) {
-                    LOG.info("Loop task '{}' executing in worktree: {}", task.getId(), worktreePath);
-                } else {
-                    LOG.warn("Loop task '{}' worktree creation failed, falling back to main workspace", task.getId());
-                }
-            }
-
-            try {
-                // 构建完整 prompt（注入 skill + state 上下文）
+            // 构建 prompt（注入 goal 引导词）
                 String effectivePrompt = buildEffectivePrompt(sessionId, task);
 
-                LoopExecutionResult executionResult;
-
-                // 单一 agent 执行
-                executionResult = executeSingle(sessionId, effectivePrompt, null);
+                LoopExecutionResult executionResult = executeSingle(sessionId, effectivePrompt, null);
 
                 String finalResult = executionResult != null ? executionResult.getFinalResult() : null;
-
-                // 更新执行记录
                 task.updateLastExecution(finalResult != null ? finalResult : "ok");
+                task.resetConsecutiveErrors(); // 成功执行后重置连续异常计数
 
-                // 仅在执行完成时递增迭代计数，避免 session busy 等场景下空转消耗迭代
                 int iteration;
                 if (executionResult != null && executionResult.isCompleted()) {
                     iteration = task.incrementIteration();
@@ -504,72 +543,380 @@ public class LoopScheduler {
                     iteration = task.getCurrentIteration();
                 }
 
-                // Goal 条件检查 — 解析 AI 响应中的 [GOAL_ACHIEVED] 标记
-                boolean goalMet = executionResult != null && executionResult.isGoalAchieved();
-                if (goalMet) {
-                    LOG.info("Loop task '{}' goal achieved at iteration {}", task.getId(), iteration);
+                // Goal 状态评估（Codex 对齐：仅检测 [GOAL_ACHIEVED] 标记）
+                if (task.isGoalMode()) {
+                    GoalState gs = task.getGoalState();
 
-                        LoopStateManager.appendHistory(engine.getWorkspace(), task.getId(), executionResult, iteration, "GOAL_ACHIEVED");
+                    // 累计 token
+                    if (executionResult != null && executionResult.getTokensUsed() > 0) {
+                        gs.addTokens(executionResult.getTokensUsed());
+                    }
 
-                    remove(sessionId, task);
-                    return;
-                }
+                    // 无进展检测（运行时兜底）
+                    String currentFingerprint = computeFingerprint(executionResult);
+                    if (currentFingerprint != null && currentFingerprint.equals(task.getLastFingerprint())) {
+                        task.recordStagnation();
+                        LOG.warn("Goal '{}' stagnation: {} consecutive no-progress turns",
+                                task.getId(), task.getStagnationCount());
+                    } else {
+                        task.resetStagnation();
+                        task.setLastFingerprint(currentFingerprint);
+                    }
 
-                if (task.isMaxIterationsReached()) {
-                    LOG.info("Loop task '{}' reached max iterations ({})", task.getId(), task.getMaxIterations());
+                    // 完成检测
+                    boolean achieved = executionResult != null && executionResult.isGoalAchieved();
+                    if (achieved) {
+                        LOG.info("Loop task '{}' goal ACHIEVED at iteration {}", task.getId(), iteration);
+                        gs.achieve();
+                        LoopStateManager.appendHistory(engine.getWorkspace(), task.getId(),
+                                executionResult, iteration, "GOAL_ACHIEVED");
+                        disableGoalScheduling(sessionId, task);
+                        return;
+                    }
 
-
-                        LoopStateManager.appendHistory(engine.getWorkspace(), task.getId(), executionResult, iteration, "MAX_ITERATIONS_REACHED");
-
-
-                    remove(sessionId, task);
-                    return;
+                    // 预算检查
+                    if (gs.isBudgetExceeded()) {
+                        LOG.info("Loop task '{}' budget exceeded at iteration {}, executing wrap-up turn",
+                                task.getId(), iteration);
+                        executeBudgetLimitWrapUp(sessionId, task, gs);
+                        gs.markBudgetLimited();
+                        LoopStateManager.appendHistory(engine.getWorkspace(), task.getId(),
+                                executionResult, iteration, "BUDGET_EXCEEDED");
+                        disableGoalScheduling(sessionId, task);
+                        return;
+                    }
+                } else {
+                    // 非 goal 模式
+                    if (task.isMaxIterationsReached()) {
+                        LOG.info("Loop task '{}' reached max iterations ({})", task.getId(), task.getMaxIterations());
+                        LoopStateManager.appendHistory(engine.getWorkspace(), task.getId(),
+                                executionResult, iteration, "MAX_ITERATIONS_REACHED");
+                        remove(sessionId, task);
+                        return;
+                    }
                 }
 
                 // 写入执行历史
+                LoopStateManager.appendHistory(engine.getWorkspace(), task.getId(),
+                        executionResult, iteration, "NONE");
 
-                    LoopStateManager.appendHistory(engine.getWorkspace(), task.getId(), executionResult, iteration, "NONE");
+                // 实时持久化
+                saveToFile(sessionId, sessionTasks.get(sessionId));
 
-
-            } finally {
-                // Phase 4: 清理 worktree（执行完毕后）
-                if (worktreePath != null) {
-                    getWorktreeManager().remove(worktreePath);
-                    LOG.debug("Loop task '{}' worktree cleaned up", task.getId());
+            // 事件驱动续行：goal 活跃 → submit 下一轮
+            if (task.isGoalMode()) {
+                GoalState gs = task.getGoalState();
+                if (gs.getStatus().isActive() && !gs.isBudgetExceeded()) {
+                    boolean busy = false;
+                    for (BusyChecker checker : busyCheckers) {
+                        if (checker.isBusy(sessionId)) {
+                            busy = true;
+                            break;
+                        }
+                    }
+                    if (!busy) {
+                        LOG.debug("Loop task '{}' continuing (event-driven)", task.getId());
+                        asyncExecutor.submit(() -> onTrigger(sessionId, task));
+                    }
                 }
             }
 
         } catch (Exception e) {
             LOG.error("Loop task '{}' failed: {}", task.getId(), e.getMessage());
             task.updateLastExecution("error: " + e.getMessage());
+            List<LoopTask> tasks = sessionTasks.get(sessionId);
+            if (tasks != null) {
+                saveToFile(sessionId, tasks);
+            }
+            // 异常后分级处理（TurnError → blocked）
+            if (task.isGoalMode() && !task.isCancelled() && !task.isExpired()) {
+                GoalState gs = task.getGoalState();
+                if (gs.getStatus().isActive() && !gs.isBudgetExceeded()) {
+                    int errors = task.incrementConsecutiveErrors();
+                    if (errors >= loop.getMaxConsecutiveErrorsOrDefault()) {
+                        // 连续异常 → 运行时兜底 blocked
+                        LOG.warn("Goal '{}' blocked by runtime: {} consecutive errors",
+                                task.getId(), errors);
+                        gs.markBlocked();
+                        pauseGoal(sessionId, task.getId());
+                        LoopStateManager.appendHistory(engine.getWorkspace(), task.getId(),
+                                (String) null, task.getCurrentIteration(), "BLOCKED_BY_ERRORS");
+                    } else {
+                        // 未达阈值 → 递增延迟重试
+                        long delay = 5L * errors; // 5s, 10s, 15s ...
+                        LOG.info("Loop task '{}' scheduling error retry in {}s (attempt {})",
+                                task.getId(), delay, errors);
+                        asyncExecutor.schedule(() -> {
+                            if (!task.isCancelled() && !task.isExpired()) {
+                                onTrigger(sessionId, task);
+                            }
+                        }, delay, TimeUnit.SECONDS);
+                    }
+                }
+            }
         } finally {
             task.finish();
         }
     }
 
+    // ==================== Prompt 构建（Codex 对齐：7 章节） ====================
+
     /**
-     * 构建完整的有效 prompt（skill 解析 + goal 条件注入）
+     * 构建完整的 effective prompt（goal 引导词注入）
+     *
+     * <p>对齐 Codex continuation.md 的 7 章节结构，并根据预算剩余自动切换精简模式：
+     * <ul>
+     *   <li>预算 > 30%：完整 7 章节</li>
+     *   <li>预算 15%-30%：精简 3 章节（Continuation + Completion audit + Budget）</li>
+     *   <li>预算 < 15%：极简单段落</li>
+     * </ul>
      */
     private String buildEffectivePrompt(String sessionId, LoopTask task) {
         String prompt = task.getPrompt();
 
-        // Goal 条件注入（持久目标 + [GOAL_ACHIEVED] 终止标记）
-        if (task.isGoalMode()) {
-            StringBuilder goalPrompt = new StringBuilder();
-            goalPrompt.append("\n\n--- 目标（持久目标） ---\n");
-
-            // 定时模式 或 模板加载失败时的回退：简短提示
-            goalPrompt.append("<objective>\n");
-            goalPrompt.append(task.getGoalCondition()).append("\n");
-            goalPrompt.append("</objective>\n\n");
-            goalPrompt.append("进度：第 ").append(task.getCurrentIteration()).append("/").append(task.getMaxIterations()).append(" 次迭代\n");
-            goalPrompt.append("\n如果目标已达成，请回复 [GOAL_ACHIEVED]。");
-
-            prompt = prompt + goalPrompt;
+        if (!task.isGoalMode()) {
+            return prompt;
         }
 
-        return prompt;
+        GoalState gs = task.getGoalState();
+        int iter = task.getCurrentIteration();
+        boolean isFirstIter = iter == 0;
+        boolean isCritical = gs.isBudgetCritical();
+
+        String budgetInfo = buildBudgetInfo(gs);
+
+        // 预算感知精简模式
+        double budgetRatio = gs.getMaxTokens() > 0
+                ? (double) (gs.getMaxTokens() - gs.getConsumedTokens()) / gs.getMaxTokens()
+                : 1.0;
+
+        if (budgetRatio < 0.15) {
+            return buildMinimalPrompt(prompt, gs, task, budgetInfo);
+        } else if (budgetRatio < 0.30) {
+            return buildCompactPrompt(prompt, gs, task, budgetInfo, iter, isFirstIter);
+        }
+
+        // 完整模式（7 章节）
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n\n");
+        sb.append("--- Goal Continuation ---\n");
+        sb.append("你正在朝向以下目标工作: ").append(gs.getCondition()).append("\n");
+        sb.append("你的目标是完成此任务。这是持续性的工作 — 每一轮执行都是同一个目标的延续。\n");
+        sb.append("\n");
+
+        // Chapter 3: Work from evidence
+        sb.append("--- 基于证据工作 ---\n");
+        sb.append("不要依赖记忆或假设来判断当前状态。在采取行动前，先检查实际的文件内容、\n");
+        sb.append("测试结果、构建输出等客观证据。你的判断必须基于最新的事实，而非上轮的记忆。\n");
+        sb.append("\n");
+
+        // Chapter 5: Fidelity
+        sb.append("--- 目标忠实度 ---\n");
+        sb.append("不要缩小目标范围或降低完成标准。目标中的每一项都必须完成。\n");
+        sb.append("不要留占位符、TODO 或 stub。如果某个部分很难，要投入精力解决，而非跳过。\n");
+        sb.append("\n");
+
+        // Chapter 6: Completion audit
+        sb.append("--- 完成审计 ---\n");
+        sb.append("在继续之前，请完成以下步骤：\n");
+        sb.append("1. 回顾：目标是什么？检查已有的进展。\n");
+        sb.append("2. 核查：针对目标中的每一项，通过运行测试、检查文件等客观手段验证其是否已完成。\n");
+        sb.append("   不要仅凭推理 — 必须有权威证据（测试通过、构建成功、文件存在且内容正确）。\n");
+        sb.append("3. 如果你已完成所有项，说明你是如何实现每一项的，\n");
+        sb.append("   然后在回复末尾输出 [GOAL_ACHIEVED] 并调用 goal_update(complete) 标记完成。\n");
+        sb.append("\n");
+
+        // Chapter 7: Blocked audit
+        sb.append("--- 阻塞审计 ---\n");
+        sb.append("如果你遇到阻碍（同一困境尝试了 3 次），调用 goal_update(blocked) 声明阻塞。\n");
+        sb.append("不要因为工作困难、进展慢或不确定就声明阻塞 — 仅当同一问题反复尝试仍无法解决时才使用。\n");
+        sb.append("resume 后阻塞计数重置为 0。\n");
+        sb.append("\n");
+
+        // 停滞质疑（运行时兜底，仅触发时注入）
+        if (task.getStagnationCount() >= loop.getStagnationThresholdOrDefault()) {
+            sb.append("--- 进展质疑 ---\n");
+            sb.append("系统检测到最近 ").append(task.getStagnationCount())
+              .append(" 轮执行未产生实质性进展。\n");
+            sb.append("请认真评估：你是否在同一问题上反复尝试但无法推进？\n");
+            sb.append("如果是，请调用 goal_update(blocked) 声明阻塞。\n");
+            sb.append("如果不是，请在下一步采取明显不同的策略。\n");
+            sb.append("\n");
+        }
+
+        // Chapter 2: Budget
+        if (isCritical) {
+            sb.append("[紧急] 你的 Token 预算即将耗尽。请专注于高效完成目标。\n");
+        }
+
+        // Chapter 4: Progress visibility — 上一轮摘要
+        if (!isFirstIter && task.getLastResult() != null) {
+            String lastSummary = truncateForPrompt(task.getLastResult(), 300);
+            sb.append("\n--- 上一轮执行摘要（第 ").append(iter).append(" 轮）---\n");
+            sb.append(lastSummary).append("\n");
+            sb.append("请基于以上进展继续推进，避免重复已尝试过的方案。\n");
+        }
+
+        sb.append(budgetInfo);
+
+        return prompt + sb.toString();
     }
+
+    /**
+     * 精简模式（预算 15%-30%）：3 章节
+     */
+    private String buildCompactPrompt(String prompt, GoalState gs, LoopTask task,
+                                      String budgetInfo, int iter, boolean isFirstIter) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n\n");
+        sb.append("--- Goal Continuation ---\n");
+        sb.append("目标: ").append(gs.getCondition()).append("\n");
+        sb.append("持续工作直至完成。完成后输出 [GOAL_ACHIEVED] 并调用 goal_update(complete)。\n");
+        sb.append("\n");
+
+        sb.append("--- 完成审计 ---\n");
+        sb.append("逐条验证目标完成情况。必须有客观证据（测试通过/文件存在）。不要凭推理判定完成。\n");
+        sb.append("\n");
+
+        if (!isFirstIter && task.getLastResult() != null) {
+            String lastSummary = truncateForPrompt(task.getLastResult(), 200);
+            sb.append("上一轮（第 ").append(iter).append("轮）: ").append(lastSummary).append("\n");
+        }
+
+        sb.append(budgetInfo);
+        return prompt + sb.toString();
+    }
+
+    /**
+     * 极简模式（预算 < 15%）：单段落
+     */
+    private String buildMinimalPrompt(String prompt, GoalState gs, LoopTask task,
+                                      String budgetInfo) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n\n");
+        sb.append("目标: ").append(gs.getCondition()).append(" | ");
+        sb.append(budgetInfo.trim()).append("\n");
+        sb.append("持续工作直至完成。完成后输出 [GOAL_ACHIEVED] 并调用 goal_update(complete)。3 轮无法推进则调用 goal_update(blocked)。\n");
+        return prompt + sb.toString();
+    }
+
+    // ==================== 预算耗尽收尾 ====================
+
+    /**
+     * 预算耗尽时执行一次收尾 turn（对齐 Codex budget_limit.md）
+     *
+     * <p>注入 budget_limit 引导词，让模型总结进展和剩余工作，而非直接终止。
+     * 收尾 turn 不触发续行。
+     */
+    private void executeBudgetLimitWrapUp(String sessionId, LoopTask task, GoalState gs) {
+        try {
+            String wrapUpPrompt = buildBudgetLimitPrompt(task, gs);
+            executeSingle(sessionId, wrapUpPrompt, null);
+        } catch (Exception e) {
+            LOG.warn("Goal '{}' wrap-up turn failed: {}", task.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * 构建 budget_limit 引导词（对齐 Codex budget_limit.md）
+     */
+    private String buildBudgetLimitPrompt(LoopTask task, GoalState gs) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n\n--- 预算耗尽 ---\n");
+        sb.append("你的目标 Token 预算已耗尽。\n\n");
+        sb.append("目标: ").append(gs.getCondition()).append("\n\n");
+
+        sb.append("预算:\n");
+        long elapsed = (System.currentTimeMillis() - gs.getStartEpochMs()) / 1000;
+        sb.append("- 耗时: ").append(formatDuration(elapsed * 1000)).append("\n");
+        sb.append("- 已消耗: ").append(formatTokens(gs.getConsumedTokens()));
+        if (gs.getMaxTokens() > 0) {
+            sb.append(" / ").append(formatTokens(gs.getMaxTokens())).append(" tokens\n");
+        } else {
+            sb.append(" tokens\n");
+        }
+        sb.append("\n");
+
+        sb.append("系统已将此目标标记为 budget_limited，请勿开始新的实质性工作。\n");
+        sb.append("请在此轮回复中：\n");
+        sb.append("1. 总结已完成的工作和进展\n");
+        sb.append("2. 列出剩余未完成的工作\n");
+        sb.append("3. 给出明确的下一步建议\n\n");
+        sb.append("不要调用 goal_update 除非目标确实已完成。\n");
+
+        return sb.toString();
+    }
+
+    // ==================== 无进展指纹计算 ====================
+
+    /**
+     * 计算执行指纹（用于无进展检测）
+     *
+     * <p>基于：是否有工具调用 + 结果文本长度区间（粗粒度）
+     */
+    private String computeFingerprint(LoopExecutionResult result) {
+        if (result == null) return "null";
+        int lenBucket = result.getFinalResult() != null
+                ? result.getFinalResult().length() / 500 : 0;
+        return result.isHasToolCalls() + ":" + lenBucket;
+    }
+
+    // ==================== 格式化辅助 ====================
+
+    private static String truncateForPrompt(String text, int maxLen) {
+        if (text == null || text.isEmpty()) return "";
+        if (text.length() <= maxLen) return text;
+        int half = maxLen / 2;
+        return text.substring(0, half) + "\n...(省略)...\n" + text.substring(text.length() - half);
+    }
+
+    private String buildBudgetInfo(GoalState gs) {
+        StringBuilder sb = new StringBuilder();
+
+        if (gs.getMaxTokens() > 0) {
+            long remainToken = gs.getMaxTokens() - gs.getConsumedTokens();
+            sb.append("\n已消耗 ").append(formatTokens(gs.getConsumedTokens()))
+              .append(" / ").append(formatTokens(gs.getMaxTokens()))
+              .append(" (").append(budgetPercent(gs.getConsumedTokens(), gs.getMaxTokens())).append("%)");
+            if (remainToken > 0 && gs.isBudgetCritical()) {
+                sb.append(" (剩余: ").append(formatTokens(remainToken)).append(")");
+            }
+            if (gs.isBudgetWarning()) {
+                sb.append("\n[预算提示] 已使用 ").append(budgetPercent(gs.getConsumedTokens(), gs.getMaxTokens()))
+                  .append("%，请评估是否需要调整策略或申请扩容");
+            }
+        } else if (gs.getConsumedTokens() > 0) {
+            sb.append("\n已消耗 Token: ").append(formatTokens(gs.getConsumedTokens()));
+        }
+
+        if (gs.getStartEpochMs() > 0) {
+            long elapsed = System.currentTimeMillis() - gs.getStartEpochMs();
+            if (elapsed > 1000) {
+                sb.append("\n耗时: ").append(formatDuration(elapsed));
+            }
+        }
+
+        return sb.toString();
+    }
+
+    private String budgetPercent(long value, long total) {
+        if (total <= 0) return "0";
+        return String.valueOf((int) (value * 100 / total));
+    }
+
+    private String formatTokens(long tokens) {
+        if (tokens < 1000) return tokens + " tokens";
+        if (tokens < 1_000_000) return String.format("%.1fk", tokens / 1000.0);
+        return String.format("%.1fM", tokens / 1_000_000.0);
+    }
+
+    private String formatDuration(long ms) {
+        if (ms < 60_000) return (ms / 1000) + "s";
+        if (ms < 3_600_000) return (ms / 60_000) + "m " + ((ms % 60_000) / 1000) + "s";
+        return (ms / 3_600_000) + "h " + ((ms % 3_600_000) / 60_000) + "m";
+    }
+
+    // ==================== 执行 ====================
 
     private LoopExecutionResult executeSingle(String sessionId, String effectivePrompt, String agentName) {
         for (TaskExecutor taskExecutor : taskExecutors) {
@@ -583,9 +930,6 @@ public class LoopScheduler {
 
     // ==================== 清理过期任务 ====================
 
-    /**
-     * 清理内存列表中的过期/已取消任务，并同步 IJobManager 和 JSON
-     */
     private void cleanExpired(String sessionId, List<LoopTask> tasks) {
         boolean changed = tasks.removeIf(t -> {
             if (t.isExpired() || t.isCancelled()) {
@@ -605,16 +949,10 @@ public class LoopScheduler {
 
     // ==================== JSON 持久化 ====================
 
-    /**
-     * 获取任务 JSON 文件路径
-     * 位于会话目录下：&lt;workspace&gt;/&lt;harnessSessions&gt;/&lt;sessionId&gt;/loop_tasks.json
-     */
     private Path getTasksFilePath(String sessionId) {
         return Paths.get(engine.getWorkspace(), engine.getHarnessSessions(), sessionId, TASKS_FILE);
     }
-    /**
-     * 将任务列表保存到 JSON 文件（原子写入：先写临时文件，再 rename）
-     */
+
     private void saveToFile(String sessionId, List<LoopTask> tasks) {
         try {
             Path filePath = getTasksFilePath(sessionId);
@@ -626,7 +964,6 @@ public class LoopScheduler {
             }
             String json = root.toJson();
 
-            // 原子写入：先写临时文件，再 rename
             Path tempFile = filePath.resolveSibling(filePath.getFileName() + ".tmp");
             try (Writer w = new OutputStreamWriter(Files.newOutputStream(tempFile,
                     StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING),
@@ -639,9 +976,6 @@ public class LoopScheduler {
         }
     }
 
-    /**
-     * 从 JSON 文件加载任务列表
-     */
     private List<LoopTask> loadFromFile(String sessionId) {
         try {
             Path filePath = getTasksFilePath(sessionId);
@@ -656,7 +990,6 @@ public class LoopScheduler {
             }
 
             LOG.info("Succeeded load loop tasks[{}]: {}项", sessionId, tasks.size());
-
             return tasks;
         } catch (Exception e) {
             LOG.error("Failed to load loop tasks[{}]: {}", sessionId, e.getMessage());
@@ -664,15 +997,11 @@ public class LoopScheduler {
         }
     }
 
-    /**
-     * 删除 JSON 文件
-     */
     private void deleteFile(String sessionId) {
         try {
             Path filePath = getTasksFilePath(sessionId);
             Files.deleteIfExists(filePath);
         } catch (Exception ignored) {
-            // ignored
         }
     }
 }

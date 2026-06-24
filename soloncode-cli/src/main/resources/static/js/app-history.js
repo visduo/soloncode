@@ -5,6 +5,9 @@
 /* ===== History ===== */
 
 /* 记住“当前活动会话”，刷新或下次打开时自动恢复 */
+/* 自定义 composing 标志，替代 e.isComposing（macOS 输入法组合态下 Enter 时序问题） */
+var composing = false;
+
 var ACTIVE_SESSION_KEY = 'soloncode-active-session';
 function rememberActiveSession(sessionId) {
     try { if (sessionId) localStorage.setItem(ACTIVE_SESSION_KEY, sessionId); } catch (e) {}
@@ -179,9 +182,9 @@ function deleteSession(idx) {
     var entry = chatHistory[idx];
     if (!entry) return;
 
-    if (!confirm('确定删除对话 "' + (entry.label || '未命名') + '"？')) return;
-
-    $.post('/web/chat/sessions/delete?sessionId=' + encodeURIComponent(entry.sessionId), function() {
+    layer.confirm('确定删除对话 "' + (entry.label || '未命名') + '"？', { title: '确认删除', btn: ['删除', '取消'], icon: 3, offset: '120px' }, function(index) {
+        layer.close(index);
+        $.post('/web/chat/sessions/delete?sessionId=' + encodeURIComponent(entry.sessionId), function() {
         /* Clean up session state after server confirms */
         var sess = sessionMap[entry.sessionId];
         if (sess) {
@@ -209,6 +212,7 @@ function deleteSession(idx) {
         } else {
             alert('删除对话失败，请重试');
         }
+    });
     });
 }
 
@@ -271,6 +275,7 @@ function loadMessages(sess) {
             realContainer.appendChild(fragment);
             // 统一高亮所有代码块（user 消息的代码块已被 appendUserMessage 标记收集，不会重复）
             if (typeof highlightCodeBlocks === 'function') highlightCodeBlocks(realContainer);
+            if (typeof processMermaidBlocks === 'function') processMermaidBlocks(realContainer);
             resetStreamState(sess);
             if (sess.sessionId === activeSessionId) scrollToBottom(true);
         } catch (e) {
@@ -416,7 +421,7 @@ function navigateCmdComplete(e, inputEl, completeEl) {
     var $completeEl = $(completeEl);
     if (!$completeEl.hasClass('show')) return false;
     // 输入法组合中，不处理命令补全的回车
-    if (e.isComposing) return false;
+    if (composing) return false;
 
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
@@ -525,17 +530,23 @@ $('#chatSkillBtn').on('click', function() {
 $(welcomeInput).on('input', handleInputForCommands);
 $(chatInput).on('input', handleInputForCommands);
 
+// composition 状态追踪（使用自定义标志解决 macOS 输入法选词 Enter 时序问题）
+$(welcomeInput).on('compositionstart', function() { composing = true; });
+$(welcomeInput).on('compositionend', function() { composing = false; });
+$(chatInput).on('compositionstart', function() { composing = true; });
+$(chatInput).on('compositionend', function() { composing = false; });
+
 // Keyboard navigation for command completion
 $(welcomeInput).on('keydown', function(e) {
     // 输入法正在组合中（如拼音选词），不触发发送
-    if (e.isComposing) return;
+    if (composing) return;
     var handled = navigateCmdComplete(e, welcomeInput, $welcomeCmdComplete[0]);
     if (handled) return;
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    if (e.key === 'Enter' && !e.shiftKey && !e.altKey) { e.preventDefault(); sendMessage(); }
 });
 $(chatInput).on('keydown', function(e) {
     // 输入法正在组合中（如拼音选词），不触发发送
-    if (e.isComposing) return;
+    if (composing) return;
     // 优先级1：命令补全导航
     var handled = navigateCmdComplete(e, chatInput, $chatCmdComplete[0]);
     if (handled) return;
@@ -548,7 +559,7 @@ $(chatInput).on('keydown', function(e) {
         showHistoryPanel();
         return;
     }
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    if (e.key === 'Enter' && !e.shiftKey && !e.altKey) { e.preventDefault(); sendMessage(); }
 });
 
 // Click on completion item
@@ -710,7 +721,7 @@ function locateUserMessage(msgIdx) {
  */
 function navigateHistory(e) {
     if (!$chatHistoryPanel.hasClass('show')) return false;
-    if (e.isComposing) return false;
+    if (composing) return false;
 
     var $items = $chatHistoryPanel.find('.history-panel-item');
 
@@ -857,8 +868,13 @@ function renderModelUI() {
             + (m.desc ? '<span class="model-item-desc">' + escapeHtml(m.desc) + '</span>' : '')
             + '</div>';
     }
-    $chatDropdown.html(html);
-    $welcomeDropdown.html(html);
+    $chatDropdown.find('.model-dropdown-items').html(html);
+    $welcomeDropdown.find('.model-dropdown-items').html(html);
+    // Reset search when models re-render
+    $chatDropdown.find('.model-search-input').val('');
+    $welcomeDropdown.find('.model-search-input').val('');
+    $chatDropdown.find('.model-dropdown-items').children().show();
+    $welcomeDropdown.find('.model-dropdown-items').children().show();
 }
 
 function selectModel(modelName) {
@@ -904,12 +920,36 @@ function initModelSelector(selectorId, currentId, dropdownId) {
 }
 
 // Close all dropdowns on outside click
-$(document).on('click', function() {
+$(document).on('click', function(e) {
+    // Don't close if clicking inside model search area
+    if ($(e.target).closest('.model-search-input, .model-search-wrap').length) return;
     $('.model-selector.open').removeClass('open');
 });
 
+// Model search filtering
+function initModelSearch(dropdownId) {
+    var $dropdown = $('#' + dropdownId);
+    var $searchInput = $dropdown.find('.model-search-input');
+    if (!$searchInput.length) return;
+
+    $searchInput.on('input', function() {
+        var query = $(this).val().toLowerCase().trim();
+        var $items = $dropdown.find('.model-dropdown-items').children();
+        if (query === '') {
+            $items.show();
+            return;
+        }
+        $items.each(function() {
+            var name = ($(this).attr('data-model') || '').toLowerCase();
+            $(this).toggle(name.indexOf(query) !== -1);
+        });
+    });
+}
+
 initModelSelector('chatModelSelector', 'chatModelCurrent', 'chatModelDropdown');
 initModelSelector('welcomeModelSelector', 'welcomeModelCurrent', 'welcomeModelDropdown');
+initModelSearch('chatModelDropdown');
+initModelSearch('welcomeModelDropdown');
 
 window.reloadModels = reloadModels;
 window.loadModels = loadModels;
