@@ -689,6 +689,42 @@
                                 </div>
                             </div>
                         </div>
+
+                            <!-- ============ 配置卡片: 日志 ============ -->
+                            <div class="general-card">
+                                <div class="general-card-header">
+                                    <div class="general-card-text">
+                                        <div class="general-card-title">日志</div>
+                                    </div>
+                                </div>
+                                <div class="general-card-body">
+                                    <div class="general-field-row">
+                                        <div class="general-field">
+                                            <label class="general-field-label">日志级别</label>
+                                            <select class="general-input" id="generalLogLevel">
+                                                <option value="">默认 (DEBUG)</option>
+                                                <option value="TRACE">TRACE</option>
+                                                <option value="DEBUG">DEBUG</option>
+                                                <option value="INFO">INFO</option>
+                                                <option value="WARN">WARN</option>
+                                                <option value="ERROR">ERROR</option>
+                                            </select>
+                                        </div>
+                                        <div class="general-field">
+                                            <label class="general-field-label">文件大小限制</label>
+                                            <input type="text" class="general-input" id="generalLogFileMaxSize" placeholder="10MB（默认）"/>
+                                        </div>
+                                        <div class="general-field">
+                                            <label class="general-field-label">存档周期（天）</label>
+                                            <input type="text" inputmode="numeric" class="general-input" id="generalLogMaxHistory" placeholder="30（默认）"/>
+                                        </div>
+                                    </div>
+                                    <div class="general-toggle-desc settings-gap-top-sm">
+                                        日志级别可运行时实时生效；文件大小限制和存档周期重启后生效
+                                    </div>
+                                </div>
+                            </div>
+
                         <div class="form-actions form-actions-end settings-actions-spacious">
                             <button class="btn-primary" id="generalSaveBtn">保存</button>
                         </div>

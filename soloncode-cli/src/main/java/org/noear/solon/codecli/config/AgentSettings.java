@@ -183,6 +183,24 @@ public class AgentSettings implements Serializable {
 
         //-----------------------------------------------------
 
+        // logging: 从 app.yml 的 solon.logging.appender.file.* 回填默认值
+        try {
+            org.noear.solon.core.Props cfg = org.noear.solon.Solon.cfg();
+            if (general.getLogLevel() == null) {
+                general.setLogLevel(cfg.get("solon.logging.appender.file.level", "DEBUG"));
+            }
+            if (general.getLogFileMaxSize() == null) {
+                general.setLogFileMaxSize(cfg.get("solon.logging.appender.file.maxSize", "10MB"));
+            }
+            if (general.getLogMaxHistory() == null) {
+                general.setLogMaxHistory(cfg.getInt("solon.logging.appender.file.maxHistory", 30));
+            }
+        } catch (Exception ignored) {
+            // 非 Solon 环境时保持 null
+        }
+
+        //-----------------------------------------------------
+
         if(permission.getTools().size() == 0) {
             permission.getTools().addAll(props.getTools());
 

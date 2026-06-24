@@ -61,6 +61,8 @@ import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import ch.qos.logback.classic.Level;
+
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
@@ -225,6 +227,20 @@ public class WebSettingsController {
             engine.getMcpGatewayTalent().setEnabled(settings.getGeneral().getMcpEnabled());
             engine.getOpenApiGatewayTalent().setEnabled(settings.getGeneral().getOpenApiEnabled());
             engine.getLspTalent().setEnabled(settings.getGeneral().getLspEnabled());
+
+            // 动态应用日志级别
+            if (tmp.hasKey("logLevel") && !tmp.get("logLevel").isNull()) {
+                String logLevel = tmp.get("logLevel").getString();
+                if (logLevel != null && !logLevel.isEmpty()) {
+                    ch.qos.logback.classic.Level level = ch.qos.logback.classic.Level.toLevel(logLevel, null);
+                    if (level != null) {
+                        ch.qos.logback.classic.Logger rootLogger =
+                                (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(
+                                        org.slf4j.Logger.ROOT_LOGGER_NAME);
+                        rootLogger.setLevel(level);
+                    }
+                }
+            }
         }
 
         saveSettings();

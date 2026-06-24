@@ -68,6 +68,11 @@
                 // Web 访问认证
                 $('#generalWebAuthUser').val(d.webAuthUser || '');
                 $('#generalWebAuthPass').val(d.webAuthPass || '');
+
+                // 日志
+                $('#generalLogLevel').val(d.logLevel || '');
+                $('#generalLogFileMaxSize').val(d.logFileMaxSize || '');
+                $('#generalLogMaxHistory').val(d.logMaxHistory != null ? d.logMaxHistory : '');
             }
         }).fail(function () { console.error('[Settings] Failed to load general settings'); });
 
@@ -107,7 +112,10 @@
             lspEnabled: $('#generalLspEnabled').is(':checked'),
             cliPrintSimplified: $('#generalCliPrintSimplified').is(':checked'),
             webAuthUser: $('#generalWebAuthUser').val().trim() || null,
-            webAuthPass: $('#generalWebAuthPass').val().trim() || null
+            webAuthPass: $('#generalWebAuthPass').val().trim() || null,
+            logLevel: $('#generalLogLevel').val().trim() || null,
+            logFileMaxSize: $('#generalLogFileMaxSize').val().trim() || null,
+            logMaxHistory: parseNumStr($('#generalLogMaxHistory').val().trim())
         };
 
         $generalSaveBtn.prop('disabled', true);
