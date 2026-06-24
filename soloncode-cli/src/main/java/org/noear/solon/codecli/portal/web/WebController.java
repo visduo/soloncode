@@ -246,7 +246,7 @@ public class WebController {
     @Post
     @Mapping("/web/chat/sessions/delete")
     public Result deleteSession(@Param("sessionId") String sessionId) throws Exception {
-        if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure();
         }
 
@@ -272,7 +272,7 @@ public class WebController {
     @Post
     @Mapping("/web/chat/sessions/rename")
     public Result renameSession(@Param("sessionId") String sessionId, @Param("label") String label) throws Exception {
-        if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure();
         }
         if (label == null || label.trim().isEmpty()) {
@@ -421,7 +421,7 @@ public class WebController {
     @Post
     @Mapping("/web/chat/interrupt")
     public Result interruptSession(@Param("sessionId") String sessionId) {
-        if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure();
         }
 
@@ -443,7 +443,7 @@ public class WebController {
     @Post
     @Mapping("/web/chat/rewind")
     public Result rewindSession(@Param("sessionId") String sessionId, @Param(value = "count", required = false) Integer count) throws Exception {
-        if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure();
         }
         if (count == null || count <= 0) {
@@ -568,7 +568,7 @@ public class WebController {
             }
             String sessionCwd = ctx.header("X-Session-Cwd");
 
-            if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+            if (!isValidSessionId(sessionId)) {
                 ctx.status(400);
                 ctx.output("Invalid Session ID");
                 return null;
@@ -694,7 +694,7 @@ public class WebController {
         if (sessionId == null || sessionId.isEmpty()) {
             return Result.failure(400, "sessionId is required");
         }
-        if (sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure(400, "Invalid sessionId");
         }
 
@@ -750,7 +750,7 @@ public class WebController {
     @Get
     @Mapping("/web/chat/loop/list")
     public Result<List<Map>> loopList(@Param("sessionId") String sessionId) {
-        if (sessionId == null || sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure(400, "Invalid sessionId");
         }
 
@@ -813,7 +813,7 @@ public class WebController {
     @Mapping("/web/chat/loop/get")
     public Result<Map> loopGet(@Param("sessionId") String sessionId,
                                @Param("taskId") String taskId) {
-        if (sessionId == null || sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure(400, "Invalid sessionId");
         }
         if (taskId == null || taskId.trim().isEmpty()) {
@@ -842,7 +842,7 @@ public class WebController {
                            @Param(value = "runNow", required = false) Boolean runNow,
                           @Param(value = "maxTokens", required = false) Long maxTokens,
                           @Param(value = "maxDurationMs", required = false) Long maxDurationMs) {
-        if (sessionId == null || sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure(400, "Invalid sessionId");
         }
         if (prompt == null || prompt.trim().isEmpty()) {
@@ -892,7 +892,7 @@ public class WebController {
                              @Param(value = "runNow", required = false) Boolean runNow,
                              @Param(value = "maxTokens", required = false) Long maxTokens,
                              @Param(value = "maxDurationMs", required = false) Long maxDurationMs) {
-        if (sessionId == null || sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure(400, "Invalid sessionId");
         }
         if (taskId == null || taskId.isEmpty()) {
@@ -937,7 +937,7 @@ public class WebController {
     @Mapping("/web/chat/loop/goal-pause")
     public Result loopGoalPause(@Param("sessionId") String sessionId,
                                 @Param("taskId") String taskId) {
-        if (sessionId == null || sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure(400, "Invalid sessionId");
         }
         if (taskId == null || taskId.isEmpty()) {
@@ -968,7 +968,7 @@ public class WebController {
     @Mapping("/web/chat/loop/goal-resume")
     public Result loopGoalResume(@Param("sessionId") String sessionId,
                                  @Param("taskId") String taskId) {
-        if (sessionId == null || sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure(400, "Invalid sessionId");
         }
         if (taskId == null || taskId.isEmpty()) {
@@ -1000,7 +1000,7 @@ public class WebController {
     @Mapping("/web/chat/loop/goal-clear")
     public Result loopGoalClear(@Param("sessionId") String sessionId,
                                 @Param("taskId") String taskId) {
-        if (sessionId == null || sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure(400, "Invalid sessionId");
         }
         if (taskId == null || taskId.isEmpty()) {
@@ -1026,7 +1026,7 @@ public class WebController {
     @Mapping("/web/chat/loop/goal-status")
     public Result<Map> loopGoalStatus(@Param("sessionId") String sessionId,
                                       @Param("taskId") String taskId) {
-        if (sessionId == null || sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure(400, "Invalid sessionId");
         }
         if (taskId == null || taskId.isEmpty()) {
@@ -1062,7 +1062,7 @@ public class WebController {
     @Post
     @Mapping("/web/chat/loop/remove")
     public Result loopRemove(@Param("sessionId") String sessionId, @Param("taskId") String taskId) {
-        if (sessionId == null || sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure(400, "Invalid sessionId");
         }
         if (taskId == null || taskId.isEmpty()) {
@@ -1084,7 +1084,7 @@ public class WebController {
     @Post
     @Mapping("/web/chat/loop/toggle")
     public Result loopToggle(@Param("sessionId") String sessionId, @Param("taskId") String taskId) {
-        if (sessionId == null || sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure(400, "Invalid sessionId");
         }
         if (taskId == null || taskId.isEmpty()) {
@@ -1101,7 +1101,7 @@ public class WebController {
     @Post
     @Mapping("/web/chat/loop/trigger")
     public Result loopTrigger(@Param("sessionId") String sessionId, @Param("taskId") String taskId) {
-        if (sessionId == null || sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure(400, "Invalid sessionId");
         }
         if (taskId == null || taskId.isEmpty()) {
@@ -1117,14 +1117,39 @@ public class WebController {
     // ==================== 工具方法 ====================
 
     /**
+     * 校验 web 会话 ID 格式（白名单方式，防止路径遍历攻击）
+     *
+     * @param sessionId 会话 ID
+     * @return true 表示合法
+     */
+    private static boolean isValidSessionId(String sessionId) {
+        if (sessionId == null || sessionId.isEmpty()) {
+            return false;
+        }
+        // Web session IDs 以 "web" 开头，只允许字母、数字、下划线、连字符和点
+        // 兼容无连字符的默认回退值 "web"（当请求未携带 X-Session-Id 时使用）
+        return sessionId.matches("^web(-[a-zA-Z0-9._-]+)?$");
+    }
+
+    /**
      * 递归删除目录及其所有子文件和子目录。
      *
      * @param dir 待删除的目录
      */
     private void deleteDirectory(File dir) {
+        // 入口处检测目录本身是否为符号链接，防止跟随链接误删外部文件
+        if (Files.isSymbolicLink(dir.toPath())) {
+            dir.delete(); // 仅删除符号链接本身，不跟随
+            return;
+        }
         File[] files = dir.listFiles();
         if (files != null) {
             for (File f : files) {
+                // 跳过符号链接，防止误删工作区外部的文件
+                if (Files.isSymbolicLink(f.toPath())) {
+                    f.delete(); // 仅删除符号链接本身，不跟随
+                    continue;
+                }
                 if (f.isDirectory()) {
                     deleteDirectory(f);
                 } else {
@@ -1171,7 +1196,7 @@ public class WebController {
     @Get
     @Mapping("/web/chat/todos")
     public Result<Map> todos(@Param("sessionId") String sessionId) {
-        if (sessionId == null || sessionId.contains("..") || sessionId.contains("/") || sessionId.contains("\\")) {
+        if (!isValidSessionId(sessionId)) {
             return Result.failure(400, "Invalid sessionId");
         }
 

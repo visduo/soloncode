@@ -120,7 +120,7 @@ public class FeishuClient {
 
             ONode content = new ONode();
             content.set("text", text);
-            body.set("content", content.toJson());
+            body.set("content", content);
 
             String resp = httpPost(BASE_URL + "/im/v1/messages?receive_id_type=" + receiveIdType, body.toJson(), accessToken);
             if (resp == null) return null;
@@ -167,7 +167,7 @@ public class FeishuClient {
             lineArray.add(textNode);
             contentArray.add(lineArray);
 
-            body.set("content", postContent.toJson());
+            body.set("content", postContent);
 
             String resp = httpPost(BASE_URL + "/im/v1/messages?receive_id_type=" + receiveIdType, body.toJson(), accessToken);
             if (resp == null) return null;

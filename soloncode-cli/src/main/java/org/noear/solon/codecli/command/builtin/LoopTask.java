@@ -179,8 +179,13 @@ public class LoopTask {
         );
         task.running = false;
         // ★ 保留原始 GoalState 运行时状态（consumedTokens、status、startEpochMs 等）
+        //    同时更新 condition 和 maxTokens 以反映新 prompt 和预算
         if (this.goalState != null) {
             task.goalState = this.goalState;
+            task.goalState.setCondition(task.getPrompt());
+            if (task.getMaxTokens() != null) {
+                task.goalState.setMaxTokens(task.getMaxTokens());
+            }
         }
         return task;
     }

@@ -145,6 +145,10 @@ public class FileService {
         if (!target.startsWith(workspacePath)) {
             return Result.failure(403, "Access denied");
         }
+        // 检测符号链接，防止越权读取工作区外部的文件
+        if (Files.isSymbolicLink(target)) {
+            return Result.failure(403, "Access denied: symlink");
+        }
         if (!target.toFile().exists() || target.toFile().isDirectory()) {
             return Result.failure(404, "File not found");
         }

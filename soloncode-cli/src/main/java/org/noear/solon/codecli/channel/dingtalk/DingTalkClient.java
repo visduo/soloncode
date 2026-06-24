@@ -134,13 +134,14 @@ public class DingTalkClient {
             }
 
             ONode root = ONode.ofJson(resp);
-            // 检查是否有错误码
-            if (root.hasKey("code")) {
-                String code = root.get("code").getString();
-                if (code != null && !"0".equals(code) && !"SUCCESS".equalsIgnoreCase(code)) {
-                    LOG.warn("[DingTalk] sendSingleMessage failed: {}", resp);
-                    return false;
-                }
+            // 检查是否有错误码（钉钉可能在 "code" 或 "errcode" 字段中返回错误）
+            String errorCode = root.hasKey("code") ? root.get("code").getString() : null;
+            if (errorCode == null && root.hasKey("errcode")) {
+                errorCode = root.get("errcode").getString();
+            }
+            if (errorCode != null && !"0".equals(errorCode) && !"SUCCESS".equalsIgnoreCase(errorCode)) {
+                LOG.warn("[DingTalk] sendSingleMessage failed: {}", resp);
+                return false;
             }
 
             return true;
@@ -181,12 +182,14 @@ public class DingTalkClient {
             }
 
             ONode root = ONode.ofJson(resp);
-            if (root.hasKey("code")) {
-                String code = root.get("code").getString();
-                if (code != null && !"0".equals(code) && !"SUCCESS".equalsIgnoreCase(code)) {
-                    LOG.warn("[DingTalk] sendGroupMessage failed: {}", resp);
-                    return false;
-                }
+            // 检查是否有错误码（钉钉可能在 "code" 或 "errcode" 字段中返回错误）
+            String errorCode = root.hasKey("code") ? root.get("code").getString() : null;
+            if (errorCode == null && root.hasKey("errcode")) {
+                errorCode = root.get("errcode").getString();
+            }
+            if (errorCode != null && !"0".equals(errorCode) && !"SUCCESS".equalsIgnoreCase(errorCode)) {
+                LOG.warn("[DingTalk] sendGroupMessage failed: {}", resp);
+                return false;
             }
 
             return true;

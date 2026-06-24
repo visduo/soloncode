@@ -66,6 +66,7 @@ import ch.qos.logback.classic.Level;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
+import java.net.*;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -1187,7 +1188,14 @@ public class WebSettingsController {
 
         ApiSourceDo source = new ApiSourceDo();
         source.setApiBaseUrl(apiBaseUrl);
-        source.setDocUrl(root.get("docUrl").getString());
+        String docUrl = root.get("docUrl").getString();
+        if (Assert.isNotEmpty(docUrl)) {
+            String ssrfError = validateExternalUrl(docUrl);
+            if (ssrfError != null) {
+                return Result.failure("文档地址 " + ssrfError);
+            }
+            source.setDocUrl(docUrl);
+        }
         source.setScope(scope);
         if (root.hasKey("headers")) {
             Map<String, String> headersMap = new LinkedHashMap<>();
@@ -1248,7 +1256,15 @@ public class WebSettingsController {
         }
         ApiSourceDo source = new ApiSourceDo();
         source.setApiBaseUrl(root.hasKey("apiBaseUrl") ? root.get("apiBaseUrl").getString() : existing.getApiBaseUrl());
-        source.setDocUrl(root.hasKey("docUrl") ? root.get("docUrl").getString() : existing.getDocUrl());
+        // 文档地址 SSRF 校验
+        String docUrlVal = root.hasKey("docUrl") ? root.get("docUrl").getString() : existing.getDocUrl();
+        if (Assert.isNotEmpty(docUrlVal)) {
+            String ssrfError = validateExternalUrl(docUrlVal);
+            if (ssrfError != null) {
+                return Result.failure("文档地址 " + ssrfError);
+            }
+            source.setDocUrl(docUrlVal);
+        }
         source.setScope(scope);
         if (root.hasKey("headers")) {
             Map<String, String> headersMap = new LinkedHashMap<>();
@@ -1339,6 +1355,12 @@ public class WebSettingsController {
                 return Result.failure("API 文档地址不能为空");
             }
 
+            // SSRF 防护：校验 URL 合法性
+            String ssrfError = validateExternalUrl(sourceDo.getDocUrl());
+            if (ssrfError != null) {
+                return Result.failure(ssrfError);
+            }
+
             // 构建HTTP连接测试
             java.net.URL url = new java.net.URL(sourceDo.getDocUrl());
             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
@@ -1370,6 +1392,57 @@ public class WebSettingsController {
             return Result.failure("连接失败: " + e.getMessage());
         } catch (Exception e) {
             return Result.failure("检测失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * SSRF 防护：校验外部 URL 是否合法，防止访问内部网络
+     *
+     * @param urlStr 待校验的 URL 字符串
+     * @return null 表示合法，非 null 为错误描述
+     */
+    private String validateExternalUrl(String urlStr) {
+        if (Assert.isEmpty(urlStr)) {
+            return "URL 不能为空";
+        }
+
+        try {
+            URL url = new URL(urlStr);
+            String protocol = url.getProtocol();
+            if (!"http".equals(protocol) && !"https".equals(protocol)) {
+                return "仅支持 http/https 协议";
+            }
+
+            String host = url.getHost();
+            if (host == null || host.isEmpty()) {
+                return "URL 缺少主机名";
+            }
+
+            // 拒绝内部主机名
+            String hostLower = host.toLowerCase();
+            if (hostLower.equals("localhost") ||
+                    hostLower.equals("127.0.0.1") ||
+                    hostLower.equals("::1") ||
+                    hostLower.equals("[::1]") ||
+                    hostLower.endsWith(".local") ||
+                    hostLower.endsWith(".localhost")) {
+                return "不允许访问内部网络地址";
+            }
+
+            // 尝试解析 IP 并拒绝私有地址段
+            InetAddress inet = InetAddress.getByName(host);
+            if (inet.isLoopbackAddress() ||
+                    inet.isSiteLocalAddress() ||
+                    inet.isLinkLocalAddress()) {
+                return "不允许访问内部网络地址";
+            }
+
+            return null;
+        } catch (MalformedURLException e) {
+            return "URL 格式错误: " + e.getMessage();
+        } catch (UnknownHostException e) {
+            // 无法解析的主机名不阻止（可能临时不可达），直接放行
+            return null;
         }
     }
 
@@ -2527,6 +2600,11 @@ public class WebSettingsController {
      * 递归删除目录
      */
     private void deleteRecursively(Path path) throws Exception {
+        // 跳过符号链接，只删除链接本身不跟随
+        if (Files.isSymbolicLink(path)) {
+            Files.delete(path);
+            return;
+        }
         if (Files.isDirectory(path)) {
             try (DirectoryStream<Path> stream = Files.newDirectoryStream(path)) {
                 for (Path child : stream) deleteRecursively(child);

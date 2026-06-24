@@ -128,6 +128,7 @@ public class GoalState {
 
     public String getId() { return id; }
     public String getCondition() { return condition; }
+    public void setCondition(String condition) { this.condition = condition; }
     public Status getStatus() { return status; }
     public void setStatus(Status status) { this.status = status; }
     public long getConsumedTokens() { return consumedTokens; }
