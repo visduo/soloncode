@@ -21,6 +21,9 @@ import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * 钉钉 API 客户端
  *
@@ -42,45 +45,60 @@ public class DingTalkClient {
     private static final String NEW_API_BASE = "https://api.dingtalk.com";
 
     /**
-     * 缓存的 access_token
+     * 按 appKey 隔离缓存的 access_token
      */
-    private static String cachedToken;
-    /**
-     * token 过期时间戳（毫秒）
-     */
-    private static long tokenExpireAt;
+    private static final Map<String, TokenEntry> tokenCache = new ConcurrentHashMap<>();
+
+    private static class TokenEntry {
+        final String token;
+        final long expireAt;
+
+        TokenEntry(String token, long expireAt) {
+            this.token = token;
+            this.expireAt = expireAt;
+        }
+    }
 
     /**
-     * 获取 access_token（自动缓存和刷新）
+     * 获取 access_token（自动缓存和刷新，按 appKey 隔离）
      *
      * @param appKey    钉钉应用 AppKey（或 appKey）
      * @param appSecret 钉钉应用 AppSecret
      * @return access_token 或 null
      */
-    public static synchronized String getAccessToken(String appKey, String appSecret) {
+    public static String getAccessToken(String appKey, String appSecret) {
         long now = System.currentTimeMillis();
-        if (cachedToken != null && tokenExpireAt > now + 300_000) {
-            return cachedToken;
+        TokenEntry entry = tokenCache.get(appKey);
+        if (entry != null && entry.expireAt > now + 300_000) {
+            return entry.token;
         }
 
-        try {
-            ONode body = new ONode();
-            body.set("appKey", appKey);
-            body.set("appSecret", appSecret);
+        synchronized (DingTalkClient.class) {
+            // double-check
+            entry = tokenCache.get(appKey);
+            if (entry != null && entry.expireAt > now + 300_000) {
+                return entry.token;
+            }
 
-            String resp = httpPost(NEW_API_BASE + "/v1.0/oauth2/accessToken", body.toJson(), null);
-            if (resp == null) return null;
+            try {
+                ONode body = new ONode();
+                body.set("appKey", appKey);
+                body.set("appSecret", appSecret);
 
-            ONode root = ONode.ofJson(resp);
-            cachedToken = root.get("accessToken").getString();
-            int expire = root.get("expireIn").getInt();
-            tokenExpireAt = now + expire * 1000L;
+                String resp = httpPost(NEW_API_BASE + "/v1.0/oauth2/accessToken", body.toJson(), null);
+                if (resp == null) return null;
 
-            LOG.debug("[DingTalk] Token refreshed, expires in {}s", expire);
-            return cachedToken;
-        } catch (Exception e) {
-            LOG.error("[DingTalk] getAccessToken error: {}", e.getMessage());
-            return null;
+                ONode root = ONode.ofJson(resp);
+                String token = root.get("accessToken").getString();
+                int expire = root.get("expireIn").getInt();
+                tokenCache.put(appKey, new TokenEntry(token, now + expire * 1000L));
+
+                LOG.debug("[DingTalk] Token refreshed for app '{}', expires in {}s", appKey, expire);
+                return token;
+            } catch (Exception e) {
+                LOG.error("[DingTalk] getAccessToken error: {}", e.getMessage());
+                return null;
+            }
         }
     }
 

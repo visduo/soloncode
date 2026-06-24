@@ -21,6 +21,9 @@ import org.noear.solon.net.http.HttpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * 飞书 API 客户端
  *
@@ -35,52 +38,67 @@ public class FeishuClient {
     private static final String BASE_URL = "https://open.feishu.cn/open-apis";
 
     /**
-     * 缓存的 tenant_access_token
+     * 按 appId 隔离缓存的 tenant_access_token
      */
-    private static String cachedToken;
-    /**
-     * token 过期时间戳（毫秒）
-     */
-    private static long tokenExpireAt;
+    private static final Map<String, TokenEntry> tokenCache = new ConcurrentHashMap<>();
+
+    private static class TokenEntry {
+        final String token;
+        final long expireAt;
+
+        TokenEntry(String token, long expireAt) {
+            this.token = token;
+            this.expireAt = expireAt;
+        }
+    }
 
     /**
-     * 获取 tenant_access_token（自动缓存和刷新）
+     * 获取 tenant_access_token（自动缓存和刷新，按 appId 隔离）
      *
      * @param appId     飞书应用 app_id
      * @param appSecret 飞书应用 app_secret
      * @return tenant_access_token 或 null
      */
-    public static synchronized String getTenantAccessToken(String appId, String appSecret) {
+    public static String getTenantAccessToken(String appId, String appSecret) {
         long now = System.currentTimeMillis();
         // 提前 5 分钟刷新
-        if (cachedToken != null && tokenExpireAt > now + 300_000) {
-            return cachedToken;
+        TokenEntry entry = tokenCache.get(appId);
+        if (entry != null && entry.expireAt > now + 300_000) {
+            return entry.token;
         }
 
-        try {
-            ONode body = new ONode();
-            body.set("app_id", appId);
-            body.set("app_secret", appSecret);
-
-            String resp = httpPost(BASE_URL + "/auth/v3/tenant_access_token/internal", body.toJson(), null);
-            if (resp == null) return null;
-
-            ONode root = ONode.ofJson(resp);
-            int code = root.get("code").getInt();
-            if (code != 0) {
-                LOG.warn("[Feishu] getTenantAccessToken failed: code={}, msg={}", code, root.get("msg").getString());
-                return null;
+        synchronized (FeishuClient.class) {
+            // double-check
+            entry = tokenCache.get(appId);
+            if (entry != null && entry.expireAt > now + 300_000) {
+                return entry.token;
             }
 
-            cachedToken = root.get("tenant_access_token").getString();
-            int expire = root.get("expire").getInt();
-            tokenExpireAt = now + expire * 1000L;
+            try {
+                ONode body = new ONode();
+                body.set("app_id", appId);
+                body.set("app_secret", appSecret);
 
-            LOG.debug("[Feishu] Token refreshed, expires in {}s", expire);
-            return cachedToken;
-        } catch (Exception e) {
-            LOG.error("[Feishu] getTenantAccessToken error: {}", e.getMessage());
-            return null;
+                String resp = httpPost(BASE_URL + "/auth/v3/tenant_access_token/internal", body.toJson(), null);
+                if (resp == null) return null;
+
+                ONode root = ONode.ofJson(resp);
+                int code = root.get("code").getInt();
+                if (code != 0) {
+                    LOG.warn("[Feishu] getTenantAccessToken failed: code={}, msg={}", code, root.get("msg").getString());
+                    return null;
+                }
+
+                String token = root.get("tenant_access_token").getString();
+                int expire = root.get("expire").getInt();
+                tokenCache.put(appId, new TokenEntry(token, now + expire * 1000L));
+
+                LOG.debug("[Feishu] Token refreshed for app '{}', expires in {}s", appId, expire);
+                return token;
+            } catch (Exception e) {
+                LOG.error("[Feishu] getTenantAccessToken error: {}", e.getMessage());
+                return null;
+            }
         }
     }
 

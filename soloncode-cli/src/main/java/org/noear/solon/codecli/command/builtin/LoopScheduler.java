@@ -140,7 +140,7 @@ public class LoopScheduler {
 
     // ==================== ShutdownHook ====================
 
-    private void installInterruptHandler() {
+    private synchronized void installInterruptHandler() {
         if (interruptHandlerInstalled) {
             return;
         }

@@ -21,7 +21,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
-import java.nio.file.Path;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 
@@ -208,6 +208,8 @@ public class FileService {
         List<Map> result = new ArrayList<>();
         for (File f : files) {
             if (f.getName().startsWith(".") || EXCLUDED_DIRS.contains(f.getName())) continue;
+            // 跳过符号链接，防止遍历到工作区外部的文件
+            if (Files.isSymbolicLink(f.toPath())) continue;
 
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("name", f.getName());
@@ -242,6 +244,8 @@ public class FileService {
 
         for (File f : files) {
             if (f.getName().startsWith(".") || (f.isDirectory() && EXCLUDED_DIRS.contains(f.getName()))) continue;
+            // 跳过符号链接，防止遍历到工作区外部的文件
+            if (Files.isSymbolicLink(f.toPath())) continue;
 
             String relativePath = workspacePath.relativize(f.toPath().toAbsolutePath().normalize()).toString().replace('\\', '/');
 

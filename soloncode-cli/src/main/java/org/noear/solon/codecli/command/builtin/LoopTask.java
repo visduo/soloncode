@@ -178,6 +178,10 @@ public class LoopTask {
                 newType
         );
         task.running = false;
+        // ★ 保留原始 GoalState 运行时状态（consumedTokens、status、startEpochMs 等）
+        if (this.goalState != null) {
+            task.goalState = this.goalState;
+        }
         return task;
     }
 
