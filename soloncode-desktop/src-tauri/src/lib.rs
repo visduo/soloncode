@@ -832,6 +832,18 @@ enum BackendLaunchMethod {
 
 /// 检测启动方式：优先 soloncode 命令，回退到 JAR
 fn detect_launch_method() -> BackendLaunchMethod {
+    if cfg!(windows) {
+        if let Ok(home) = std::env::var("USERPROFILE") {
+            let bin_dir = Path::new(&home).join(".soloncode").join("bin");
+            for name in ["soloncode.ps1", "soloncode.bat", "soloncode.cmd", "soloncode.exe"] {
+                let candidate = bin_dir.join(name);
+                if candidate.exists() {
+                    app_log(&format!("[soloncode] Found {}: {:?}", name, candidate));
+                    return BackendLaunchMethod::Command { cmd: candidate.to_string_lossy().to_string() };
+                }
+            }
+        }
+    }
     // 1. 优先检查 soloncode 命令是否在 PATH 中
     let check = Command::new(if cfg!(windows) { "where" } else { "which" })
         .arg("soloncode")
@@ -840,7 +852,20 @@ fn detect_launch_method() -> BackendLaunchMethod {
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() {
-                let cmd = path.lines().next().unwrap_or(&path).to_string();
+                let cmd = path.lines()
+                    .find(|line| {
+                        if !cfg!(windows) {
+                            return true;
+                        }
+                        let ext = Path::new(line)
+                            .extension()
+                            .and_then(|v| v.to_str())
+                            .unwrap_or("")
+                            .to_ascii_lowercase();
+                        matches!(ext.as_str(), "ps1" | "bat" | "cmd" | "exe")
+                    })
+                    .unwrap_or_else(|| path.lines().next().unwrap_or(&path))
+                    .to_string();
                 app_log(&format!("[soloncode] Found soloncode command: {}", cmd));
                 return BackendLaunchMethod::Command { cmd };
             }
@@ -919,6 +944,16 @@ fn is_soloncode_backend(port: u16) -> bool {
         && resp.contains("\"version\"")
 }
 
+/// 检测指定端口是否已经有可复用的 SolonCode 后端。
+#[tauri::command]
+fn detect_backend(port: u16) -> Result<bool, String> {
+    let detected = is_soloncode_backend(port);
+    if detected {
+        app_log(&format!("[soloncode] Detected existing soloncode backend on port {}", port));
+    }
+    Ok(detected)
+}
+
 /// 启动后端 CLI 进程（如果已在运行则复用）
 #[tauri::command]
 fn start_backend(workspace_path: &str, port: u16) -> Result<u32, String> {
@@ -995,9 +1030,24 @@ fn start_backend(workspace_path: &str, port: u16) -> Result<u32, String> {
         BackendLaunchMethod::Command { cmd: cmd_path } => {
             app_log(&format!("[soloncode] Starting: {} serve {}", cmd_path, port_str));
             if cfg!(windows) {
-                let mut c = Command::new("powershell");
-                c.args(["-ExecutionPolicy", "Bypass", "-File", cmd_path, "serve", &port_str]);
-                c
+                let ext = Path::new(cmd_path)
+                    .extension()
+                    .and_then(|v| v.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                if ext == "ps1" {
+                    let mut c = Command::new("powershell");
+                    c.args(["-ExecutionPolicy", "Bypass", "-File", cmd_path, "serve", &port_str]);
+                    c
+                } else if ext == "bat" || ext == "cmd" {
+                    let mut c = Command::new("cmd");
+                    c.args(["/C", cmd_path, "serve", &port_str]);
+                    c
+                } else {
+                    let mut c = Command::new(cmd_path);
+                    c.args(["serve", &port_str]);
+                    c
+                }
             } else {
                 let mut c = Command::new(cmd_path);
                 c.args(["serve", &port_str]);
@@ -1519,6 +1569,7 @@ pub fn run() {
             git_diff_staged,
             copy_item,
             move_item,
+            detect_backend,
             start_backend,
             stop_backend,
             backend_status,

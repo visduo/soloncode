@@ -240,7 +240,7 @@ function groupConsecutiveActions(items: ContentItem[]): GroupedItem[] {
   let i = 0;
   while (i < items.length) {
     const item = items[i];
-    if (item.type === 'ACTION' && item.toolName) {
+    if (item.type === 'ACTION' && item.toolName && item.toolName.toLowerCase() !== 'read') {
       const toolName = item.toolName;
       const group: ContentItem[] = [item];
       let j = i + 1;
@@ -263,14 +263,14 @@ function groupConsecutiveActions(items: ContentItem[]): GroupedItem[] {
 }
 
 // 内容项渲染组件 — memo 化，避免消息不变时重渲染
-const ContentItemRenderer = memo(function ContentItemRenderer({ item, theme, onHitlAction, onFileSelect }: { item: ContentItem; theme?: Theme; onHitlAction?: (action: 'approve' | 'reject') => void; onFileSelect?: (path: string) => void }) {
+const ContentItemRenderer = memo(function ContentItemRenderer({ item, theme, onHitlAction, onFileSelect, autoExpanded }: { item: ContentItem; theme?: Theme; onHitlAction?: (action: 'approve' | 'reject') => void; onFileSelect?: (path: string) => void; autoExpanded?: boolean }) {
   if (item.type === 'THINK') {
     return <ThinkBlock content={item.text} theme={theme} />;
   }
 
   if (item.type === 'ACTION') {
     return (
-      <ActionBlock text={item.text || ''} toolName={item.toolName} args={item.args} theme={theme} onFileClick={onFileSelect} />
+      <ActionBlock text={item.text || ''} toolName={item.toolName} args={item.args} theme={theme} onFileClick={onFileSelect} autoExpanded={autoExpanded} />
     );
   }
 
@@ -347,7 +347,7 @@ const MessageMetadata = memo(function MessageMetadata({ metadata }: { metadata: 
 });
 
 // 单条消息组件 — memo 化
-const MessageRow = memo(function MessageRow({ message, theme, onDelete, onHitlAction, onFileSelect }: { message: Message; theme?: Theme; onDelete?: (id: number) => void; onHitlAction?: (action: 'approve' | 'reject') => void; onFileSelect?: (path: string) => void }) {
+const MessageRow = memo(function MessageRow({ message, theme, onDelete, onHitlAction, onFileSelect, isStreaming }: { message: Message; theme?: Theme; onDelete?: (id: number) => void; onHitlAction?: (action: 'approve' | 'reject') => void; onFileSelect?: (path: string) => void; isStreaming?: boolean }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
@@ -362,6 +362,13 @@ const MessageRow = memo(function MessageRow({ message, theme, onDelete, onHitlAc
   }, [message.contents]);
 
   const grouped = useMemo(() => groupConsecutiveActions(message.contents), [message.contents]);
+  const activeActionIndex = useMemo(() => {
+    if (!isStreaming) return -1;
+    const lastIndex = grouped.length - 1;
+    const last = grouped[lastIndex];
+    if (!last) return -1;
+    return last.kind === 'group' || last.item.type === 'ACTION' ? lastIndex : -1;
+  }, [grouped, isStreaming]);
 
   return (
     <div className={`message ${message.role.toLowerCase()}`}>
@@ -369,9 +376,9 @@ const MessageRow = memo(function MessageRow({ message, theme, onDelete, onHitlAc
         <div className="message-text">
           {grouped.map((g, index) =>
             g.kind === 'group' ? (
-              <ActionGroupBlock key={index} toolName={g.toolName} items={g.items} theme={theme} onFileClick={onFileSelect} />
+              <ActionGroupBlock key={index} toolName={g.toolName} items={g.items} theme={theme} onFileClick={onFileSelect} autoExpanded={index === activeActionIndex} />
             ) : (
-              <ContentItemRenderer key={index} item={g.item} theme={theme} onHitlAction={onHitlAction} onFileSelect={onFileSelect} />
+              <ContentItemRenderer key={index} item={g.item} theme={theme} onHitlAction={onHitlAction} onFileSelect={onFileSelect} autoExpanded={index === activeActionIndex} />
             )
           )}
         </div>
@@ -404,10 +411,11 @@ export const ChatMessages = forwardRef<ChatMessagesRef, ChatMessagesProps>(
 
     const itemContent = useCallback((index: number) => {
       const message = messages[index];
+      const isStreamingMessage = isLoading && index === messages.length - 1 && message?.role === 'ASSISTANT';
       return (
-        <MessageRow message={message} theme={theme} onDelete={onDeleteMessage} onHitlAction={onHitlAction} onFileSelect={onFileSelect} />
+        <MessageRow message={message} theme={theme} onDelete={onDeleteMessage} onHitlAction={onHitlAction} onFileSelect={onFileSelect} isStreaming={isStreamingMessage} />
       );
-    }, [messages, theme, onDeleteMessage, onHitlAction, onFileSelect]);
+    }, [messages, isLoading, theme, onDeleteMessage, onHitlAction, onFileSelect]);
 
     if (messages.length === 0 && !isLoading) {
       return (

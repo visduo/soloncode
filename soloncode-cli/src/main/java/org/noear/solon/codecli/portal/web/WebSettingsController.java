@@ -49,6 +49,7 @@ import org.noear.solon.codecli.config.entity.McpServerDo;
 import org.noear.solon.codecli.config.entity.ModelDo;
 import org.noear.solon.codecli.config.entity.MountDo;
 import org.noear.solon.codecli.config.entity.ProviderDo;
+import org.noear.solon.codecli.portal.web.model.ModelApiUrl;
 import org.noear.solon.codecli.portal.web.model.ModelInfo;
 import org.noear.solon.codecli.portal.web.model.ModelsAdapter;
 import org.noear.solon.codecli.portal.web.model.ModelsAdapterManager;
@@ -146,7 +147,7 @@ public class WebSettingsController {
     }
 
     /**
-     * 构造函数：支持自定义 MarketManager 和 ModelProviderFactory。
+     * 构造函数：支持自定义 MarketManager 和 ModelsAdapterManager。
      *
      * @param engine              AI Agent 执行引擎
      * @param settings            统一配置管理器
@@ -393,9 +394,11 @@ public class WebSettingsController {
         }
 
         try {
-            ChatModel chatModel = ChatModel.of(apiUrl)
+            String normalizedStandard = ModelApiUrl.normalizeStandard(standard, apiUrl);
+            String normalizedApiUrl = ModelApiUrl.normalizeChatApiUrl(apiUrl, normalizedStandard);
+            ChatModel chatModel = ChatModel.of(normalizedApiUrl)
                     .apiKey(apiKey)
-                    .standard(standard)
+                    .standard(normalizedStandard)
                     .model(model)
                     .userAgent(settings.getGeneral().getUserAgent())
                     .build();
@@ -418,6 +421,7 @@ public class WebSettingsController {
         if (Assert.isEmpty(config.getApiUrl()) || Assert.isEmpty(config.getModel())) {
             return Result.failure("apiUrl and model are required");
         }
+        ModelApiUrl.normalize(config);
 
         engine.addModel(config);
 
@@ -1918,8 +1922,10 @@ public class WebSettingsController {
         }
 
         try {
-            // 使用 ModelProviderFactory 获取对应的提供商
-            ModelsAdapter provider = modelProviderFactory.getProvider(standard);
+            // 使用 ModelsAdapterManager 获取对应的提供商
+            String normalizedStandard = ModelApiUrl.normalizeStandard(standard, apiUrl);
+            ModelsAdapter provider = modelProviderFactory.getProvider(normalizedStandard);
+            String baseUrl = provider.deriveBaseUrl(apiUrl);
             
             // 构建请求头
             Map<String, String> headers = new HashMap<>();
@@ -1928,7 +1934,7 @@ public class WebSettingsController {
             }
             
             // 调用提供商获取模型列表
-            List<ModelInfo> models = provider.fetchModels(apiUrl, headers, apiKey);
+            List<ModelInfo> models = provider.fetchModels(baseUrl, headers, apiKey);
             
             // 转换为前端需要的格式
             List<Map<String, Object>> modelList = new ArrayList<>();

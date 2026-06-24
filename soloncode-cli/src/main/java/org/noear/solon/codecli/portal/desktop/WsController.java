@@ -6,10 +6,10 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.annotation.*;
 import org.noear.solon.codecli.config.AgentFlags;
-import org.noear.solon.codecli.portal.desktop.provider.ModelInfo;
-import org.noear.solon.codecli.portal.desktop.provider.ModelProvider;
-import org.noear.solon.codecli.portal.desktop.provider.ModelProviderFactory;
-import org.noear.solon.codecli.util.AiApiUrlAdapter;
+import org.noear.solon.codecli.portal.web.model.ModelApiUrl;
+import org.noear.solon.codecli.portal.web.model.ModelInfo;
+import org.noear.solon.codecli.portal.web.model.ModelsAdapter;
+import org.noear.solon.codecli.portal.web.model.ModelsAdapterManager;
 import org.noear.solon.core.handle.Context;
 import org.noear.solon.core.handle.Result;
 import org.noear.solon.core.util.Assert;
@@ -30,9 +30,9 @@ public class WsController {
     private static final Logger LOG = LoggerFactory.getLogger(WsController.class);
 
     private final HarnessEngine engine;
-    private final ModelProviderFactory modelProviderFactory;
+    private final ModelsAdapterManager modelProviderFactory;
 
-    public WsController(HarnessEngine engine, ModelProviderFactory modelProviderFactory) {
+    public WsController(HarnessEngine engine, ModelsAdapterManager modelProviderFactory) {
         this.engine = engine;
         this.modelProviderFactory = modelProviderFactory;
     }
@@ -51,7 +51,7 @@ public class WsController {
 
 
     /**
-     * 通过 ModelProviderFactory 从远程 API 获取可用模型列表
+     * 通过 ModelsAdapterManager 从远程 API 获取可用模型列表
      */
     @Get
     @Mapping("/chat/models/fetch")
@@ -60,16 +60,16 @@ public class WsController {
             return Result.failure("apiUrl is required");
         }
 
-        String normalizedProvider = AiApiUrlAdapter.normalizeProvider(provider, apiUrl);
-        String normalizedApiUrl = AiApiUrlAdapter.normalizeChatApiUrl(apiUrl, normalizedProvider);
-        ModelProvider modelProvider = modelProviderFactory.getProvider(normalizedProvider);
-        String baseUrl = AiApiUrlAdapter.deriveBaseUrl(normalizedApiUrl, normalizedProvider);
+        String normalizedProvider = ModelApiUrl.normalizeStandard(provider, apiUrl);
+        String normalizedApiUrl = ModelApiUrl.normalizeChatApiUrl(apiUrl, normalizedProvider);
+        ModelsAdapter modelProvider = modelProviderFactory.getProvider(normalizedProvider);
+        String baseUrl = modelProvider.deriveBaseUrl(normalizedApiUrl);
         List<ModelInfo> models = modelProvider.fetchModels(baseUrl, null, apiKey);
 
         if (models.isEmpty() && Assert.isNotEmpty(model)) {
             ChatModel chatModel = ChatModel.of(normalizedApiUrl)
                     .apiKey(apiKey)
-                    .provider(normalizedProvider)
+                    .standard(normalizedProvider)
                     .model(model)
                     .build();
             chatModel.prompt("hi").call();
@@ -95,7 +95,7 @@ public class WsController {
             config.setApiKey(apiKey);
             config.setModel(mi.getId());
             if (Assert.isNotEmpty(normalizedProvider)) {
-                config.setProvider(normalizedProvider);
+                config.setStandard(normalizedProvider);
             }
             engine.removeModel(mi.getId());
             engine.addModel(config);
@@ -132,10 +132,10 @@ public class WsController {
         config.setApiUrl(apiUrl);
         config.setApiKey(apiKey);
         config.setModel(model);
-        config.setProvider(provider);
-        AiApiUrlAdapter.normalize(config);
-        if (Assert.isEmpty(config.getProvider())) {
-            config.setProvider(null);
+        config.setStandard(provider);
+        ModelApiUrl.normalize(config);
+        if (Assert.isEmpty(config.getStandard())) {
+            config.setStandard(null);
         }
 
         // timeout

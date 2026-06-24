@@ -1,55 +1,51 @@
-package org.noear.solon.codecli.util;
+package org.noear.solon.codecli.portal.web.model;
 
 import org.noear.solon.ai.chat.ChatConfig;
 import org.noear.solon.core.util.Assert;
 
 /**
- * Normalizes provider API URLs so UI can accept either BaseURL or full endpoint URLs.
+ * Shared model API URL rules for web and desktop provider adapters.
  */
-public final class AiApiUrlAdapter {
-    private AiApiUrlAdapter() {
+public final class ModelApiUrl {
+    private ModelApiUrl() {
     }
 
-    public static String normalizeProvider(String provider, String apiUrl) {
-        String p = trimToEmpty(provider);
+    public static String normalizeStandard(String standard, String apiUrl) {
+        String value = trimToEmpty(standard);
         String url = trimToEmpty(apiUrl);
 
-        if ("claude".equalsIgnoreCase(p)) {
+        if ("claude".equalsIgnoreCase(value)) {
             return "anthropic";
         }
 
-        if ("openai".equalsIgnoreCase(p) && isOpenAiResponsesUrl(url)) {
+        if (("openai".equalsIgnoreCase(value) || Assert.isEmpty(value)) && isOpenAiResponsesUrl(url)) {
             return "openai-responses";
         }
 
-        if (Assert.isEmpty(p) && isOpenAiResponsesUrl(url)) {
-            return "openai-responses";
-        }
-
-        return p;
+        return value.toLowerCase();
     }
 
-    public static String normalizeChatApiUrl(String apiUrl, String provider) {
+    public static String normalizeChatApiUrl(String apiUrl, String standard) {
         String url = trimTrailingSlash(trimToEmpty(apiUrl));
         if (Assert.isEmpty(url)) {
             return url;
         }
 
-        String p = normalizeProvider(provider, url);
+        String value = normalizeStandard(standard, url);
 
-        if ("openai-responses".equalsIgnoreCase(p)) {
+        if ("openai-responses".equals(value)) {
             return ensureSuffix(deriveOpenAiBaseUrl(url), "/responses");
         }
 
-        if ("openai".equalsIgnoreCase(p)) {
+        if ("openai".equals(value)) {
             return normalizeOpenAiUrl(url);
         }
 
-        if ("anthropic".equalsIgnoreCase(p) || "claude".equalsIgnoreCase(p)) {
+        if ("anthropic".equals(value)) {
             return normalizeAnthropicUrl(url);
         }
 
-        if ("ollama".equalsIgnoreCase(p)) {
+        if ("ollama".equals(value)) {
             return normalizeOllamaUrl(url);
         }
 
@@ -60,23 +56,23 @@ public final class AiApiUrlAdapter {
         return url;
     }
 
-    public static String deriveBaseUrl(String apiUrl, String provider) {
+    public static String deriveBaseUrl(String apiUrl, String standard) {
         String url = trimTrailingSlash(trimToEmpty(apiUrl));
         if (Assert.isEmpty(url)) {
             return url;
         }
 
-        String p = normalizeProvider(provider, url);
+        String value = normalizeStandard(standard, url);
 
-        if ("openai".equalsIgnoreCase(p) || "openai-responses".equalsIgnoreCase(p)) {
+        if ("openai".equals(value) || "openai-responses".equals(value)) {
             return deriveOpenAiBaseUrl(url);
         }
 
-        if ("anthropic".equalsIgnoreCase(p) || "claude".equalsIgnoreCase(p)) {
+        if ("anthropic".equals(value)) {
             return deriveAnthropicBaseUrl(url);
         }
 
-        if ("ollama".equalsIgnoreCase(p)) {
+        if ("ollama".equals(value)) {
             return deriveOllamaBaseUrl(url);
         }
 
@@ -88,10 +84,10 @@ public final class AiApiUrlAdapter {
             return;
         }
 
-        String provider = normalizeProvider(config.getProvider(), config.getApiUrl());
-        String apiUrl = normalizeChatApiUrl(config.getApiUrl(), provider);
+        String standard = normalizeStandard(config.getStandardOrProvider(), config.getApiUrl());
+        String apiUrl = normalizeChatApiUrl(config.getApiUrl(), standard);
 
-        config.setProvider(provider);
+        config.setStandard(standard);
         config.setApiUrl(apiUrl);
     }
 

@@ -46,6 +46,37 @@ const defaultSettings: Settings = {
   shell: 'bash', terminalFontSize: 14,
   providers: [], activeProviderId: '', maxSteps: 30,
   cliPort: 4808,
+  sessionWindowSize: 8,
+  compressionMaxMessages: 40,
+  compressionMaxTokens: 64000,
+  sandboxEnabled: true,
+  sandboxAllowUserHome: false,
+  sandboxSystemRestrict: true,
+  memoryEnabled: true,
+  memoryIsolation: true,
+  modelRetries: 3,
+  mcpRetries: 3,
+  apiRetries: 3,
+  cliPrintSimplified: true,
+  webAuthUser: '',
+  webAuthPass: '',
+  bashAsyncEnabled: false,
+  subagentEnabled: true,
+  mcpEnabled: true,
+  openApiEnabled: true,
+  lspEnabled: true,
+  loopDefaultMaxTokens: 0,
+  loopDefaultMaxDuration: 0,
+  loopStagnationThreshold: 3,
+  loopMaxConsecutiveErrors: 3,
+  loopPauseAutoAbandonHours: 24,
+  loopBudgetWarningPercent: 70,
+  loopBudgetCriticalPercent: 85,
+  loopValidatorEnabled: false,
+  disallowedTools: [],
+  mounts: [],
+  openApiServers: [],
+  lspServers: [],
   mcpServers: [],
   skills: [],
   agents: [],
@@ -104,6 +135,7 @@ function App() {
     name: string;
   } | null>(null);
   const [newSessionFromProject, setNewSessionFromProject] = useState(false);
+  const [sessionRunStates, setSessionRunStates] = useState<Record<string, 'running' | 'completed' | 'error'>>({});
   const [currentTheme, setCurrentTheme] = useState<Theme>(() => {
     const saved = localStorage.getItem('soloncode-theme') as Theme | null;
     const theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -151,9 +183,13 @@ function App() {
       prevActive.apiKey !== nextActive.apiKey ||
       prevActive.model !== nextActive.model ||
       prevActive.type !== nextActive.type ||
+      prevActive.contextLength !== nextActive.contextLength ||
+      prevActive.timeout !== nextActive.timeout ||
+      prevActive.scope !== nextActive.scope ||
+      prevActive.defaultOptions !== nextActive.defaultOptions ||
       settings.activeProviderId !== newSettings.activeProviderId
     )) {
-      sendModelConfig({ apiUrl: nextActive.apiUrl, apiKey: nextActive.apiKey, model: nextActive.model, type: nextActive.type });
+      sendModelConfig(nextActive);
     }
   }, [settings]);
 
@@ -170,8 +206,20 @@ function App() {
   const {
     sessions, currentSessionId, setCurrentSessionId, currentConversation,
     handleNewSession, handleDeleteSession, handleUpdateSessionTitle,
+    incrementSessionMessageCount,
     restoreLastSession,
-  } = useSessions(null);
+  } = useSessions(null, {
+    onSessionIdResolved: (oldId, newId) => {
+      setSessionRunStates(prev => {
+        const state = prev[oldId];
+        if (!state) return prev;
+        const next = { ...prev };
+        delete next[oldId];
+        next[newId] = state;
+        return next;
+      });
+    },
+  });
 
   const {
     activeProjectPath, projectRefreshKey, projects, workspaceName,
@@ -491,6 +539,7 @@ function App() {
           <SessionsPanel
             projects={projects} sessions={sessions} currentSessionId={currentSessionId} currentProjectId={activeProjectPath}
             backendPort={backendPort}
+            sessionRunStates={sessionRunStates}
             onSelectSession={handleSelectSession} onNewSession={(projectId?: string) => { setNewSessionFromProject(true); return handleNewSession(projectId); }} onDeleteSession={handleDeleteSession}
             onAddProject={handleAddProject} onRemoveProject={handleRemoveProject}
             onSyncSession={handleSyncSession}
@@ -529,12 +578,16 @@ function App() {
           <ChatView
             currentConversation={currentConversation} plugins={plugins} workspacePath={activeProjectPath || undefined} projectName={workspaceName || undefined}
             theme={currentTheme} backendPort={backendPort} onUpdateSessionTitle={handleUpdateSessionTitle} onNewSession={(title) => { setNewSessionFromProject(false); return handleNewSession(undefined, title); }}
-            providers={settings.providers} onActiveProviderChange={(providerId: string) => { setSettings(prev => { const updated = { ...prev, activeProviderId: providerId }; settingsService.save(updated); return updated; }); }}
+            providers={settings.providers} activeProviderId={settings.activeProviderId} onActiveProviderChange={(providerId: string) => { setSettings(prev => { const updated = { ...prev, activeProviderId: providerId }; settingsService.save(updated); return updated; }); }}
             activeFileName={activeFile?.name} activeFilePath={activeFilePath || undefined}
             onFileSelect={handleChatFileSelect}
             onNewProject={handleCreateProject} onOpenFolder={handleOpenFolder}
             initialPrompt={aiCreatePrompt} onAiCreateComplete={handleAiCreateComplete}
             newSessionFromProject={newSessionFromProject}
+            onSessionRunStateChange={(sessionId, status) => {
+              setSessionRunStates(prev => ({ ...prev, [sessionId]: status }));
+            }}
+            onSessionMessageSaved={incrementSessionMessageCount}
           />
         </div>
       );

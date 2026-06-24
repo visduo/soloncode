@@ -49,6 +49,10 @@ export interface DbProvider {
   apiUrl: string;
   apiKey: string;
   model: string;
+  contextLength?: number;
+  scope?: string;
+  timeout?: string;
+  defaultOptions?: string;
   enabled: number;     // SQLite 风格: 0 | 1
   sortOrder: number;   // 排序
   availableModels: string; // JSON 序列化 {id:string, ownedBy?:string}[]
@@ -60,6 +64,12 @@ export interface DbMcpServer {
   name: string;
   command: string;
   args: string;        // JSON 序列化 string[]
+  scope?: string;
+  type?: string;
+  url?: string;
+  env?: string;        // JSON 序列化 Record<string, string>
+  headers?: string;    // JSON 序列化 Record<string, string>
+  timeout?: string;
   enabled: number;     // 0 | 1
   sortOrder: number;
 }

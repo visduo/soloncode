@@ -12,6 +12,39 @@ export interface McpServerConfig {
   command: string;
   args: string[];
   enabled: boolean;
+  scope?: 'user' | 'workspace';
+  type?: 'stdio' | 'sse' | 'streamable';
+  url?: string;
+  env?: Record<string, string>;
+  headers?: Record<string, string>;
+  timeout?: string;
+}
+
+export interface MountConfig {
+  alias: string;
+  path: string;
+  type: 'SKILLS' | 'AGENTS' | 'FILES';
+  scope: 'user' | 'workspace';
+  writeable: boolean;
+  description?: string;
+}
+
+export interface OpenApiServerConfig {
+  name: string;
+  baseUrl: string;
+  docUrl: string;
+  scope: 'user' | 'workspace';
+  headers?: Record<string, string>;
+  enabled: boolean;
+}
+
+export interface LspServerConfig {
+  name: string;
+  command: string;
+  extensions: string[];
+  scope: 'user' | 'workspace';
+  env?: Record<string, string>;
+  enabled: boolean;
 }
 
 export type SkillGroup = 'global' | 'project' | 'claude' | 'codex';
@@ -87,7 +120,11 @@ export interface ModelProvider {
   apiKey: string;
   model: string;
   enabled: boolean;
-  availableModels?: { id: string; ownedBy?: string }[];
+  scope?: 'user' | 'workspace';
+  timeout?: string;
+  contextLength?: number;
+  defaultOptions?: string;
+  availableModels?: { id: string; ownedBy?: string; contextLength?: number }[];
 }
 
 /** 常规设置（键值对，存在 globalSettings 表） */
@@ -104,6 +141,37 @@ export interface GeneralSettings {
   activeProviderId: string;
   maxSteps: number;
   cliPort: number;
+  sessionWindowSize: number;
+  compressionMaxMessages: number;
+  compressionMaxTokens: number;
+  sandboxEnabled: boolean;
+  sandboxAllowUserHome: boolean;
+  sandboxSystemRestrict: boolean;
+  memoryEnabled: boolean;
+  memoryIsolation: boolean;
+  modelRetries: number;
+  mcpRetries: number;
+  apiRetries: number;
+  cliPrintSimplified: boolean;
+  webAuthUser: string;
+  webAuthPass: string;
+  bashAsyncEnabled: boolean;
+  subagentEnabled: boolean;
+  mcpEnabled: boolean;
+  openApiEnabled: boolean;
+  lspEnabled: boolean;
+  loopDefaultMaxTokens: number;
+  loopDefaultMaxDuration: number;
+  loopStagnationThreshold: number;
+  loopMaxConsecutiveErrors: number;
+  loopPauseAutoAbandonHours: number;
+  loopBudgetWarningPercent: number;
+  loopBudgetCriticalPercent: number;
+  loopValidatorEnabled: boolean;
+  disallowedTools: string[];
+  mounts: MountConfig[];
+  openApiServers: OpenApiServerConfig[];
+  lspServers: LspServerConfig[];
   skillPrompt: string;
   agentPrompt: string;
   gitPrompt: string;
@@ -129,6 +197,10 @@ export function createProvider(type: ProviderType): ModelProvider {
     apiKey: '',
     model: preset.models[0]?.value || '',
     enabled: true,
+    scope: 'user',
+    timeout: 'PT120S',
+    contextLength: 128000,
+    defaultOptions: '',
   };
 }
 
@@ -229,6 +301,37 @@ const defaultGeneral: GeneralSettings = {
   activeProviderId: '',
   maxSteps: 30,
   cliPort: 4808,
+  sessionWindowSize: 8,
+  compressionMaxMessages: 40,
+  compressionMaxTokens: 64000,
+  sandboxEnabled: true,
+  sandboxAllowUserHome: false,
+  sandboxSystemRestrict: true,
+  memoryEnabled: true,
+  memoryIsolation: true,
+  modelRetries: 3,
+  mcpRetries: 3,
+  apiRetries: 3,
+  cliPrintSimplified: true,
+  webAuthUser: '',
+  webAuthPass: '',
+  bashAsyncEnabled: false,
+  subagentEnabled: true,
+  mcpEnabled: true,
+  openApiEnabled: true,
+  lspEnabled: true,
+  loopDefaultMaxTokens: 0,
+  loopDefaultMaxDuration: 0,
+  loopStagnationThreshold: 3,
+  loopMaxConsecutiveErrors: 3,
+  loopPauseAutoAbandonHours: 24,
+  loopBudgetWarningPercent: 70,
+  loopBudgetCriticalPercent: 85,
+  loopValidatorEnabled: false,
+  disallowedTools: [],
+  mounts: [],
+  openApiServers: [],
+  lspServers: [],
   skillPrompt: DEFAULT_PROMPTS.skillPrompt,
   agentPrompt: DEFAULT_PROMPTS.agentPrompt,
   gitPrompt: DEFAULT_PROMPTS.gitPrompt,
@@ -272,6 +375,29 @@ export function parseSimpleYaml(text: string): Record<string, Record<string, str
     }
   }
   return result;
+}
+
+function parseJsonArray(value?: string): string[] {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseJsonRecord(value?: string): Record<string, string> | undefined {
+  try {
+    const parsed = JSON.parse(value || '{}');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    return Object.fromEntries(Object.entries(parsed).map(([key, val]) => [key, String(val)]));
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeMcpType(type?: string): 'stdio' | 'sse' | 'streamable' {
+  return type === 'sse' || type === 'streamable' ? type : 'stdio';
 }
 
 export const settingsService = {
@@ -365,6 +491,10 @@ export const settingsService = {
           apiKey,
           model: modelId,
           enabled: true,
+          scope: 'user',
+          timeout: 'PT120S',
+          contextLength: Number(m.contextLength || m.context_length) || undefined,
+          defaultOptions: '',
         };
         newProviders.push(modelProvider);
 
@@ -380,7 +510,10 @@ export const settingsService = {
                 apiKey,
                 model: modelId,
                 provider: normalizeProviderType(provider),
+                standard: normalizeProviderType(provider),
+                scope: modelProvider.scope,
                 timeout: 'PT120S',
+                contextLength: modelProvider.contextLength,
               }),
             });
           } catch (e) {
@@ -483,6 +616,10 @@ export const settingsService = {
       apiKey: r.apiKey,
       model: r.model,
       enabled: !!r.enabled,
+      scope: ((r as any).scope === 'workspace' ? 'workspace' : 'user'),
+      timeout: (r as any).timeout || 'PT120S',
+      contextLength: Number((r as any).contextLength) || 128000,
+      defaultOptions: (r as any).defaultOptions || '',
       availableModels: r.availableModels ? JSON.parse(r.availableModels) : undefined,
     }));
 
@@ -492,7 +629,13 @@ export const settingsService = {
       id: r.id,
       name: r.name,
       command: r.command,
-      args: JSON.parse(r.args || '[]'),
+      args: parseJsonArray(r.args),
+      scope: r.scope === 'workspace' ? 'workspace' : 'user',
+      type: normalizeMcpType(r.type),
+      url: r.url || '',
+      env: parseJsonRecord(r.env),
+      headers: parseJsonRecord(r.headers),
+      timeout: r.timeout || '',
       enabled: !!r.enabled,
     }));
 
@@ -532,6 +675,10 @@ export const settingsService = {
         model: p.model,
         enabled: p.enabled ? 1 : 0,
         sortOrder: i,
+        scope: p.scope || 'user',
+        timeout: p.timeout || 'PT120S',
+        contextLength: p.contextLength || 128000,
+        defaultOptions: p.defaultOptions || '',
         availableModels: p.availableModels ? JSON.stringify(p.availableModels) : '',
       });
     }
@@ -543,6 +690,12 @@ export const settingsService = {
         name: s.name,
         command: s.command,
         args: JSON.stringify(s.args),
+        scope: s.scope || 'user',
+        type: s.type || 'stdio',
+        url: s.url || '',
+        env: s.env ? JSON.stringify(s.env) : '',
+        headers: s.headers ? JSON.stringify(s.headers) : '',
+        timeout: s.timeout || '',
         enabled: s.enabled ? 1 : 0,
         sortOrder: 0,
       });

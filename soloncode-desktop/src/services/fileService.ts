@@ -395,6 +395,13 @@ export const fileService = {
   /**
    * 启动后端 CLI 进程（通过 soloncode 命令）
    */
+  async detectBackend(port: number): Promise<boolean> {
+    if (!isTauriEnv()) {
+      return false;
+    }
+    return await invoke<boolean>('detect_backend', { port });
+  },
+
   async startBackend(workspacePath: string, port: number): Promise<number> {
     if (!isTauriEnv()) {
       console.log('[fileService] mock startBackend');

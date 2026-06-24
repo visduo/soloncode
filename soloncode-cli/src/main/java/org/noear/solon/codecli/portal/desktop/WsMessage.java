@@ -19,6 +19,8 @@ public class WsMessage {
 
     String mode; // "default" | "auto" | "plan"
 
+    String reasoningEffort; // "auto" | "low" | "medium" | "high"
+
     List<WsAttachment> attachments;
 
     @Data

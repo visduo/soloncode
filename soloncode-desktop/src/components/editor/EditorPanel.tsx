@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Editor, { DiffEditor, type OnMount } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import { Icon, getFileIconName } from '../common/Icon';
+import { ContextMenu } from '../common/ContextMenu';
 import type { DiffLine } from '../../services/gitService';
 import './EditorPanel.css';
 
@@ -79,7 +80,7 @@ export function EditorPanel({
   onContentChange,
   onFileSave,
   theme: _themeProp,
-  editorTheme,
+  editorTheme: _editorTheme,
   diffLines = [],
   diffFiles = {},
 }: EditorPanelProps) {
@@ -104,6 +105,7 @@ export function EditorPanel({
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const decorationsRef = useRef<editor.IEditorDecorationsCollection | null>(null);
+  const [tabContextMenu, setTabContextMenu] = useState<{ x: number; y: number; path: string } | null>(null);
 
   // 用 ref 保持最新值，避免 addCommand 回调闭包过期
   const activeFilePathRef = useRef(activeFilePath);
@@ -121,6 +123,39 @@ export function EditorPanel({
       }
     });
   };
+
+  const closeFileAndDiff = useCallback((path: string) => {
+    onFileClose(path);
+  }, [onFileClose]);
+
+  const handleTabMenuAction = useCallback((itemId: string) => {
+    if (!tabContextMenu) return;
+    const targetPath = tabContextMenu.path;
+    const targetIndex = files.findIndex(file => file.path === targetPath);
+    if (itemId === 'close-current') {
+      closeFileAndDiff(targetPath);
+      return;
+    }
+    if (itemId === 'close-others') {
+      files.filter(file => file.path !== targetPath).forEach(file => closeFileAndDiff(file.path));
+      return;
+    }
+    if (itemId === 'close-left') {
+      files.slice(0, Math.max(0, targetIndex)).forEach(file => closeFileAndDiff(file.path));
+    }
+  }, [closeFileAndDiff, files, tabContextMenu]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'w') {
+        if (!activeFilePath) return;
+        event.preventDefault();
+        closeFileAndDiff(activeFilePath);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeFilePath, closeFileAndDiff]);
 
   // 根据 diffLines 更新 Monaco decorations
   useEffect(() => {
@@ -239,6 +274,11 @@ export function EditorPanel({
             key={file.path}
             className={`editor-tab${file.path === activeFilePath ? ' active' : ''}`}
             onClick={() => onFileSelect(file.path)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              onFileSelect(file.path);
+              setTabContextMenu({ x: event.clientX, y: event.clientY, path: file.path });
+            }}
           >
             <Icon name={getFileIconName(file.name)} size={14} className="tab-icon" />
             <span className="tab-name">{file.name}</span>
@@ -256,6 +296,20 @@ export function EditorPanel({
           </div>
         ))}
       </div>
+
+      {tabContextMenu && (
+        <ContextMenu
+          x={tabContextMenu.x}
+          y={tabContextMenu.y}
+          items={[
+            { id: 'close-current', label: '关闭当前', shortcut: 'Ctrl+W' },
+            { id: 'close-others', label: '关闭其他', disabled: files.length <= 1 },
+            { id: 'close-left', label: '关闭左侧', disabled: files.findIndex(file => file.path === tabContextMenu.path) <= 0 },
+          ]}
+          onItemClick={handleTabMenuAction}
+          onClose={() => setTabContextMenu(null)}
+        />
+      )}
 
       {activeFile && (
         <div className="editor-content">
@@ -277,7 +331,7 @@ export function EditorPanel({
               language={getMonacoLanguage(activeFile.path)}
               original={diffFiles[activeFile.path]}
               modified={activeFile.content}
-              theme={editorTheme || (activeTheme === 'dark' ? 'vs-dark' : 'light')}
+              theme={activeTheme === 'dark' ? 'vs-dark' : 'light'}
               options={{
                 readOnly: true,
                 renderSideBySide: true,
@@ -293,7 +347,7 @@ export function EditorPanel({
             value={activeFile.content}
             onChange={handleEditorChange}
             onMount={handleEditorMount}
-            theme={editorTheme || (activeTheme === 'dark' ? 'vs-dark' : 'light')}
+            theme={activeTheme === 'dark' ? 'vs-dark' : 'light'}
             options={editorOptions}
             path={activeFile.path}
           />
