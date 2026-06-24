@@ -10,6 +10,9 @@ solon.logging.appender:
   file:
     level: DEBUG
     name: ".soloncode/logs/${solon.app.name}"
+    extension: ".log"
+    maxFileSize: "10 MB"
+    maxHistory: "7" #单位：天
 
 solon:
   logging:
