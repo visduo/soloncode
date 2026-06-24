@@ -418,6 +418,35 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 .attachment-type-tag.image { background: rgba(79,110,247,0.85); color: #fff; }
 .attachment-type-tag.file { background: rgba(34,197,94,0.85); color: #fff; }
 
+/* User message attachment images wrap */
+.user-attach-imgs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+/* User message attachment file tag (theme-aware) */
+.user-attach-file {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--text-user-msg);
+    background: rgba(127,127,127,0.12);
+    border: 1px solid rgba(127,127,127,0.2);
+}
+.user-attach-file-name {
+    font-weight: 500;
+}
+.user-attach-file-size {
+    opacity: 0.7;
+    font-size: 11px;
+}
+
 /* Scrollbar */
 .messages-wrap::-webkit-scrollbar, .sidebar-list::-webkit-scrollbar, .thinking-block-body::-webkit-scrollbar { width: 5px; }
 .messages-wrap::-webkit-scrollbar-thumb, .sidebar-list::-webkit-scrollbar-thumb, .thinking-block-body::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }

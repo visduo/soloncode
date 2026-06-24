@@ -18,7 +18,7 @@ function appendUserMessage(sess, text, imageDataUrls, fileAttachments, createdAt
 
     // Multiple images
     if (imageDataUrls && imageDataUrls.length > 0) {
-        var imgWrap = $('<div>').attr('style', 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;')[0];
+        var imgWrap = $('<div>').addClass('user-attach-imgs')[0];
         for (var i = 0; i < imageDataUrls.length; i++) {
             var img = $('<img>').attr('src', imageDataUrls[i].dataUrl || imageDataUrls[i])
                 .attr('style', 'max-height:120px;max-width:200px;border-radius:8px;object-fit:cover;')[0];
@@ -30,10 +30,10 @@ function appendUserMessage(sess, text, imageDataUrls, fileAttachments, createdAt
     // Multiple file attachments
     if (fileAttachments && fileAttachments.length > 0) {
         for (var j = 0; j < fileAttachments.length; j++) {
-            var tag = $('<div>').attr('style', 'display:flex;align-items:center;gap:6px;padding:6px 10px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.25);border-radius:6px;margin-bottom:6px;font-size:13px;color:#fff;')[0];
+            var tag = $('<div>').addClass('user-attach-file')[0];
             tag.innerHTML = '<span>📎</span>'
-                + '<span style="font-weight:500">' + escapeHtml(fileAttachments[j].name) + '</span>'
-                + '<span style="opacity:0.7;font-size:11px">(' + formatFileSize(fileAttachments[j].size) + ')</span>';
+                + '<span class="user-attach-file-name">' + escapeHtml(fileAttachments[j].name) + '</span>'
+                + '<span class="user-attach-file-size">(' + formatFileSize(fileAttachments[j].size) + ')</span>';
             $(bubble).append(tag);
         }
     }

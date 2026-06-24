@@ -3,6 +3,7 @@
 
 * 添加 soloncode web 设置/通用/日志保存
 * 修复 soloncode web 添加供应商时，没有同步输入面板的模型选择
+* 修复 soloncode web 附件显示不正常的问题
 * 细节优化
 
 ### v2026.6.24
