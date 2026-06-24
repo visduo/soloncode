@@ -62,6 +62,7 @@ public class LoopScheduler {
     private final HarnessEngine engine;
     private final IJobManager jobManager;
     private final ConcurrentHashMap<String, List<LoopTask>> sessionTasks = new ConcurrentHashMap<>();
+    private final LoopPromptBuilder promptBuilder;
 
     // 共享线程池：续行调度 + 异常重试
     private final ScheduledExecutorService asyncExecutor = Executors.newScheduledThreadPool(2, r -> {
@@ -92,6 +93,7 @@ public class LoopScheduler {
                 loop.getBudgetWarningPercentOrDefault(),
                 loop.getBudgetCriticalPercentOrDefault()
         );
+        this.promptBuilder = new LoopPromptBuilder(loop.getStagnationThresholdOrDefault());
     }
 
     public LoopGroupDo getLoopConfig() {
@@ -398,6 +400,8 @@ public class LoopScheduler {
         sessionTasks.put(sessionId, Collections.synchronizedList(alive));
 
         for (LoopTask t : alive) {
+            // kill -9 兜底：running 锁未持久化，但显式释放确保无残留
+            t.finish();
             registerJob(sessionId, t);
         }
 
@@ -408,7 +412,6 @@ public class LoopScheduler {
                 if (gs.getStatus().isResumable()) {
                     LOG.info("Auto-resuming paused/blocked goal '{}'", t.getId());
                     gs.resume();
-                    registerJob(sessionId, t);
                 }
             }
         }
@@ -583,7 +586,7 @@ public class LoopScheduler {
      */
     private GoalRoundOutcome executeGoalRound(String sessionId, LoopTask task) {
         // 构建 prompt（注入 goal 引导词）
-        String effectivePrompt = buildEffectivePrompt(sessionId, task);
+        String effectivePrompt = promptBuilder.buildEffectivePrompt(task);
 
         LoopExecutionResult executionResult = executeSingle(sessionId, effectivePrompt, null);
 
@@ -727,146 +730,7 @@ public class LoopScheduler {
         }
     }
 
-    // ==================== Prompt 构建（Codex 对齐：7 章节） ====================
 
-    /**
-     * 构建完整的 effective prompt（goal 引导词注入）
-     *
-     * <p>对齐 Codex continuation.md 的 7 章节结构，并根据预算剩余自动切换精简模式：
-     * <ul>
-     *   <li>预算 > 30%：完整 7 章节</li>
-     *   <li>预算 15%-30%：精简 3 章节（Continuation + Completion audit + Budget）</li>
-     *   <li>预算 < 15%：极简单段落</li>
-     * </ul>
-     */
-    private String buildEffectivePrompt(String sessionId, LoopTask task) {
-        String prompt = task.getPrompt();
-
-        if (!task.isGoalMode()) {
-            return prompt;
-        }
-
-        GoalState gs = task.getGoalState();
-        int iter = task.getCurrentIteration();
-        boolean isFirstIter = iter == 0;
-        boolean isCritical = gs.isBudgetCritical();
-
-        String budgetInfo = buildBudgetInfo(gs);
-
-        // 预算感知精简模式
-        double budgetRatio = gs.getMaxTokens() > 0
-                ? (double) (gs.getMaxTokens() - gs.getConsumedTokens()) / gs.getMaxTokens()
-                : 1.0;
-
-        if (budgetRatio < 0.15) {
-            return buildMinimalPrompt(prompt, gs, task, budgetInfo);
-        } else if (budgetRatio < 0.30) {
-            return buildCompactPrompt(prompt, gs, task, budgetInfo, iter, isFirstIter);
-        }
-
-        // 完整模式（7 章节）
-        StringBuilder sb = new StringBuilder();
-        sb.append("\n\n");
-        sb.append("--- 目标延续 (Goal Continuation) ---\n");
-        sb.append("你正在朝向以下目标工作: ").append(gs.getCondition()).append("\n");
-        sb.append("你的目标是完成此任务。这是持续性的工作 — 每一轮执行都是同一个目标的延续。\n");
-        sb.append("\n");
-
-        // Chapter 3: Work from evidence
-        sb.append("--- 证据驱动 (Evidence-Based) ---\n");
-        sb.append("不要依赖记忆或假设来判断当前状态。在采取行动前，先检查实际的文件内容、\n");
-        sb.append("测试结果、构建输出等客观证据。你的判断必须基于最新的事实，而非上轮的记忆。\n");
-        sb.append("\n");
-
-        // Chapter 5: Fidelity
-        sb.append("--- 忠于目标 (Goal Fidelity) ---\n");
-        sb.append("不要缩小目标范围或降低完成标准。目标中的每一项都必须完成。\n");
-        sb.append("不要留占位符、TODO 或 stub。如果某个部分很难，要投入精力解决，而非跳过。\n");
-        sb.append("\n");
-
-        // Chapter 6: Completion audit
-        sb.append("--- 审计完成 (Audit Check) ---\n");
-        sb.append("在继续之前，请完成以下步骤：\n");
-        sb.append("1. 回顾：目标是什么？检查已有的进展。\n");
-        sb.append("2. 核查：针对目标中的每一项，通过运行测试、检查文件等客观手段验证其是否已完成。\n");
-        sb.append("   不要仅凭推理 — 必须有权威证据（测试通过、构建成功、文件存在且内容正确）。\n");
-        sb.append("3. 如果你已完成所有项，说明你是如何实现每一项的，\n");
-        sb.append("   然后在回复末尾输出 [GOAL_ACHIEVED] 并调用 goal_update(complete) 标记完成。\n");
-        sb.append("\n");
-
-        // Chapter 7: Blocked audit
-        sb.append("--- 阻塞审计 (Blocked Audit) ---\n");
-        sb.append("如果你遇到阻碍（同一困境尝试了 3 次），调用 goal_update(blocked) 声明阻塞。\n");
-        sb.append("不要因为工作困难、进展慢或不确定就声明阻塞 — 仅当同一问题反复尝试仍无法解决时才使用。\n");
-        sb.append("resume 后阻塞计数重置为 0。\n");
-        sb.append("\n");
-
-        // 停滞质疑（运行时兜底，仅触发时注入）
-        if (task.getStagnationCount() >= loop.getStagnationThresholdOrDefault()) {
-            sb.append("--- 进展质疑 (Stagnation Check) ---\n");
-            sb.append("系统检测到最近 ").append(task.getStagnationCount())
-              .append(" 轮执行未产生实质性进展。\n");
-            sb.append("请认真评估：你是否在同一问题上反复尝试但无法推进？\n");
-            sb.append("如果是，请调用 goal_update(blocked) 声明阻塞。\n");
-            sb.append("如果不是，请在下一步采取明显不同的策略。\n");
-            sb.append("\n");
-        }
-
-        // Chapter 2: Budget
-        if (isCritical) {
-            sb.append("[紧急] 你的 Token 预算即将耗尽。请专注于高效完成目标。\n");
-        }
-
-        // Chapter 4: Progress visibility — 上一轮摘要
-        if (!isFirstIter && task.getLastResult() != null) {
-            String lastSummary = truncateForPrompt(task.getLastResult(), 300);
-            sb.append("\n--- 上一轮执行摘要（第 ").append(iter).append(" 轮）---\n");
-            sb.append(lastSummary).append("\n");
-            sb.append("请基于以上进展继续推进，避免重复已尝试过的方案。\n");
-        }
-
-        sb.append(budgetInfo);
-
-        return prompt + sb.toString();
-    }
-
-    /**
-     * 精简模式（预算 15%-30%）：3 章节
-     */
-    private String buildCompactPrompt(String prompt, GoalState gs, LoopTask task,
-                                      String budgetInfo, int iter, boolean isFirstIter) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("\n\n");
-        sb.append("--- 目标延续 (Goal Continuation) ---\n");
-        sb.append("目标: ").append(gs.getCondition()).append("\n");
-        sb.append("持续工作直至完成。完成后输出 [GOAL_ACHIEVED] 并调用 goal_update(complete)。\n");
-        sb.append("\n");
-
-        sb.append("--- 审计完成 (Audit Check) ---\n");
-        sb.append("逐条验证目标完成情况。必须有客观证据（测试通过/文件存在）。不要凭推理判定完成。\n");
-        sb.append("\n");
-
-        if (!isFirstIter && task.getLastResult() != null) {
-            String lastSummary = truncateForPrompt(task.getLastResult(), 200);
-            sb.append("上一轮（第 ").append(iter).append("轮）: ").append(lastSummary).append("\n");
-        }
-
-        sb.append(budgetInfo);
-        return prompt + sb.toString();
-    }
-
-    /**
-     * 极简模式（预算 < 15%）：单段落
-     */
-    private String buildMinimalPrompt(String prompt, GoalState gs, LoopTask task,
-                                      String budgetInfo) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("\n\n");
-        sb.append("目标: ").append(gs.getCondition()).append(" | ");
-        sb.append(budgetInfo.trim()).append("\n");
-        sb.append("持续工作直至完成。完成后输出 [GOAL_ACHIEVED] 并调用 goal_update(complete)。3 轮无法推进则调用 goal_update(blocked)。\n");
-        return prompt + sb.toString();
-    }
 
     // ==================== 预算耗尽收尾 ====================
 
@@ -878,7 +742,7 @@ public class LoopScheduler {
      */
     private void executeBudgetLimitWrapUp(String sessionId, LoopTask task, GoalState gs) {
         try {
-            String wrapUpPrompt = buildBudgetLimitPrompt(task, gs);
+            String wrapUpPrompt = promptBuilder.buildBudgetLimitPrompt(task, gs);
             LoopExecutionResult wrapUpResult = executeSingle(sessionId, wrapUpPrompt, null);
 
             // 预算耗尽后仍给 LLM 一次总结机会：如果 LLM 认为目标已完成，尊重此判断
@@ -891,35 +755,7 @@ public class LoopScheduler {
         }
     }
 
-    /**
-     * 构建 budget_limit 引导词（对齐 Codex budget_limit.md）
-     */
-    private String buildBudgetLimitPrompt(LoopTask task, GoalState gs) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("\n\n--- 预算耗尽 (Budget Limit) ---\n");
-        sb.append("你的目标 Token 预算已耗尽。\n\n");
-        sb.append("目标: ").append(gs.getCondition()).append("\n\n");
 
-        sb.append("预算:\n");
-        long elapsed = (System.currentTimeMillis() - gs.getStartEpochMs()) / 1000;
-        sb.append("- 耗时: ").append(formatDuration(elapsed * 1000)).append("\n");
-        sb.append("- 已消耗: ").append(formatTokens(gs.getConsumedTokens()));
-        if (gs.getMaxTokens() > 0) {
-            sb.append(" / ").append(formatTokens(gs.getMaxTokens())).append(" tokens\n");
-        } else {
-            sb.append(" tokens\n");
-        }
-        sb.append("\n");
-
-        sb.append("系统已将此目标标记为 budget_limited，请勿开始新的实质性工作。\n");
-        sb.append("请在此轮回复中：\n");
-        sb.append("1. 总结已完成的工作和进展\n");
-        sb.append("2. 列出剩余未完成的工作\n");
-        sb.append("3. 给出明确的下一步建议\n\n");
-        sb.append("不要调用 goal_update 除非目标确实已完成。\n");
-
-        return sb.toString();
-    }
 
     // ==================== 无进展指纹计算 ====================
 
@@ -951,60 +787,7 @@ public class LoopScheduler {
         return count;
     }
 
-    // ==================== 格式化辅助 ====================
 
-    private static String truncateForPrompt(String text, int maxLen) {
-        if (text == null || text.isEmpty()) return "";
-        if (text.length() <= maxLen) return text;
-        int half = maxLen / 2;
-        return text.substring(0, half) + "\n...(省略)...\n" + text.substring(text.length() - half);
-    }
-
-    private String buildBudgetInfo(GoalState gs) {
-        StringBuilder sb = new StringBuilder();
-
-        if (gs.getMaxTokens() > 0) {
-            long remainToken = gs.getMaxTokens() - gs.getConsumedTokens();
-            sb.append("\n已消耗 ").append(formatTokens(gs.getConsumedTokens()))
-              .append(" / ").append(formatTokens(gs.getMaxTokens()))
-              .append(" (").append(budgetPercent(gs.getConsumedTokens(), gs.getMaxTokens())).append("%)");
-            if (remainToken > 0 && gs.isBudgetCritical()) {
-                sb.append(" (剩余: ").append(formatTokens(remainToken)).append(")");
-            }
-            if (gs.isBudgetWarning()) {
-                sb.append("\n[预算提示] 已使用 ").append(budgetPercent(gs.getConsumedTokens(), gs.getMaxTokens()))
-                  .append("%，请评估是否需要调整策略或申请扩容");
-            }
-        } else if (gs.getConsumedTokens() > 0) {
-            sb.append("\n已消耗 Token: ").append(formatTokens(gs.getConsumedTokens()));
-        }
-
-        if (gs.getStartEpochMs() > 0) {
-            long elapsed = System.currentTimeMillis() - gs.getStartEpochMs();
-            if (elapsed > 1000) {
-                sb.append("\n耗时: ").append(formatDuration(elapsed));
-            }
-        }
-
-        return sb.toString();
-    }
-
-    private String budgetPercent(long value, long total) {
-        if (total <= 0) return "0";
-        return String.valueOf((int) (value * 100 / total));
-    }
-
-    private String formatTokens(long tokens) {
-        if (tokens < 1000) return tokens + " tokens";
-        if (tokens < 1_000_000) return String.format("%.1fk", tokens / 1000.0);
-        return String.format("%.1fM", tokens / 1_000_000.0);
-    }
-
-    private String formatDuration(long ms) {
-        if (ms < 60_000) return (ms / 1000) + "s";
-        if (ms < 3_600_000) return (ms / 60_000) + "m " + ((ms % 60_000) / 1000) + "s";
-        return (ms / 3_600_000) + "h " + ((ms % 3_600_000) / 60_000) + "m";
-    }
 
     // ==================== 执行 ====================
 

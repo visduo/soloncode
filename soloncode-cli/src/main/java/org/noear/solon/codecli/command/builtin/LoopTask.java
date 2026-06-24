@@ -322,8 +322,8 @@ public class LoopTask {
         node.set("createdAt", createdAt.toString());
         node.set("autoInterval", autoInterval);
         node.set("cancelled", cancelled);
-        node.set("running", running);
         node.set("enabled", enabled);
+        // running 是瞬态运行时锁，不持久化 — restore() 时兜底解锁
         node.set("type", type.name());
 
         // 运行时状态
@@ -428,6 +428,9 @@ public class LoopTask {
         // 恢复运行时兜底字段
         task.stagnationCount = stagnationCountVal;
         task.consecutiveErrors = consecutiveErrorsVal;
+
+        // running 是瞬态锁，反序列化后始终为 false
+        // （kill -9 场景兜底：若有 future 的注册逻辑需显式调用 finish()）
 
         return task;
     }
