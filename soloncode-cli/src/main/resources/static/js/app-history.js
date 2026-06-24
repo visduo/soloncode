@@ -5,6 +5,9 @@
 /* ===== History ===== */
 
 /* 记住“当前活动会话”，刷新或下次打开时自动恢复 */
+/* 自定义 composing 标志，替代 e.isComposing（macOS 输入法组合态下 Enter 时序问题） */
+var composing = false;
+
 var ACTIVE_SESSION_KEY = 'soloncode-active-session';
 function rememberActiveSession(sessionId) {
     try { if (sessionId) localStorage.setItem(ACTIVE_SESSION_KEY, sessionId); } catch (e) {}
@@ -418,7 +421,7 @@ function navigateCmdComplete(e, inputEl, completeEl) {
     var $completeEl = $(completeEl);
     if (!$completeEl.hasClass('show')) return false;
     // 输入法组合中，不处理命令补全的回车
-    if (e.isComposing) return false;
+    if (composing) return false;
 
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
@@ -527,17 +530,23 @@ $('#chatSkillBtn').on('click', function() {
 $(welcomeInput).on('input', handleInputForCommands);
 $(chatInput).on('input', handleInputForCommands);
 
+// composition 状态追踪（使用自定义标志解决 macOS 输入法选词 Enter 时序问题）
+$(welcomeInput).on('compositionstart', function() { composing = true; });
+$(welcomeInput).on('compositionend', function() { composing = false; });
+$(chatInput).on('compositionstart', function() { composing = true; });
+$(chatInput).on('compositionend', function() { composing = false; });
+
 // Keyboard navigation for command completion
 $(welcomeInput).on('keydown', function(e) {
     // 输入法正在组合中（如拼音选词），不触发发送
-    if (e.isComposing) return;
+    if (composing) return;
     var handled = navigateCmdComplete(e, welcomeInput, $welcomeCmdComplete[0]);
     if (handled) return;
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 $(chatInput).on('keydown', function(e) {
     // 输入法正在组合中（如拼音选词），不触发发送
-    if (e.isComposing) return;
+    if (composing) return;
     // 优先级1：命令补全导航
     var handled = navigateCmdComplete(e, chatInput, $chatCmdComplete[0]);
     if (handled) return;
@@ -712,7 +721,7 @@ function locateUserMessage(msgIdx) {
  */
 function navigateHistory(e) {
     if (!$chatHistoryPanel.hasClass('show')) return false;
-    if (e.isComposing) return false;
+    if (composing) return false;
 
     var $items = $chatHistoryPanel.find('.history-panel-item');
 
