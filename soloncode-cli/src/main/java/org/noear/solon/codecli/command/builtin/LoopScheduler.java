@@ -699,25 +699,25 @@ public class LoopScheduler {
         // 完整模式（7 章节）
         StringBuilder sb = new StringBuilder();
         sb.append("\n\n");
-        sb.append("--- Goal Continuation ---\n");
+        sb.append("--- 目标延续 (Goal Continuation) ---\n");
         sb.append("你正在朝向以下目标工作: ").append(gs.getCondition()).append("\n");
         sb.append("你的目标是完成此任务。这是持续性的工作 — 每一轮执行都是同一个目标的延续。\n");
         sb.append("\n");
 
         // Chapter 3: Work from evidence
-        sb.append("--- 基于证据工作 ---\n");
+        sb.append("--- 证据驱动 (Evidence-Based) ---\n");
         sb.append("不要依赖记忆或假设来判断当前状态。在采取行动前，先检查实际的文件内容、\n");
         sb.append("测试结果、构建输出等客观证据。你的判断必须基于最新的事实，而非上轮的记忆。\n");
         sb.append("\n");
 
         // Chapter 5: Fidelity
-        sb.append("--- 目标忠实度 ---\n");
+        sb.append("--- 忠于目标 (Goal Fidelity) ---\n");
         sb.append("不要缩小目标范围或降低完成标准。目标中的每一项都必须完成。\n");
         sb.append("不要留占位符、TODO 或 stub。如果某个部分很难，要投入精力解决，而非跳过。\n");
         sb.append("\n");
 
         // Chapter 6: Completion audit
-        sb.append("--- 完成审计 ---\n");
+        sb.append("--- 审计完成 (Audit Check) ---\n");
         sb.append("在继续之前，请完成以下步骤：\n");
         sb.append("1. 回顾：目标是什么？检查已有的进展。\n");
         sb.append("2. 核查：针对目标中的每一项，通过运行测试、检查文件等客观手段验证其是否已完成。\n");
@@ -727,7 +727,7 @@ public class LoopScheduler {
         sb.append("\n");
 
         // Chapter 7: Blocked audit
-        sb.append("--- 阻塞审计 ---\n");
+        sb.append("--- 阻塞审计 (Blocked Audit) ---\n");
         sb.append("如果你遇到阻碍（同一困境尝试了 3 次），调用 goal_update(blocked) 声明阻塞。\n");
         sb.append("不要因为工作困难、进展慢或不确定就声明阻塞 — 仅当同一问题反复尝试仍无法解决时才使用。\n");
         sb.append("resume 后阻塞计数重置为 0。\n");
@@ -735,7 +735,7 @@ public class LoopScheduler {
 
         // 停滞质疑（运行时兜底，仅触发时注入）
         if (task.getStagnationCount() >= loop.getStagnationThresholdOrDefault()) {
-            sb.append("--- 进展质疑 ---\n");
+            sb.append("--- 进展质疑 (Stagnation Check) ---\n");
             sb.append("系统检测到最近 ").append(task.getStagnationCount())
               .append(" 轮执行未产生实质性进展。\n");
             sb.append("请认真评估：你是否在同一问题上反复尝试但无法推进？\n");
@@ -769,12 +769,12 @@ public class LoopScheduler {
                                       String budgetInfo, int iter, boolean isFirstIter) {
         StringBuilder sb = new StringBuilder();
         sb.append("\n\n");
-        sb.append("--- Goal Continuation ---\n");
+        sb.append("--- 目标延续 (Goal Continuation) ---\n");
         sb.append("目标: ").append(gs.getCondition()).append("\n");
         sb.append("持续工作直至完成。完成后输出 [GOAL_ACHIEVED] 并调用 goal_update(complete)。\n");
         sb.append("\n");
 
-        sb.append("--- 完成审计 ---\n");
+        sb.append("--- 审计完成 (Audit Check) ---\n");
         sb.append("逐条验证目标完成情况。必须有客观证据（测试通过/文件存在）。不要凭推理判定完成。\n");
         sb.append("\n");
 
@@ -822,7 +822,7 @@ public class LoopScheduler {
      */
     private String buildBudgetLimitPrompt(LoopTask task, GoalState gs) {
         StringBuilder sb = new StringBuilder();
-        sb.append("\n\n--- 预算耗尽 ---\n");
+        sb.append("\n\n--- 预算耗尽 (Budget Limit) ---\n");
         sb.append("你的目标 Token 预算已耗尽。\n\n");
         sb.append("目标: ").append(gs.getCondition()).append("\n\n");
 
