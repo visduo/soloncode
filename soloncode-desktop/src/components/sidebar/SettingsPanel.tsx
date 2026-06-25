@@ -624,6 +624,7 @@ function ProviderModelSelect({ provider, onChange, onModelsLoaded, backendPort }
   const models = provider.availableModels || [];
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
 
   const handleFetch = useCallback(async () => {
     if (!provider.apiUrl) {
@@ -668,13 +669,48 @@ function ProviderModelSelect({ provider, onChange, onModelsLoaded, backendPort }
   }, [backendPort, provider.apiUrl, provider.apiKey, provider.type, provider.model, onChange, onModelsLoaded]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
-      <div style={{ display: 'flex', gap: '6px' }}>
-        <button className="mcp-add-btn" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+    <div className="provider-model-select">
+      <div className="provider-model-row">
+        <input
+          type="text"
+          className="setting-input provider-model-combo"
+          value={provider.model}
+          onChange={e => {
+            onChange(e.target.value);
+            setModelDropdownOpen(true);
+          }}
+          onFocus={() => setModelDropdownOpen(true)}
+          onBlur={() => setTimeout(() => setModelDropdownOpen(false), 120)}
+          onKeyDown={e => {
+            if (e.key === 'Escape') setModelDropdownOpen(false);
+          }}
+          placeholder="Model name"
+        />
+        {modelDropdownOpen && models.length > 0 && (
+          <div className="provider-model-dropdown">
+            {models.map(m => (
+              <button
+                type="button"
+                key={m.id}
+                className={`provider-model-option${m.id === provider.model ? ' selected' : ''}`}
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => {
+                  onChange(m.id);
+                  setModelDropdownOpen(false);
+                }}
+              >
+                <span className="provider-model-option-id">{m.id}</span>
+                {m.ownedBy && <span className="provider-model-option-owner">{m.ownedBy}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+        <button className="mcp-add-btn provider-model-fetch"
           onClick={handleFetch} disabled={loading}>
           {loading ? '加载中...' : '获取模型'}
         </button>
         {models.length > 0 ? (
+          <>
           <select className="setting-select" value={provider.model}
             onChange={e => onChange(e.target.value)} style={{ flex: 1, minWidth: 0 }}>
             <option value="">选择模型...</option>
@@ -682,6 +718,14 @@ function ProviderModelSelect({ provider, onChange, onModelsLoaded, backendPort }
               <option key={m.id} value={m.id}>{m.id}</option>
             ))}
           </select>
+          <input
+            type="text"
+            className="setting-input provider-model-input"
+            value={provider.model}
+            onChange={e => onChange(e.target.value)}
+            placeholder="妯″瀷鍚嶇О"
+          />
+          </>
         ) : (
           <input type="text" className="setting-input" value={provider.model}
             onChange={e => onChange(e.target.value)} placeholder="模型名称"
