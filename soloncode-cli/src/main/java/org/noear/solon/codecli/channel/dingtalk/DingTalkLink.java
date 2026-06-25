@@ -71,9 +71,10 @@ public class DingTalkLink implements Channel, Runnable {
     private final Map<String, String> userIdToSession = new ConcurrentHashMap<>();
 
     /**
-     * 最近收到消息的 webhook 缓存（userId -> sessionWebhook），用于回复
+     * userId -> ReplyChannel（最近一次 CALLBACK 的 WebSocket 回复通道）
+     * 用于 AI 回复时通过 WebSocket Stream 直接发送，无需 webhook，无过期问题。
      */
-    private final Map<String, String> webhookCache = new ConcurrentHashMap<>();
+    private final Map<String, ReplyChannel> replyChannels = new ConcurrentHashMap<>();
 
     /**
      * 消息处理调度器（单线程顺序处理）
@@ -118,18 +119,17 @@ public class DingTalkLink implements Channel, Runnable {
             return;
         }
 
-        // 优先使用缓存的 sessionWebhook 回复（Markdown 格式）
-        String webhook = webhookCache.get(binding.userId);
-        if (webhook != null && !webhook.isEmpty()) {
-            try {
-                ChunkedSender.sendChunked(reply,
-                        ChunkedSender.Config.dingtalk(),
-                        (chunk, part) -> DingTalkClient.replyViaWebhook(webhook, chunk));
+        // 优先通过 WebSocket Stream 回复（无需 webhook，无过期问题）
+        ReplyChannel channel = replyChannels.get(binding.userId);
+        if (channel != null && channel.isActive()) {
+            ChunkedSender.SendResult result = ChunkedSender.sendChunked(reply,
+                    ChunkedSender.Config.dingtalk(),
+                    (chunk, part) -> replyViaStream(channel.conn.wsClient, channel.messageId, chunk));
+            if (result.allSucceeded()) {
                 return;
-            } catch (Exception e) {
-                LOG.warn("[DingTalk] Webhook reply failed, falling back to API: {}", e.getMessage());
-                webhookCache.remove(binding.userId);
             }
+            LOG.warn("[DingTalk] Stream reply failed (sent {}/{}), falling back to API",
+                    result.getTotalParts() - result.getFailedParts(), result.getTotalParts());
         }
 
         // 降级：使用 API 方式发送
@@ -294,7 +294,7 @@ public class DingTalkLink implements Channel, Runnable {
         if (binding == null) return;
 
         userIdToSession.remove(binding.userId);
-        webhookCache.remove(binding.userId);
+        replyChannels.remove(binding.userId);
         credentialStore.save(bindings);
 
         // 检查是否还有绑定使用此 appKey，如果没有则关闭连接
@@ -325,9 +325,7 @@ public class DingTalkLink implements Channel, Runnable {
             DingTalkBinding binding = entry.getValue();
             bindings.put(sessionId, binding);
             userIdToSession.put(binding.userId, sessionId);
-            if (binding.sessionWebhook != null && !binding.sessionWebhook.isEmpty()) {
-                webhookCache.put(binding.userId, binding.sessionWebhook);
-            }
+
             LOG.info("[DingTalk] Restored session {} -> userId {}", sessionId, binding.userId);
         }
     }
@@ -377,7 +375,7 @@ public class DingTalkLink implements Channel, Runnable {
                 ONode headers = msg.get("headers");
                 String messageId = headers != null ? headers.get("messageId").getString() : null;
 
-                // 回复 ACK
+                // 回复 ACK（仅确认收到，后续 AI 回复通过 WebSocket 发送）
                 ONode ack = new ONode();
                 ack.set("code", 200);
                 ONode ackHeaders = ack.getOrNew("headers");
@@ -392,7 +390,7 @@ public class DingTalkLink implements Channel, Runnable {
                 String data = msg.get("data").getString();
                 if (data != null && !data.isEmpty()) {
                     ONode botMsg = ONode.ofJson(data);
-                    onBotMessageParsed(botMsg, conn);
+                    onBotMessageParsed(botMsg, conn, messageId);
                 }
             }
         } catch (Exception e) {
@@ -403,7 +401,7 @@ public class DingTalkLink implements Channel, Runnable {
     /**
      * 解析并处理钉钉机器人消息
      */
-    private void onBotMessageParsed(ONode botMsg, StreamConnection conn) {
+    private void onBotMessageParsed(ONode botMsg, StreamConnection conn, String wsMessageId) {
         String userId = botMsg.get("senderStaffId").getString();
         if (userId == null || userId.isEmpty()) {
             userId = botMsg.get("senderId").getString();
@@ -422,16 +420,15 @@ public class DingTalkLink implements Channel, Runnable {
         }
 
         String msgId = botMsg.get("msgId").getString();
-        String webhook = botMsg.get("sessionWebhook").getString();
         String conversationType = botMsg.get("conversationType").getString();
 
         LOG.info("[DingTalk] Received bot message: userId={}, convType={}, msgId={}, text={}",
                 userId, conversationType, msgId,
                 text != null ? text.substring(0, Math.min(text.length(), 50)) : "null");
 
-        // 缓存 sessionWebhook（用于后续回复）
-        if (webhook != null && !webhook.isEmpty()) {
-            webhookCache.put(userId, webhook);
+        // 存储 WebSocket 回复通道（用于后续 AI 回复，无需 webhook，无过期问题）
+        if (wsMessageId != null && !wsMessageId.isEmpty()) {
+            replyChannels.put(userId, new ReplyChannel(wsMessageId, conn));
         }
 
         // 查找绑定的 session
@@ -444,14 +441,6 @@ public class DingTalkLink implements Channel, Runnable {
                 String robotCode = conn.appKey;
                 doBindSession(conn.pendingSessionId, userId, robotCode, conn.appKey, conn.appSecret);
                 sessionId = conn.pendingSessionId;
-                // 绑定成功后发一条欢迎提示
-                if (webhook != null && !webhook.isEmpty()) {
-                    try {
-                        DingTalkClient.replyViaWebhook(webhook, "绑定成功！已连接到 SolonCode Web 会话。");
-                    } catch (Exception e) {
-                        LOG.warn("[DingTalk] Welcome message send failed: {}", e.getMessage());
-                    }
-                }
             } else {
                 LOG.warn("[DingTalk] Received message from unbound user (no pending session): userId={}", userId);
                 return;
@@ -460,12 +449,6 @@ public class DingTalkLink implements Channel, Runnable {
 
         DingTalkBinding binding = bindings.get(sessionId);
         if (binding == null) return;
-
-        // 持久化 sessionWebhook 到绑定记录（重启后可用）
-        if (webhook != null && !webhook.equals(binding.sessionWebhook)) {
-            binding.sessionWebhook = webhook;
-            credentialStore.save(bindings);
-        }
 
         // 防重复处理
         if (msgId != null && msgId.equals(binding.lastMessageId)) {
@@ -492,7 +475,7 @@ public class DingTalkLink implements Channel, Runnable {
     // ==================== 消息发送 ====================
 
     /**
-     * 降级方案：通过 API 发送回复（当 sessionWebhook 不可用时）
+     * 降级方案：通过 API 发送回复（当 WebSocket Stream 不可用时）
      */
     private void sendReplyViaApi(DingTalkBinding binding, String reply) {
         String token = DingTalkClient.getAccessToken(binding.appKey, binding.appSecret);
@@ -519,6 +502,64 @@ public class DingTalkLink implements Channel, Runnable {
                     }
                     return DingTalkClient.sendSingleMarkdownMessage(fToken, fRobotCode, fUserId, title, chunk);
                 });
+    }
+
+    // ==================== WebSocket 回复通道 ====================
+
+    /**
+     * 通过 WebSocket Stream 发送 markdown 回复
+     *
+     * @param wsClient  WebSocket 客户端
+     * @param messageId 原始 CALLBACK 的 messageId（用于关联回复）
+     * @param text      回复文本（Markdown 格式）
+     * @return true 发送成功
+     */
+    private boolean replyViaStream(SimpleWebSocketClient wsClient, String messageId, String text) {
+        if (wsClient == null || !wsClient.isOpen()) {
+            LOG.warn("[DingTalk] replyViaStream: WebSocket not open");
+            return false;
+        }
+        try {
+            ONode reply = new ONode();
+            reply.set("code", 200);
+            ONode headers = reply.getOrNew("headers");
+            headers.set("messageId", messageId);
+            headers.set("contentType", "application/json");
+
+            // data 中放 DingTalk 消息 JSON（markdown 格式）
+            ONode data = new ONode();
+            data.set("msgtype", "markdown");
+            ONode md = data.getOrNew("markdown");
+            md.set("title", DingTalkClient.extractTitle(text));
+            md.set("text", text);
+            reply.set("data", data.toJson());
+
+            wsClient.send(reply.toJson());
+            return true;
+        } catch (Exception e) {
+            LOG.error("[DingTalk] replyViaStream error: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    // ==================== 内部数据类 ====================
+
+    /**
+     * WebSocket 回复通道：记录从哪个连接、用哪个 messageId 回复
+     */
+    private static class ReplyChannel {
+        final String messageId;
+        final StreamConnection conn;
+
+        ReplyChannel(String messageId, StreamConnection conn) {
+            this.messageId = messageId;
+            this.conn = conn;
+        }
+
+        boolean isActive() {
+            return messageId != null && !messageId.isEmpty()
+                    && conn != null && conn.wsClient != null && conn.wsClient.isOpen();
+        }
     }
 
     // ==================== 内部连接类（每个 appKey 独立一条连接） ====================
@@ -692,6 +733,5 @@ public class DingTalkLink implements Channel, Runnable {
         public String lastMessageId;   // 最后处理的消息 ID（防重复）
         public String appKey;          // 保存的 AppKey（用于重启后恢复 Stream 连接）
         public String appSecret;       // 保存的 AppSecret
-        public String sessionWebhook;  // sessionWebhook（持久化后重启可恢复 webhook 回复）
     }
 }

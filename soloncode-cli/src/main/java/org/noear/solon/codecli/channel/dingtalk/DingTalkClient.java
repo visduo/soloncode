@@ -200,30 +200,6 @@ public class DingTalkClient {
     }
 
     /**
-     * 通过 sessionWebhook 回复消息（支持 Markdown 格式）
-     *
-     * @param webhook sessionWebhook URL
-     * @param text    回复文本（Markdown 格式）
-     * @return true 发送成功
-     */
-    public static boolean replyViaWebhook(String webhook, String text) {
-        try {
-            ONode body = new ONode();
-            body.set("msgtype", "markdown");
-            ONode mdNode = body.getOrNew("markdown");
-            // 取回复内容的第一行作为通知标题，避免 iOS 通知始终显示固定的 "SolonCode"
-            mdNode.set("title", extractTitle(text));
-            mdNode.set("text", text);
-            String resp = httpPost(webhook, body.toJson(), null);
-            if (resp == null) return false;
-            return true;
-        } catch (Exception e) {
-            LOG.error("[DingTalk] replyViaWebhook error: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    /**
      * 从 Markdown 文本中提取通知标题
      * <ul>
      *     <li>取第一行，trim</li>
