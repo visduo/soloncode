@@ -375,7 +375,7 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 .model-selector-current .model-name { overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
 .model-selector-current .model-arrow { font-size: 12px; transition: transform 0.2s; opacity: 0.5; }
 .model-selector.open .model-arrow { transform: rotate(180deg); }
-.model-dropdown { position: absolute; bottom: 100%; left: 0; margin-bottom: 6px; background: var(--bg-input-box); border: 1px solid var(--border-color); border-radius: 10px; box-shadow: var(--shadow-lg); min-width: 220px; max-height: 280px; overflow-y: auto; display: none; z-index: 100; animation: drop-up 0.15s ease-out; }
+.model-dropdown { position: absolute; bottom: 100%; left: 0; margin-bottom: 6px; background: var(--bg-input-box); border: 1px solid var(--border-color); border-radius: 10px; box-shadow: var(--shadow-lg); min-width: 220px; max-width: 90vw; width: max-content; max-height: 280px; overflow-y: auto; display: none; z-index: 100; animation: drop-up 0.15s ease-out; }
 .model-selector.open .model-dropdown { display: block; }
 @keyframes drop-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .model-dropdown-item { padding: 10px 14px; cursor: pointer; font-size: 13px; color: var(--text-primary); display: flex; flex-direction: column; gap: 2px; transition: background 0.15s; }
