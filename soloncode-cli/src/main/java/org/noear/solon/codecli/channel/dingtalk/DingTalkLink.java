@@ -510,7 +510,13 @@ public class DingTalkLink implements Channel, Runnable {
         ChunkedSender.sendChunked(reply,
                 ChunkedSender.Config.dingtalk(),
                 (chunk, part) -> {
-                    String title = part > 1 ? "(" + part + ")" : "";
+                    // 通知标题：part 1 取内容第一行，多段时加序号
+                    String title;
+                    if (part > 1) {
+                        title = "(" + part + ") " + DingTalkClient.extractTitle(chunk);
+                    } else {
+                        title = DingTalkClient.extractTitle(chunk);
+                    }
                     return DingTalkClient.sendSingleMarkdownMessage(fToken, fRobotCode, fUserId, title, chunk);
                 });
     }

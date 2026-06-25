@@ -211,7 +211,8 @@ public class DingTalkClient {
             ONode body = new ONode();
             body.set("msgtype", "markdown");
             ONode mdNode = body.getOrNew("markdown");
-            mdNode.set("title", "SolonCode");
+            // 取回复内容的第一行作为通知标题，避免 iOS 通知始终显示固定的 "SolonCode"
+            mdNode.set("title", extractTitle(text));
             mdNode.set("text", text);
             String resp = httpPost(webhook, body.toJson(), null);
             if (resp == null) return false;
@@ -220,6 +221,26 @@ public class DingTalkClient {
             LOG.error("[DingTalk] replyViaWebhook error: {}", e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * 从 Markdown 文本中提取通知标题
+     * <ul>
+     *     <li>取第一行，trim</li>
+     *     <li>去除 markdown 标题标记（# 开头）</li>
+     *     <li>最多 30 字符</li>
+     * </ul>
+     */
+    public static String extractTitle(String text) {
+        if (text == null || text.isEmpty()) {
+            return "SolonCode";
+        }
+        String firstLine = text.split("\\n", 2)[0].trim();
+        firstLine = firstLine.replaceAll("^#+\\s*", "");
+        if (firstLine.length() > 30) {
+            return firstLine.substring(0, 30) + "…";
+        }
+        return firstLine;
     }
 
     /**
