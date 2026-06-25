@@ -82,15 +82,6 @@ public class WebGate extends SimpleWebSocketListener {
      */
     private final List<WebSocket> connections = new CopyOnWriteArrayList<>();
 
-    /**
-     * 会话 → 消息来源通道 映射表。
-     *
-     * <p>记录每个会话最近一次用户消息的来源通道（"wechat" / "feishu" / "dingtalk" / "web"），
-     * 用于在 {@link #emitToClient} 中自动为 AI 回复注入来源标识，
-     * 使得 web.html 上可以区分消息来自哪个 IM 通道。</p>
-     */
-    private final Map<String, String> sessionChannelMap = new ConcurrentHashMap<>();
-
 
     /**
      * 构造网关实例。
@@ -173,9 +164,6 @@ public class WebGate extends SimpleWebSocketListener {
      * <p>将 sessionId 注入到消息块中，然后序列化为 JSON 广播给所有已连接的前端。
      * 前端根据消息中的 sessionId 字段路由到对应的会话面板进行渲染。</p>
      *
-     * <p>同时根据 {@link #sessionChannelMap} 自动注入消息来源通道标识（source / sourceLabel），
-     * 使前端能区分消息来自哪个 IM 通道（微信/飞书/钉钉/Web）。</p>
-     *
      * @param sessionId 会话标识，用于前端路由消息到正确的会话面板
      * @param jsonChunk 待推送的消息块（可为文本流、错误、完成信号等多种类型）
      */
@@ -184,15 +172,6 @@ public class WebGate extends SimpleWebSocketListener {
             return;
         } else {
             jsonChunk.setSessionId(sessionId);
-        }
-
-        // 自动注入来源标识（仅对未设置 source 的消息块执行）
-        if (jsonChunk.getSource() == null) {
-            String channel = sessionChannelMap.get(sessionId);
-            if (channel != null) {
-                jsonChunk.setSource(channel);
-                jsonChunk.setSourceLabel(WebChunk.toSourceLabel(channel));
-            }
         }
 
         // 确保消息中包含 sessionId
@@ -262,14 +241,10 @@ public class WebGate extends SimpleWebSocketListener {
                             String sessionCwd,
                             String input, String selectedModel,
                             UploadedFile[] attachments, String[] attachmentTypes,
-                            String hitlAction) {
+                            String hitlAction, String source) {
         AgentSession session = null;
         try {
             session = engine.getSession(sessionId);
-
-            // 记录来源为 web（仅在未通过 safeChatInput 设置来源时生效，
-            // 避免覆盖 IM 通道已设置的来源标识）
-            sessionChannelMap.putIfAbsent(sessionId, "web");
 
             String agentName = null;
             String currentInput = input;
@@ -360,9 +335,9 @@ public class WebGate extends SimpleWebSocketListener {
                     for (ImageBlock block : imageBlocks) {
                         contents.addBlock(block);
                     }
-                    prompt = Prompt.of(new UserMessage(contents));
+                    prompt = Prompt.of(new UserMessage(contents).addMetadata("source", source));
                 } else {
-                    prompt = Prompt.of(currentInput);
+                    prompt = Prompt.of(ChatMessage.ofUser(currentInput).addMetadata("source", source));
                 }
 
                 // 流式处理：输出通过 WebSocket 推送
@@ -630,7 +605,7 @@ public class WebGate extends SimpleWebSocketListener {
                     String cmdName = parts.get(0).toLowerCase();
                     if ("interrupt".equals(cmdName) || "exit".equals(cmdName)) {
                         emitToClient(sessionId, WebChunk.ofUserInput(input, source));
-                        onChatInput(sessionId, null, input, null, null, null, null);
+                        onChatInput(sessionId, null, input, null, null, null, null, source);
                         return;
                     }
                 }
@@ -643,13 +618,10 @@ public class WebGate extends SimpleWebSocketListener {
             return;
         }
 
-        // ★ 记录消息来源通道，后续 AI 回复将自动继承此来源
-        sessionChannelMap.put(sessionId, source);
-
         // 先推送用户消息到前端，确保对话记录中显示用户侧消息
         emitToClient(sessionId, WebChunk.ofUserInput(input, source));
 
-        onChatInput(sessionId, null, input, null, null, null, null);
+        onChatInput(sessionId, null, input, null, null, null, null, source);
     }
 
 
@@ -678,10 +650,6 @@ public class WebGate extends SimpleWebSocketListener {
             return null;
         }
 
-
-        // ★ 记录消息来源通道，后续 AI 回复将自动继承此来源
-        sessionChannelMap.put(sessionId, source);
-
         emitToClient(sessionId, WebChunk.ofUserInput(input, source));
 
         String agentName = null;
@@ -696,7 +664,8 @@ public class WebGate extends SimpleWebSocketListener {
             }
         }
 
-        return performAgentTaskSync(session, null, Prompt.of(currentInput), null, agentName);
+        ChatMessage chatMessage = ChatMessage.ofUser(currentInput).addMetadata("source", source);
+        return performAgentTaskSync(session, null, Prompt.of(chatMessage), null, agentName);
     }
 
 

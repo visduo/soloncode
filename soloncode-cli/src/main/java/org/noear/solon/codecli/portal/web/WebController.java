@@ -398,10 +398,19 @@ public class WebController {
                     String content = node.get("content").getString();
 
                     if (role != null && content != null) {
+                        ONode metadata = node.get("metadata");
+                        String source = metadata.get("source").getString();
+
                         Map<String, Object> item = new LinkedHashMap<>();
                         item.put("role", role);
                         item.put("content", content);
                         item.put("createdAt", node.get("createdAt").getString());
+
+                        if (source != null) {
+                            item.put("source", source); //可能有 {source:xxx}
+                            item.put("sourceLabel", WebChunk.toSourceLabel(source));
+                        }
+
                         data.add(item);
                     }
                 }
@@ -585,7 +594,7 @@ public class WebController {
             String hitlAction = ctx.param("hitlAction");
 
             // 路由到 WebGate 处理（AI 结果通过 WebSocket 推送到前端）
-            webGate.onChatInput(sessionId, sessionCwd, input, model, attachments, attachmentTypes, hitlAction);
+            webGate.onChatInput(sessionId, sessionCwd, input, model, attachments, attachmentTypes, hitlAction, null);
 
             // 返回简单 JSON，前端通过 WebSocket 接收 AI 结果
             return Result.succeed();

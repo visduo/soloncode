@@ -249,6 +249,15 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 .source-tag.source-dingtalk { background: #0089FF; }
 .source-tag.source-default { background: #999; }
 
+/* 来源文本标签 — 与时间戳同色，放在时间左侧 */
+.msg-source-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    opacity: 0.55;
+    margin-right: 6px;
+    user-select: none;
+}
+
 /* Markdown */
 .md-content { padding: 2px 0; color: var(--text-ai-msg); font-size: 14px; }
 .md-content > :first-child { margin-top: 0; }

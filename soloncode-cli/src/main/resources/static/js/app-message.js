@@ -16,12 +16,7 @@ function appendUserMessage(sess, text, imageDataUrls, fileAttachments, createdAt
     row.innerHTML = '<div class="user-msg-col"><div class="msg-bubble"></div><button class="user-copy-btn" title="复制">' + COPY_SVG + '</button></div>';
     var bubble = $(row).find('.msg-bubble')[0];
 
-    // 来源标签（仅非空且非 "Web" 时显示）
-    if (sourceLabel && sourceLabel !== 'Web') {
-        var sourceTag = $('<span>').addClass('source-tag').addClass('source-' + (sourceLabel === '微信' ? 'wechat' : sourceLabel === '飞书' ? 'feishu' : sourceLabel === '钉钉' ? 'dingtalk' : 'default'))[0];
-        sourceTag.textContent = sourceLabel;
-        $(bubble).append(sourceTag);
-    }
+    // 来源标签（仅非空且非 "Web" 时显示；会在时间戳左侧追加）
 
     // Multiple images
     if (imageDataUrls && imageDataUrls.length > 0) {
@@ -76,7 +71,13 @@ function appendUserMessage(sess, text, imageDataUrls, fileAttachments, createdAt
 
     // 时间戳（实时发送不传 createdAt 时兜底为当前时间，与历史加载行为一致）
     var msgTime = createdAt || Date.now();
-    var timeEl = $('<div>').addClass('msg-time').text(formatMsgTime(msgTime))[0];
+    var timeEl = $('<div>').addClass('msg-time')[0];
+    // 来源标签放在时间左侧，同样浅色
+    if (sourceLabel && sourceLabel !== 'Web') {
+        var srcSpan = $('<span>').addClass('msg-source-label').text(sourceLabel)[0];
+        $(timeEl).append(srcSpan);
+    }
+    timeEl.appendChild(document.createTextNode(formatMsgTime(msgTime)));
     $(bubble).append(timeEl);
 
     addImageLightbox(bubble);
@@ -110,13 +111,7 @@ function ensureAssistantBubble(sess) {
         $(sess.container).append(row);
         sess.currentBubbleEl = $(row).find('.md-content')[0];
 
-        // 来源标签（AI 回复继承用户输入的消息来源）
-        if (sess.currentSourceLabel && sess.currentSourceLabel !== 'Web') {
-            var bubble = $(row).find('.msg-bubble')[0];
-            var tag = $('<span>').addClass('source-tag').addClass('source-' + (sess.currentSourceLabel === '微信' ? 'wechat' : sess.currentSourceLabel === '飞书' ? 'feishu' : sess.currentSourceLabel === '钉钉' ? 'dingtalk' : 'default'))[0];
-            tag.textContent = sess.currentSourceLabel;
-            bubble.insertBefore(tag, bubble.firstChild);
-        }
+        // AI 回复不显示来源标签
         var copyBtn = $(row).find('.copy-btn')[0];
         // 复制目标为「最终答案」：统一从 .md-content 的 data-md-raw 读取。
         // 历史消息与流式结束后后端写入的最终答案都带该属性；流式接收过程中不写，故复制不到中间片段。

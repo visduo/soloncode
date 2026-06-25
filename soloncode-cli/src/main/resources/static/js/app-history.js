@@ -251,7 +251,7 @@ function loadMessages(sess) {
                 var m = msgs[i];
                 if (m.role === 'USER') {
                     resetStreamState(sess);
-                    appendUserMessage(sess, m.content, null, null, m.createdAt);
+                    appendUserMessage(sess, m.content, null, null, m.createdAt, m.sourceLabel);
                 } else if (m.role === 'ASSISTANT') {
                     var isConsecutive = (i > 0 && msgs[i - 1].role === 'ASSISTANT');
                     if (!isConsecutive) resetStreamState(sess);
