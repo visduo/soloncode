@@ -19,6 +19,7 @@ import org.noear.java_websocket.client.SimpleWebSocketClient;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.codecli.channel.Channel;
+import org.noear.solon.codecli.channel.ChunkedSender;
 import org.noear.solon.codecli.portal.web.WebGate;
 import org.noear.solon.core.util.Assert;
 import org.slf4j.Logger;
@@ -117,27 +118,13 @@ public class DingTalkLink implements Channel, Runnable {
             return;
         }
 
-        // 优先使用缓存的 sessionWebhook 回复
+        // 优先使用缓存的 sessionWebhook 回复（Markdown 格式）
         String webhook = webhookCache.get(binding.userId);
         if (webhook != null && !webhook.isEmpty()) {
             try {
-                int maxLen = 5000;
-                if (reply.length() <= maxLen) {
-                    DingTalkClient.replyViaWebhook(webhook, reply);
-                } else {
-                    int pos = 0;
-                    int part = 1;
-                    while (pos < reply.length()) {
-                        int end = Math.min(pos + maxLen, reply.length());
-                        String chunk = reply.substring(pos, end);
-                        if (part > 1) {
-                            chunk = "(" + part + ") " + chunk;
-                        }
-                        DingTalkClient.replyViaWebhook(webhook, chunk);
-                        pos = end;
-                        part++;
-                    }
-                }
+                ChunkedSender.sendChunked(reply,
+                        ChunkedSender.Config.dingtalk(),
+                        (chunk, part) -> DingTalkClient.replyViaWebhook(webhook, chunk));
                 return;
             } catch (Exception e) {
                 LOG.warn("[DingTalk] Webhook reply failed, falling back to API: {}", e.getMessage());
@@ -505,26 +492,18 @@ public class DingTalkLink implements Channel, Runnable {
             return;
         }
 
-        String robotCode = binding.robotCode != null && !binding.robotCode.isEmpty()
+        final String fToken = token;
+        final String fRobotCode = binding.robotCode != null && !binding.robotCode.isEmpty()
                 ? binding.robotCode : binding.appKey;
+        final String fUserId = binding.userId;
 
-        int maxLen = 5000;
-        if (reply.length() <= maxLen) {
-            DingTalkClient.sendSingleMessage(token, robotCode, binding.userId, reply);
-        } else {
-            int pos = 0;
-            int part = 1;
-            while (pos < reply.length()) {
-                int end = Math.min(pos + maxLen, reply.length());
-                String chunk = reply.substring(pos, end);
-                if (part > 1) {
-                    chunk = "(" + part + ") " + chunk;
-                }
-                DingTalkClient.sendSingleMessage(token, robotCode, binding.userId, chunk);
-                pos = end;
-                part++;
-            }
-        }
+        // 使用 Markdown 格式分段发送（含限速 + 重试）
+        ChunkedSender.sendChunked(reply,
+                ChunkedSender.Config.dingtalk(),
+                (chunk, part) -> {
+                    String title = part > 1 ? "(" + part + ")" : "";
+                    return DingTalkClient.sendSingleMarkdownMessage(fToken, fRobotCode, fUserId, title, chunk);
+                });
     }
 
     // ==================== 内部连接类（每个 appKey 独立一条连接） ====================

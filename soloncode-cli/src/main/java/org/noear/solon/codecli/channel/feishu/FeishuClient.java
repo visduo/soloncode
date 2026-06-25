@@ -187,6 +187,61 @@ public class FeishuClient {
     }
 
     /**
+     * 发送 Markdown 富文本消息（post + md tag）
+     *
+     * <p>飞书 post 格式支持 {@code tag: "md"}，可渲染完整 GFM Markdown（标题、加粗、
+     * 斜体、代码块、引用、列表、表格、任务列表等）。</p>
+     *
+     * <p>注意：{@code md} 标签独占一个段落，不能与其他标签（如 text、a）混排。</p>
+     *
+     * @param accessToken    tenant_access_token
+     * @param receiveIdType  接收者类型：open_id / user_id / chat_id
+     * @param receiveId      接收者 ID
+     * @param title          消息标题（显示在消息顶部，可选，传空字符串则无标题）
+     * @param mdBody         Markdown 文本内容
+     * @return message_id 或 null
+     */
+    public static String sendMdPostMessage(String accessToken, String receiveIdType,
+                                            String receiveId, String title, String mdBody) {
+        try {
+            ONode body = new ONode();
+            body.set("receive_id_type", receiveIdType);
+            body.set("receive_id", receiveId);
+            body.set("msg_type", "post");
+
+            // 构建 post 富文本，使用 md tag 渲染全量 Markdown
+            ONode postContent = new ONode();
+            ONode postBody = postContent.getOrNew("zh_cn");
+            postBody.set("title", title != null ? title : "");
+            ONode contentArray = postBody.getOrNew("content").asArray();
+            ONode lineArray = new ONode().asArray();
+            ONode mdNode = new ONode();
+            mdNode.set("tag", "md");
+            mdNode.set("text", mdBody);
+            lineArray.add(mdNode);
+            contentArray.add(lineArray);
+
+            body.set("content", postContent);
+
+            String resp = httpPost(BASE_URL + "/im/v1/messages?receive_id_type=" + receiveIdType,
+                    body.toJson(), accessToken);
+            if (resp == null) return null;
+
+            ONode root = ONode.ofJson(resp);
+            int code = root.get("code").getInt();
+            if (code != 0) {
+                LOG.warn("[Feishu] sendMdPostMessage failed: code={}, msg={}", code, root.get("msg").getString());
+                return null;
+            }
+
+            return root.get("data").get("message_id").getString();
+        } catch (Exception e) {
+            LOG.error("[Feishu] sendMdPostMessage error: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * 获取飞书 WebSocket 长连接端点
      *
      * @param appId     飞书应用 App ID

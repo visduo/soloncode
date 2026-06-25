@@ -200,23 +200,77 @@ public class DingTalkClient {
     }
 
     /**
-     * 通过 sessionWebhook 回复消息（替代 BotReplier）
+     * 通过 sessionWebhook 回复消息（支持 Markdown 格式）
      *
      * @param webhook sessionWebhook URL
-     * @param text    回复文本
+     * @param text    回复文本（Markdown 格式）
      * @return true 发送成功
      */
     public static boolean replyViaWebhook(String webhook, String text) {
         try {
             ONode body = new ONode();
-            body.set("msgtype", "text");
-            ONode textNode = body.getOrNew("text");
-            textNode.set("content", text);
+            body.set("msgtype", "markdown");
+            ONode mdNode = body.getOrNew("markdown");
+            mdNode.set("title", "SolonCode");
+            mdNode.set("text", text);
             String resp = httpPost(webhook, body.toJson(), null);
             if (resp == null) return false;
             return true;
         } catch (Exception e) {
             LOG.error("[DingTalk] replyViaWebhook error: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 发送单聊 Markdown 机器人消息（批量接口，但这里每次只发一个用户）
+     *
+     * <p>使用 {@code msgKey: "sampleMarkdown"}，支持标题、加粗、斜体、列表、
+     * 引用、代码块等 Markdown 语法。</p>
+     *
+     * @param accessToken access_token
+     * @param robotCode   机器人编码
+     * @param userId      接收者 userId（staffId）
+     * @param title       消息标题（显示在消息头部，可选）
+     * @param mdText      Markdown 文本内容
+     * @return true 发送成功
+     */
+    public static boolean sendSingleMarkdownMessage(String accessToken, String robotCode, String userId,
+                                                     String title, String mdText) {
+        try {
+            ONode body = new ONode();
+            body.set("robotCode", robotCode);
+
+            ONode userIds = body.getOrNew("userIds").asArray();
+            userIds.add(userId);
+
+            body.set("msgKey", "sampleMarkdown");
+
+            ONode msgParam = new ONode();
+            msgParam.set("title", title != null ? title : "");
+            msgParam.set("text", mdText);
+            body.set("msgParam", msgParam.toJson());
+
+            String resp = httpPost(NEW_API_BASE + "/v1.0/robot/oToMessages/batchSend", body.toJson(), accessToken);
+            if (resp == null) return false;
+
+            if (resp.isEmpty()) {
+                return true;
+            }
+
+            ONode root = ONode.ofJson(resp);
+            String errorCode = root.hasKey("code") ? root.get("code").getString() : null;
+            if (errorCode == null && root.hasKey("errcode")) {
+                errorCode = root.get("errcode").getString();
+            }
+            if (errorCode != null && !"0".equals(errorCode) && !"SUCCESS".equalsIgnoreCase(errorCode)) {
+                LOG.warn("[DingTalk] sendSingleMarkdownMessage failed: {}", resp);
+                return false;
+            }
+
+            return true;
+        } catch (Exception e) {
+            LOG.error("[DingTalk] sendSingleMarkdownMessage error: {}", e.getMessage());
             return false;
         }
     }
