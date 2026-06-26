@@ -1,4 +1,10 @@
 
+### v2026.6.27
+
+* 优化 soloncode web 钉钉与微信绑定
+* 优化 soloncode web mcp 编辑提示
+* 细节优化
+
 ### v2026.6.26
 
 * 添加 soloncode web 用户消息来源显示（飞书、Web）
