@@ -262,6 +262,9 @@ public class WeChatLink implements Channel, Runnable {
                 WeChatClient.sendTyping(binding.botToken, fromUserId, binding.typingTicket, 2);
             }
         }
+
+        // 持久化更新后的凭据（cursor, lastContextToken, lastFromUserId）
+        credentialStore.save(bindings);
     }
 
     @Override
