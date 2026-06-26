@@ -143,6 +143,7 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 .dingtalk-btn-header { background: none; border-color: var(--border-color); color: var(--text-secondary); }
 .dingtalk-btn-header:hover { background: var(--bg-hover); color: var(--text-primary); }
 .dingtalk-btn-header.bound { background: none; border: 1px solid var(--color-success); color: var(--color-success); }
+.dingtalk-btn-header.pending { background: none; border: 1px solid var(--color-dingtalk); color: var(--color-dingtalk); }
 
 /* WeChat QR Modal */
 .wechat-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; align-items: center; justify-content: center; animation: modal-fade-in 0.2s ease-out; }

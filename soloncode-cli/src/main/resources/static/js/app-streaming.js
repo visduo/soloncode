@@ -872,9 +872,22 @@ function updateDingTalkUI() {
         try {
             var data = resp.data || {};
             var bound = !!data.bound;
-            dingtalkHeaderBtn.toggleClass('bound', bound);
-            dingtalkHeaderLabel.text(bound ? '已连接' : '');
-            dingtalkHeaderBtn.attr('title', bound ? '钉钉已绑定（点击解绑）' : '钉钉绑定');
+            var pending = !!data.pending;
+            if (bound && !pending) {
+                // 完全绑定（用户已在钉上发过消息）
+                dingtalkHeaderBtn.toggleClass('bound', true).removeClass('pending');
+                dingtalkHeaderLabel.text('已连接');
+                dingtalkHeaderBtn.attr('title', '钉钉已绑定（点击解绑）');
+            } else if (bound && pending) {
+                // 半绑定（扫码成功，等待用户发第一条消息）
+                dingtalkHeaderBtn.toggleClass('pending', true).removeClass('bound');
+                dingtalkHeaderLabel.text('连接中...');
+                dingtalkHeaderBtn.attr('title', '等待用户在钉钉上发消息完成绑定');
+            } else {
+                dingtalkHeaderBtn.removeClass('bound pending');
+                dingtalkHeaderLabel.text('');
+                dingtalkHeaderBtn.attr('title', '钉钉绑定');
+            }
         } catch(e) {}
     }, 'json');
 }
@@ -895,10 +908,11 @@ function startDingtalkStatusPoll() {
         $.get('/web/chat/dingtalk/status?sessionId=' + encodeURIComponent(activeSessionId), function(resp) {
             try {
                 var data = resp.data || {};
-                if (data.bound) {
+                // 只在完全绑定（pending=false）时才停止轮询
+                if (data.bound && !data.pending) {
                     clearInterval(dingtalkStatusTimer);
                     dingtalkStatusTimer = null;
-                    dingtalkHeaderBtn.toggleClass('bound', true);
+                    dingtalkHeaderBtn.toggleClass('bound', true).removeClass('pending');
                     dingtalkHeaderLabel.text('已连接');
                     dingtalkHeaderBtn.attr('title', '钉钉已绑定（点击解绑）');
                 }
@@ -1147,7 +1161,8 @@ function showDingTalkModal() {
                             $.get('/web/chat/dingtalk/status?sessionId=' + encodeURIComponent(activeSessionId), function(resp) {
                                 try {
                                     var data = resp.data || {};
-                                    if (data.bound) {
+                                    // bound=true + pending=false 表示用户已在钉钉上发消息完成了绑定
+                                    if (data.bound && !data.pending) {
                                         clearInterval(dingtalkBindCheckTimer);
                                         dingtalkBindCheckTimer = null;
                                         $qrStatus.text('绑定成功！').removeClass('error').addClass('scanned');

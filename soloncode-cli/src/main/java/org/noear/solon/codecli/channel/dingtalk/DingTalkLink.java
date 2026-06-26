@@ -105,13 +105,23 @@ public class DingTalkLink implements Channel, Runnable {
 
     @Override
     public boolean isBound(String sessionId) {
-        return bindings.containsKey(sessionId);
+        if (bindings.containsKey(sessionId)) {
+            return true;
+        }
+        // QR 扫码流：尚未完成绑定但已有 pending 连接时也算 bound（sendReply 可走 API 降级）
+        return connections.values().stream()
+                .anyMatch(c -> sessionId.equals(c.pendingSessionId));
     }
 
     @Override
     public void sendReply(String sessionId, String reply, boolean isFinal) {
         DingTalkBinding binding = bindings.get(sessionId);
+
         if (binding == null) {
+            // QR 流：尚未完成绑定（无 userId），记录日志
+            if (connections.values().stream().anyMatch(c -> sessionId.equals(c.pendingSessionId))) {
+                sendReplyViaQrPending(sessionId, reply);
+            }
             return;
         }
 
@@ -119,20 +129,14 @@ public class DingTalkLink implements Channel, Runnable {
             return;
         }
 
-        // 优先通过 WebSocket Stream 回复（无需 webhook，无过期问题）
-        ReplyChannel channel = replyChannels.get(binding.userId);
-        if (channel != null && channel.isActive()) {
-            ChunkedSender.SendResult result = ChunkedSender.sendChunked(reply,
-                    ChunkedSender.Config.dingtalk(),
-                    (chunk, part) -> replyViaStream(channel.conn.wsClient, channel.messageId, chunk));
-            if (result.allSucceeded()) {
-                return;
-            }
-            LOG.warn("[DingTalk] Stream reply failed (sent {}/{}), falling back to API",
-                    result.getTotalParts() - result.getFailedParts(), result.getTotalParts());
+        if (binding.userId == null || binding.userId.isEmpty()) {
+            LOG.warn("[DingTalk] sendReply: binding.userId is null for session {}, cannot send via API", sessionId);
+            return;
         }
 
-        // 降级：使用 API 方式发送
+        // 始终通过钉钉 OpenAPI 发送回复
+        // （WebSocket Stream 回复仅用于同步 ACK，不适用于异步 AI 响应场景。
+        //   ACK 阶段已用 data="{}" 回复了 CALLBACK，再用同一 messageId 发消息会被钉钉服务器丢弃。）
         sendReplyViaApi(binding, reply);
     }
 
@@ -188,6 +192,18 @@ public class DingTalkLink implements Channel, Runnable {
 
         StreamConnection conn = getOrCreateConnection(appKey, appSecret);
         conn.pendingSessionId = sessionId;
+
+        // QR 扫码流：立即注册半绑定条目（userId=null），让 isBound() 返回 true
+        if (!bindings.containsKey(sessionId)) {
+            DingTalkBinding halfBinding = new DingTalkBinding();
+            halfBinding.appKey = appKey;
+            halfBinding.appSecret = appSecret;
+            halfBinding.robotCode = appKey;
+            halfBinding.userId = null; // 用户发消息时会补全
+            bindings.put(sessionId, halfBinding);
+            LOG.info("[DingTalk] startStream (QR): registered half-binding for session {}", sessionId);
+        }
+
         LOG.info("[DingTalk] startStream: appKey={}, pendingSession={}",
                 appKey.substring(0, Math.min(8, appKey.length())) + "...", sessionId);
 
@@ -234,16 +250,27 @@ public class DingTalkLink implements Channel, Runnable {
      * 内部绑定实现
      */
     private void doBindSession(String sessionId, String userId, String robotCode, String appKey, String appSecret) {
-        DingTalkBinding binding = new DingTalkBinding();
-        binding.userId = userId;
-        binding.robotCode = robotCode != null ? robotCode : appKey;
-        binding.appKey = appKey;
-        binding.appSecret = appSecret;
+        // QR 流：如果已有半绑定条目，补全 userId 即可
+        DingTalkBinding binding = bindings.get(sessionId);
+        if (binding != null && binding.userId == null) {
+            // 补全 QR 半绑定
+            binding.userId = userId;
+            binding.robotCode = robotCode != null ? robotCode : appKey;
+            LOG.info("[DingTalk] QR half-binding completed for session {}, userId={}", sessionId, userId);
+        } else {
+            // 正常绑定（手动输入）
+            binding = new DingTalkBinding();
+            binding.userId = userId;
+            binding.robotCode = robotCode != null ? robotCode : appKey;
+            binding.appKey = appKey;
+            binding.appSecret = appSecret;
+            bindings.put(sessionId, binding);
+        }
 
         // 一个 userId 只能绑定一个 session（清理旧绑定）
         Set<String> unbindSessionIds = new HashSet<>();
         bindings.forEach((k, v) -> {
-            if (v.userId.equals(userId)) {
+            if (v.userId != null && !k.equals(sessionId) && v.userId.equals(userId)) {
                 unbindSessionIds.add(k);
             }
         });
@@ -251,7 +278,6 @@ public class DingTalkLink implements Channel, Runnable {
             doUnbindSession(unbindSessionId);
         }
 
-        bindings.put(sessionId, binding);
         userIdToSession.put(userId, sessionId);
 
         // 清除连接的 pending 状态
@@ -489,6 +515,9 @@ public class DingTalkLink implements Channel, Runnable {
                 ? binding.robotCode : binding.appKey;
         final String fUserId = binding.userId;
 
+        LOG.info("[DingTalk] sendReplyViaApi: robotCode={}, userId={}, replyLen={}",
+                fRobotCode, fUserId, reply.length());
+
         // 使用 Markdown 格式分段发送（含限速 + 重试）
         ChunkedSender.sendChunked(reply,
                 ChunkedSender.Config.dingtalk(),
@@ -500,8 +529,20 @@ public class DingTalkLink implements Channel, Runnable {
                     } else {
                         title = DingTalkClient.extractTitle(chunk);
                     }
-                    return DingTalkClient.sendSingleMarkdownMessage(fToken, fRobotCode, fUserId, title, chunk);
+                    boolean ok = DingTalkClient.sendSingleMarkdownMessage(fToken, fRobotCode, fUserId, title, chunk);
+                    LOG.info("[DingTalk] sendSingleMarkdownMessage part={} ok={}, robotCode={}, userId={}",
+                            part, ok, fRobotCode, fUserId);
+                    return ok;
                 });
+    }
+
+    /**
+     * QR 扫码半绑定状态发送降级：binding 中没有 userId（用户尚未在钉钉上发消息），
+     * 无法通过单聊 API 发送。记录警告日志，等待用户发消息完成绑定。
+     */
+    private void sendReplyViaQrPending(String sessionId, String reply) {
+        LOG.warn("[DingTalk] Cannot send reply to session {}: QR binding pending, " +
+                "user needs to send a DingTalk message first", sessionId);
     }
 
     // ==================== WebSocket 回复通道 ====================
