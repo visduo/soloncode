@@ -41,6 +41,21 @@ function sendMessage() {
     /* Block only if the active session is currently streaming */
     if (activeSessionId && sessionMap[activeSessionId] && sessionMap[activeSessionId].isStreaming) return;
 
+    /* /clear 命令：先发送到服务端清后端数据，流结束后再清前端 UI */
+    if (text === '/clear') {
+        clearInput();
+        clearAttachmentPreview();
+        if (!inChatMode) switchToChatMode();
+        setActiveSession(SESSION_ID);
+        var clearSess = sessionMap[SESSION_ID];
+        if (clearSess) {
+            clearSess._pendingClear = true;
+            sendCommandSilent('/clear', null);
+        }
+        chatInput.focus();
+        return;
+    }
+
     var filesToSend = pendingFiles.slice(); // snapshot
 
     // Build display text
@@ -245,6 +260,22 @@ function finishStream(sess) {
 
     // 清除消息来源标识，避免污染下一条流式响应
     sess.currentSourceLabel = null;
+
+    // /clear 命令处理完毕：清空前端对话 UI
+    if (sess._pendingClear) {
+        sess._pendingClear = false;
+        $(sess.container).empty();
+        sess.currentBubbleEl = null;
+        sess.reasonBuffer = '';
+        sess.thinkingBuffer = '';
+        sess.thinkingBlockEl = null;
+        sess.thinkingBodyMdEl = null;
+        sess.thinkingBodyWrapEl = null;
+        sess.pendingToolCard = null;
+        sess.pendingToolStarted = false;
+        sess.approvedToolCard = null;
+        sess.userMsgCounter = 0;
+    }
 
     // resetStreamState 会清空 buffer，所以必须在上面强刷完后再调
     resetStreamState(sess);
