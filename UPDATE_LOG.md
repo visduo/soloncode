@@ -1,3 +1,10 @@
+### v2026.6.28
+
+* 添加 soloncode web clear 命令执行后的前端清理
+* 优化 soloncode web 设置/供应商 同步细节
+* 优化 soloncode web 设置/日志选择、接口规范选择器的表单样式
+* 优化 soloncode serve 启动时打印
+* 细节优化
 
 ### v2026.6.27
 
