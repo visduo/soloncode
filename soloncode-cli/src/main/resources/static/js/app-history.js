@@ -8,6 +8,10 @@
 /* 自定义 composing 标志，替代 e.isComposing（macOS 输入法组合态下 Enter 时序问题） */
 var composing = false;
 
+function isInputComposing(event) {
+    return composing || !!(event && (event.isComposing || event.keyCode === 229));
+}
+
 var ACTIVE_SESSION_KEY = 'soloncode-active-session';
 function rememberActiveSession(sessionId) {
     try { if (sessionId) localStorage.setItem(ACTIVE_SESSION_KEY, sessionId); } catch (e) {}
@@ -374,11 +378,11 @@ function applyCmdSelection(inputEl, completeEl) {
     if (cmdActiveIndex >= 0 && cmdActiveIndex < cmdVisibleItems.length) {
         var cmd = cmdVisibleItems[cmdActiveIndex];
         var trigger = cmdTrigger || '/';
-        
+
         // 找到当前输入框中的命令前缀位置
         var val = inputEl.value;
         var prefixPos = -1;
-        
+
         // 查找最近的命令前缀（/、@ 或 $）
         for (var i = val.length - 1; i >= 0; i--) {
             var ch = val.charAt(i);
@@ -387,22 +391,22 @@ function applyCmdSelection(inputEl, completeEl) {
                 break;
             }
         }
-        
+
         if (prefixPos >= 0) {
             // 替换前缀及其后面的内容
             var textBefore = val.substring(0, prefixPos);
             var textAfter = val.substring(prefixPos);
-            
+
             // 找到前缀后面的空格位置（如果有）
             var spaceIndex = textAfter.indexOf(' ');
             var argsStr = '';
             if (spaceIndex >= 0) {
                 argsStr = textAfter.substring(spaceIndex);
             }
-            
+
             // 构建新的值（命令/技能/子代理名称后追加空格）
             inputEl.value = textBefore + trigger + cmd.name + ' ' + argsStr;
-            
+
             // 更新光标位置到命令和空格后面
             var newCursorPos = textBefore.length + trigger.length + cmd.name.length + 1;
             inputEl.setSelectionRange(newCursorPos, newCursorPos);
@@ -411,7 +415,7 @@ function applyCmdSelection(inputEl, completeEl) {
             inputEl.value = trigger + cmd.name + ' ' + val;
             inputEl.setSelectionRange(trigger.length + cmd.name.length + 1, trigger.length + cmd.name.length + 1);
         }
-        
+
         autoResize(inputEl);
     }
     hideCmdComplete();
@@ -497,14 +501,14 @@ function triggerCmdComplete(inputEl, completeEl, prefix) {
     var cursorPos = inputEl.selectionStart;
     var textBefore = inputEl.value.substring(0, cursorPos);
     var textAfter = inputEl.value.substring(cursorPos);
-    
+
     // 在光标位置插入前缀（命令/子代理/技能符号后追加空格）
     inputEl.value = textBefore + prefix + ' ' + textAfter;
-    
+
     // 更新光标位置到前缀和空格后面
     var newCursorPos = cursorPos + prefix.length + 1;
     inputEl.setSelectionRange(newCursorPos, newCursorPos);
-    
+
     inputEl.focus();
     showCmdComplete(inputEl, completeEl, prefix);
 }
@@ -539,14 +543,14 @@ $(chatInput).on('compositionend', function() { composing = false; });
 // Keyboard navigation for command completion
 $(welcomeInput).on('keydown', function(e) {
     // 输入法正在组合中（如拼音选词），不触发发送
-    if (composing) return;
+    if (isInputComposing(e)) return;
     var handled = navigateCmdComplete(e, welcomeInput, $welcomeCmdComplete[0]);
     if (handled) return;
     if (e.key === 'Enter' && !e.shiftKey && !e.altKey) { e.preventDefault(); sendMessage(); }
 });
 $(chatInput).on('keydown', function(e) {
     // 输入法正在组合中（如拼音选词），不触发发送
-    if (composing) return;
+    if (isInputComposing(e)) return;
     // 优先级1：命令补全导航
     var handled = navigateCmdComplete(e, chatInput, $chatCmdComplete[0]);
     if (handled) return;
