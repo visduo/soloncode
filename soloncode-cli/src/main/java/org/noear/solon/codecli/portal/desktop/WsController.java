@@ -87,7 +87,21 @@ public class WsController {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("id", mi.getId());
             item.put("object", mi.getObject());
+            item.put("displayName", mi.getDisplayName());
             item.put("ownedBy", mi.getOwnedBy());
+            item.put("owned_by", mi.getOwnedBy());
+            item.put("type", mi.getType());
+            item.put("maxInputTokens", mi.getMaxInputTokens());
+            item.put("max_input_tokens", mi.getMaxInputTokens());
+            item.put("maxTokens", mi.getMaxTokens());
+            item.put("max_tokens", mi.getMaxTokens());
+            if (mi.getMaxInputTokens() != null && mi.getMaxInputTokens() > 0) {
+                item.put("contextLength", mi.getMaxInputTokens());
+                item.put("context_length", mi.getMaxInputTokens());
+            } else if (mi.getMaxTokens() != null && mi.getMaxTokens() > 0) {
+                item.put("contextLength", mi.getMaxTokens());
+                item.put("context_length", mi.getMaxTokens());
+            }
 
             ChatConfig config = new ChatConfig();
             config.setName(mi.getId());
