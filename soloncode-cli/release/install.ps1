@@ -290,6 +290,7 @@ Write-Host "    |   +-- soloncode.ps1   (PowerShell launcher)"
 Write-Host "    |   +-- soloncode.bat   (CMD launcher)"
 Write-Host "    |   +-- soloncode       (Git Bash launcher)"
 Write-Host "    |   +-- uninstall.ps1   (uninstall script)"
+Write-Host "    |   +-- uninstall.cmd   (uninstall script)"
 Write-Host "    +-- skills/        (skill modules)"
 Write-Host ""
 Write-Host "  [Tip] To use soloncode immediately in current terminal:" -ForegroundColor Yellow
