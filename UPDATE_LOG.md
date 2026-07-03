@@ -1,4 +1,9 @@
 
+### v2026.7.3
+
+* 修复 soloncode web mcp 不能检测的问题
+* 修复 soloncode 安装通过 Invoke-Expression 绕过执行策略以解决 PowerShell 脚本禁止运行错误
+
 ### v2026.7.1
 
 * 添加 soloncode web 设置/供应商 模型“全选”“反选”

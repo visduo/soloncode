@@ -783,7 +783,7 @@ public class WebSettingsController {
      */
     @Post
     @Mapping("/web/settings/mcp/servers/check")
-    public Result mcpServersCheck(String json) {
+    public Result mcpServersCheck(@Body String json) {
         try {
             ONode root = ONode.ofJson(json);
             String type = root.get("type").getString();
