@@ -5,6 +5,8 @@
 * 优化 soloncode 上下文压缩算法
 * 优化 soloncode hitl 实现
 * 优化 soloncode permission 实现
+* 优化 soloncode web 跨域处理
+* 优化 soloncode web 附件显示
 * 细节优化
 
 ### v2026.7.3
