@@ -278,6 +278,7 @@ public class WebGate extends SimpleWebSocketListener {
 
             // Handle file upload
             List<ImageBlock> imageBlocks = new ArrayList<>();
+            List<String> imageFileNames = new ArrayList<>();
             List<String> fileAttachments = new ArrayList<>();
 
             if (attachments != null) {
@@ -296,6 +297,7 @@ public class WebGate extends SimpleWebSocketListener {
                                 String base64 = Base64.getEncoder().encodeToString(bytes);
                                 String mime = extensionToMime(ext);
                                 imageBlocks.add(ImageBlock.ofBase64(base64, mime));
+                                imageFileNames.add(fileName);
                             } else {
                                 fileAttachments.add(fileName);
                             }
@@ -335,8 +337,15 @@ public class WebGate extends SimpleWebSocketListener {
                     for (ImageBlock block : imageBlocks) {
                         contents.addBlock(block);
                     }
-                    prompt = Prompt.of(new UserMessage(contents).addMetadata("source", source));
+                    // 构建附件元数据（含图片文件名），供历史消息恢复时前端渲染文件名标签
+                    String attachMeta = buildAttachmentMeta(imageFileNames);
+                    UserMessage userMsg = new UserMessage(contents).addMetadata("source", source);
+                    if (attachMeta != null) {
+                        userMsg.addMetadata("attachments", attachMeta);
+                    }
+                    prompt = Prompt.of(userMsg);
                 } else {
+                    // 文件附件已在 currentInput 前缀写入文件名（[附件: xxx]），ndjson 有记录
                     prompt = Prompt.of(ChatMessage.ofUser(currentInput).addMetadata("source", source));
                 }
 
@@ -711,6 +720,29 @@ public class WebGate extends SimpleWebSocketListener {
             default:
                 return "image/png";
         }
+    }
+
+    /**
+     * 构建附件元数据 JSON 数组字符串（用于存入 ndjson metadata.attachments）。
+     *
+     * @param imageFileNames 图片文件名列表（已校验安全的文件名）
+     * @return JSON 数组字符串，如 [{"name":"photo.jpg","type":"image"}]；列表为空则返回 null
+     */
+    private static String buildAttachmentMeta(List<String> imageFileNames) {
+        if (imageFileNames == null || imageFileNames.isEmpty()) {
+            return null;
+        }
+        // 手动构建 JSON 避免依赖 ONode 序列化细节
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < imageFileNames.size(); i++) {
+            if (i > 0) sb.append(",");
+            String name = imageFileNames.get(i);
+            // 简单转义双引号和反斜杠（文件名已校验无 / \ ..）
+            String escaped = name.replace("\\", "\\\\").replace("\"", "\\\"");
+            sb.append("{\"name\":\"").append(escaped).append("\",\"type\":\"image\"}");
+        }
+        sb.append("]");
+        return sb.toString();
     }
 
     // ═══════════════════════════════════════════════════════════════

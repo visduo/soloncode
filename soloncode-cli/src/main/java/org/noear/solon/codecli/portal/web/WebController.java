@@ -413,6 +413,28 @@ public class WebController {
                             item.put("sourceLabel", WebChunk.toSourceLabel(source));
                         }
 
+                        // 解析附件元数据（图片文件名等），供历史消息恢复时渲染
+                        ONode attachMeta = metadata.get("attachments");
+                        if (attachMeta != null) {
+                            String attachStr = attachMeta.getString();
+                            if (attachStr != null && !attachStr.isEmpty()) {
+                                try {
+                                    ONode attachArr = ONode.ofJson(attachStr);
+                                    if (attachArr.isArray()) {
+                                        List<Map<String, String>> attachList = new ArrayList<>();
+                                        for (ONode a : attachArr.getArray()) {
+                                            Map<String, String> am = new LinkedHashMap<>();
+                                            am.put("name", a.get("name").getString());
+                                            am.put("type", a.get("type").getString());
+                                            attachList.add(am);
+                                        }
+                                        item.put("attachments", attachList);
+                                    }
+                                } catch (Exception ignored) {
+                                }
+                            }
+                        }
+
                         data.add(item);
                     }
                 }

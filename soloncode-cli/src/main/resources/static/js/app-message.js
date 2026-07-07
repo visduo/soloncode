@@ -31,13 +31,16 @@ function appendUserMessage(sess, text, imageDataUrls, fileAttachments, createdAt
         $(bubble).append(imgWrap);
     }
 
-    // Multiple file attachments
+    // Multiple file / image attachment tags（来自实时上传的 {name,size,type} 或历史元数据 {name,type}）
     if (fileAttachments && fileAttachments.length > 0) {
         for (var j = 0; j < fileAttachments.length; j++) {
+            var att = fileAttachments[j];
             var tag = $('<div>').addClass('user-attach-file')[0];
-            tag.innerHTML = '<span>📎</span>'
-                + '<span class="user-attach-file-name">' + escapeHtml(fileAttachments[j].name) + '</span>'
-                + '<span class="user-attach-file-size">(' + formatFileSize(fileAttachments[j].size) + ')</span>';
+            var icon = att.type === 'image' ? '🖼️' : '📎';
+            var sizeHtml = att.size != null ? '<span class="user-attach-file-size">(' + formatFileSize(att.size) + ')</span>' : '';
+            tag.innerHTML = '<span>' + icon + '</span>'
+                + '<span class="user-attach-file-name">' + escapeHtml(att.name) + '</span>'
+                + sizeHtml;
             $(bubble).append(tag);
         }
     }
