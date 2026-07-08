@@ -290,6 +290,9 @@ function finishStream(sess) {
 
     // 刷新任务面板
     if (window.loadTodos) window.loadTodos();
+
+    // 任务完成通知（页面在后台时弹通知 + 播放提示音）
+    setTimeout(window._notifyTaskComplete, 500);
 }
 
 /* ===== WebSocket 单连接 ===== */
