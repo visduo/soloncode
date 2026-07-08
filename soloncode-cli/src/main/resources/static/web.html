@@ -1518,12 +1518,15 @@
             } catch(e) {}
         }
     };
-    // 首次请求通知权限
-    _requestNotifyPerm();
-    // 用户点击时触发权限弹窗
-    document.addEventListener('click', function() {
-        if (window._notifyPerm === 'default') _requestNotifyPerm();
-    }, { once: true });
+    // 页面加载时先不请求权限，避免干扰用户操作
+    // 当页面首次切到后台（用户离开页面）时再请求通知权限
+    var _permRequested = false;
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden && !_permRequested && window._notifyPerm === 'default') {
+            _permRequested = true;
+            _requestNotifyPerm();
+        }
+    });
 })();
 </script>
 

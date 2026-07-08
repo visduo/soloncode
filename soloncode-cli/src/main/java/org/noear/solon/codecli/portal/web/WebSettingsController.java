@@ -2039,8 +2039,11 @@ public class WebSettingsController {
             }
             
             // 调用提供商获取模型列表
-            List<ModelInfo> models = provider.fetchModels(baseUrl, headers, apiKey);
-            
+            List<ModelInfo> models = provider.fetchModels(settings.getGeneral().getUserAgent(), baseUrl, headers, apiKey);
+
+            // 按 id 排序，保证每次返回顺序一致
+            models.sort(Comparator.comparing(ModelInfo::getId, Comparator.nullsLast(String::compareTo)));
+
             // 转换为前端需要的格式
             List<Map<String, Object>> modelList = new ArrayList<>();
             for (ModelInfo model : models) {

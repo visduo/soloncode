@@ -6,6 +6,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.annotation.*;
 import org.noear.solon.codecli.config.AgentFlags;
+import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.codecli.config.models.ModelApiUrl;
 import org.noear.solon.codecli.config.models.ModelInfo;
 import org.noear.solon.codecli.config.models.ModelsAdapter;
@@ -30,10 +31,12 @@ public class WsController {
     private static final Logger LOG = LoggerFactory.getLogger(WsController.class);
 
     private final HarnessEngine engine;
+    private final AgentSettings settings;
     private final ModelsAdapterManager modelProviderFactory;
 
-    public WsController(HarnessEngine engine, ModelsAdapterManager modelProviderFactory) {
+    public WsController(HarnessEngine engine, AgentSettings settings, ModelsAdapterManager modelProviderFactory) {
         this.engine = engine;
+        this.settings = settings;
         this.modelProviderFactory = modelProviderFactory;
     }
 
@@ -62,7 +65,7 @@ public class WsController {
 
         ModelsAdapter modelsAdapter = modelProviderFactory.getAdapter(provider);
         String baseUrl = modelsAdapter.deriveBaseUrl(apiUrl);
-        List<ModelInfo> models = modelsAdapter.fetchModels(baseUrl, null, apiKey);
+        List<ModelInfo> models = modelsAdapter.fetchModels(settings.getGeneral().getUserAgent(), baseUrl, null, apiKey);
 
         if (models.isEmpty() && Assert.isNotEmpty(model)) {
             ChatModel chatModel = ChatModel.of(apiUrl)

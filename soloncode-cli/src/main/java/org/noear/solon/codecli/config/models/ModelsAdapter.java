@@ -14,7 +14,7 @@ public interface ModelsAdapter {
      */
     String getStandard();
 
-    List<ModelInfo> fetchModels(String baseUrl, Map<String, String> headers, String apiKey);
+    List<ModelInfo> fetchModels(String userAgent, String baseUrl, Map<String, String> headers, String apiKey);
 
     String deriveBaseUrl(String apiUrl);
 

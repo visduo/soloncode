@@ -1,6 +1,9 @@
 package org.noear.solon.codecli.config.models;
 
 import org.noear.solon.annotation.Component;
+import org.noear.solon.codecli.config.models.adapter.AnthropicModelsAdapter;
+import org.noear.solon.codecli.config.models.adapter.OllamaModelsAdapter;
+import org.noear.solon.codecli.config.models.adapter.OpenAIModelsAdapter;
 import org.noear.solon.core.util.Assert;
 
 import java.util.HashMap;

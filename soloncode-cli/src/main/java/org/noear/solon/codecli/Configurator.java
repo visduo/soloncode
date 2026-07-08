@@ -279,7 +279,7 @@ public class Configurator {
         WebSocketRouter.getInstance().of("/ws", new WsGate(agentRuntime, settings));
 
         //serve web controller
-        BeanWrap webBean = Solon.context().wrapAndPut(WsController.class, new WsController(agentRuntime, modelProviderFactory));
+        BeanWrap webBean = Solon.context().wrapAndPut(WsController.class, new WsController(agentRuntime, settings, modelProviderFactory));
         Solon.app().router().add(webBean);
 
         cliShell.printWelcome("Server port: " + Solon.cfg().serverPort());

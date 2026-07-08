@@ -1,7 +1,10 @@
-package org.noear.solon.codecli.config.models;
+package org.noear.solon.codecli.config.models.adapter;
 
 import lombok.extern.slf4j.Slf4j;
 import org.noear.snack4.ONode;
+import org.noear.solon.codecli.config.models.ModelApiUrl;
+import org.noear.solon.codecli.config.models.ModelInfo;
+import org.noear.solon.codecli.config.models.ModelsAdapter;
 import org.noear.solon.net.http.HttpUtils;
 
 import java.util.ArrayList;
@@ -29,12 +32,14 @@ public class OllamaModelsAdapter implements ModelsAdapter {
     }
 
     @Override
-    public List<ModelInfo> fetchModels(String baseUrl, Map<String, String> headers, String apiKey) {
+    public List<ModelInfo> fetchModels(String userAgent, String baseUrl, Map<String, String> headers, String apiKey) {
         String modelsUrl = baseUrl + "/api/tags";
         List<ModelInfo> result = new ArrayList<>();
 
         try {
-            HttpUtils http = HttpUtils.http(modelsUrl).timeout(15);
+            HttpUtils http = HttpUtils.http(modelsUrl)
+                    .userAgent(userAgent)
+                    .timeout(15);
 
             if (headers != null) {
                 headers.forEach(http::header);
