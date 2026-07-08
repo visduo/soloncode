@@ -30,6 +30,25 @@
         return basePath + (query ? '?' + query : '');
     }
 
+    /** 绑定单击/双击事件，解决双击时两次 click 的冲突 */
+    function bindClickDblClick($el, onClick, onDblClick) {
+        var timer = null;
+        $el.on('click', function(e) {
+            e.stopPropagation();
+            if (timer) { clearTimeout(timer); timer = null; }
+            timer = setTimeout(function() {
+                timer = null;
+                onClick(e);
+            }, 250);
+        });
+        $el.on('dblclick', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            if (timer) { clearTimeout(timer); timer = null; }
+            onDblClick(e);
+        });
+    }
+
     // ---- 同步 toggle 按钮位置 ----
     function syncToggleBtnPosition(knownWidth) {
         if (!$toggleBtn.length || !$panel.length) return;
@@ -214,36 +233,49 @@
         var $childrenEl = $('<div>').addClass('filer-node-children');
         $nodeEl.append($childrenEl);
 
-        // 点击展开/折叠
-        (function(id, $ne, $cEl, $r) {
-            $row.on('click', function(e) {
-                e.stopPropagation();
-                var $aEl = $r.find('.filer-arrow');
-                var isOpen = $cEl.hasClass('open');
+        // 单击展开/折叠，双击插入路径到输入框
+        var wsId = ws.id;
+        bindClickDblClick($row,
+            function() {
+                var $aEl = $row.find('.filer-arrow');
+                var isOpen = $childrenEl.hasClass('open');
                 if (isOpen) {
-                    $cEl.removeClass('open');
+                    $childrenEl.removeClass('open');
                     $aEl.removeClass('open');
                 } else {
-                    // 设置为当前活动工作区（供搜索和文件查看器使用）
-                    window.activeFilerWorkspace = id;
-
-                    $cEl.addClass('open');
+                    window.activeFilerWorkspace = wsId;
+                    $childrenEl.addClass('open');
                     $aEl.addClass('open');
-                    if (!$cEl.children().length) {
+                    if (!$childrenEl.children().length) {
                         var url = '/web/chat/filer/tree?depth=1';
-                        if (id !== 'workspace') {
-                            url += '&workspace=' + encodeURIComponent(id);
+                        if (wsId !== 'workspace') {
+                            url += '&workspace=' + encodeURIComponent(wsId);
                         }
                         $.get(url, function(res) {
                             var data = (res && res.data) ? res.data : [];
-                            renderTree(data, $cEl, indent + 1);
+                            renderTree(data, $childrenEl, indent + 1);
                         }).fail(function() {
-                            console.error('[filer] load workspace tree error', id);
+                            console.error('[filer] load workspace tree error', wsId);
                         });
                     }
                 }
-            });
-        })(wsId, $nodeEl, $childrenEl, $row);
+            },
+            function() {
+                var targetInput = (typeof inChatMode !== 'undefined' && inChatMode) ? chatInput : welcomeInput;
+                if (!targetInput) return;
+                var currentVal = targetInput.value || '';
+                var insertText = '[' + wsId + ']';
+                var cursorPos = targetInput.selectionStart || currentVal.length;
+                var before = currentVal.substring(0, cursorPos);
+                var after = currentVal.substring(cursorPos);
+                var prefix = (before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n')) ? ' ' : '';
+                targetInput.value = before + prefix + insertText + ' ' + after;
+                targetInput.focus();
+                var newPos = cursorPos + prefix.length + insertText.length + 1;
+                targetInput.setSelectionRange(newPos, newPos);
+                if (typeof autoResize === 'function') autoResize(targetInput);
+            }
+        );
 
         $container.append($nodeEl);
     }
@@ -301,15 +333,13 @@
             $nodeEl.append($childrenEl);
         }
 
-        // 单击：目录展开/折叠；文件打开查看器
+        // 目录：单击展开/折叠，双击插入路径到输入框
         if (node.type === 'directory') {
-            (function(n, $ne) {
-                $row.on('click', function(e) {
-                    e.stopPropagation();
-                    var $cEl = $ne.children('.filer-node-children');
+            bindClickDblClick($row,
+                function() {
+                    var $cEl = $nodeEl.children('.filer-node-children');
                     var $aEl = $row.find('.filer-arrow');
                     if (!$cEl.length) return;
-
                     var isOpen = $cEl.hasClass('open');
                     if (isOpen) {
                         $cEl.removeClass('open');
@@ -317,12 +347,11 @@
                     } else {
                         $cEl.addClass('open');
                         $aEl.addClass('open');
-                        var isDirty = $ne.attr('data-dirty') === '1';
+                        var isDirty = $nodeEl.attr('data-dirty') === '1';
                         if (isDirty || !$cEl.children().length) {
-                            $ne.removeAttr('data-dirty');
-                            // 使用 workspace 感知的路径查询
-                            var wsId = getNodeWorkspaceId($ne);
-                            var url = '/web/chat/filer/tree?path=' + encodeURIComponent(n.path) + '&depth=1';
+                            $nodeEl.removeAttr('data-dirty');
+                            var wsId = getNodeWorkspaceId($nodeEl);
+                            var url = '/web/chat/filer/tree?path=' + encodeURIComponent(node.path) + '&depth=1';
                             if (wsId !== 'workspace') {
                                 url += '&workspace=' + encodeURIComponent(wsId);
                             }
@@ -332,55 +361,56 @@
                             });
                         }
                     }
-                });
-            })(node, $nodeEl);
+                },
+                function() {
+                    var wsId = getNodeWorkspaceId($nodeEl);
+                    var targetInput = (typeof inChatMode !== 'undefined' && inChatMode) ? chatInput : welcomeInput;
+                    if (!targetInput) return;
+                    var currentVal = targetInput.value || '';
+                    var insertText = (wsId !== 'workspace')
+                        ? '[' + wsId + '/' + node.path + ']'
+                        : '[' + node.path + ']';
+                    var cursorPos = targetInput.selectionStart || currentVal.length;
+                    var before = currentVal.substring(0, cursorPos);
+                    var after = currentVal.substring(cursorPos);
+                    var prefix = (before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n')) ? ' ' : '';
+                    targetInput.value = before + prefix + insertText + ' ' + after;
+                    targetInput.focus();
+                    var newPos = cursorPos + prefix.length + insertText.length + 1;
+                    targetInput.setSelectionRange(newPos, newPos);
+                    if (typeof autoResize === 'function') autoResize(targetInput);
+                }
+            );
         } else {
-            // 文件：单击打开文件查看器（延迟 250ms，避免与双击冲突）
-            (function(n, $ne) {
-                var wsId = getNodeWorkspaceId($ne);
-                var viewPath = (wsId !== 'workspace' && wsId.indexOf('@') === 0) ? wsId + '/' + n.path : n.path;
-                var clickTimer = null;
-                $row.on('click', function(e) {
-                    e.stopPropagation();
-                    if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
-                    clickTimer = setTimeout(function() {
-                        if (typeof window.openFileViewer === 'function') {
-                            window.openFileViewer(viewPath, n.name);
-                        }
-                    }, 250);
-                });
-                $row.on('dblclick', function(e) {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
-                });
-            })(node, $nodeEl);
+            // 文件：单击打开查看器，双击插入路径到输入框
+            bindClickDblClick($row,
+                function() {
+                    var wsId = getNodeWorkspaceId($nodeEl);
+                    var viewPath = (wsId !== 'workspace' && wsId.indexOf('@') === 0) ? wsId + '/' + node.path : node.path;
+                    if (typeof window.openFileViewer === 'function') {
+                        window.openFileViewer(viewPath, node.name);
+                    }
+                },
+                function() {
+                    var wsId = getNodeWorkspaceId($nodeEl);
+                    var targetInput = (typeof inChatMode !== 'undefined' && inChatMode) ? chatInput : welcomeInput;
+                    if (!targetInput) return;
+                    var currentVal = targetInput.value || '';
+                    var insertText = (wsId !== 'workspace')
+                        ? '[' + wsId + '/' + node.path + ']'
+                        : '[' + node.path + ']';
+                    var cursorPos = targetInput.selectionStart || currentVal.length;
+                    var before = currentVal.substring(0, cursorPos);
+                    var after = currentVal.substring(cursorPos);
+                    var prefix = (before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n')) ? ' ' : '';
+                    targetInput.value = before + prefix + insertText + ' ' + after;
+                    targetInput.focus();
+                    var newPos = cursorPos + prefix.length + insertText.length + 1;
+                    targetInput.setSelectionRange(newPos, newPos);
+                    if (typeof autoResize === 'function') autoResize(targetInput);
+                }
+            );
         }
-
-        // 双击：插入 path 到输入框（所有节点通用）
-        (function(n, $ne) {
-            $row.on('dblclick', function(e) {
-                e.stopPropagation();
-                e.preventDefault();
-
-                var wsId = getNodeWorkspaceId($ne);
-                var targetInput = (typeof inChatMode !== 'undefined' && inChatMode) ? chatInput : welcomeInput;
-                if (!targetInput) return;
-                var currentVal = targetInput.value || '';
-                var insertText = (wsId !== 'workspace')
-                    ? '[' + wsId + '/' + n.path + ']'
-                    : '[' + n.path + ']';
-                var cursorPos = targetInput.selectionStart || currentVal.length;
-                var before = currentVal.substring(0, cursorPos);
-                var after = currentVal.substring(cursorPos);
-                var prefix = (before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n')) ? ' ' : '';
-                targetInput.value = before + prefix + insertText + ' ' + after;
-                targetInput.focus();
-                var newPos = cursorPos + prefix.length + insertText.length + 1;
-                targetInput.setSelectionRange(newPos, newPos);
-                if (typeof autoResize === 'function') autoResize(targetInput);
-            });
-        })(node, $nodeEl);
 
         $container.append($nodeEl);
     }
