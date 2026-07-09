@@ -308,13 +308,17 @@ public class WebController {
                     Files.copy(sourceMarker.toPath(), targetMarker.toPath());
                 }
                 // 复制自定义 label.txt（如有），便于延续原标题风格
+                String name = newSessionId;
                 File sourceLabel = new File(sourceDir, "label.txt");
                 if (sourceLabel.exists()) {
                     Files.copy(sourceLabel.toPath(),
                             new File(targetDir, "label.txt").toPath());
+                    name = new String(java.nio.file.Files.readAllBytes(sourceLabel.toPath()), "UTF-8").trim();
+                    if (name.isEmpty()) name = newSessionId;
                 }
                 Map<String, Object> data = new LinkedHashMap<>();
                 data.put("sessionId", newSessionId);
+                data.put("name", name);
                 return Result.succeed(data);
             }
         }
