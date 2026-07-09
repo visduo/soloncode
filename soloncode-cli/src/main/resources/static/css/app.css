@@ -1754,20 +1754,7 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 }
 
 /* ===== File Viewer (文件内容查看器) ===== */
-.file-view-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 0 10px 16px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    opacity: 0.7;
-    border-bottom: 1px solid var(--border-color);
-    margin-bottom: 4px;
-}
-.file-view-info-sep {
-    opacity: 0.3;
-}
+
 /* 文件查看器 header 操作按钮组 */
 .git-viewer-header-actions {
     display: flex;

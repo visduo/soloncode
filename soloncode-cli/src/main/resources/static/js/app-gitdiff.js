@@ -396,6 +396,16 @@
     function renderFileContent(content, fileName, fileSize, filePath) {
         if (!gitViewerContent) return;
 
+        // 重置 MD 切换按钮为初始状态（源码态），应对切换文件时图标未复位的问题
+        var _mdToggleReset = document.getElementById('gitViewerMdToggle');
+        if (_mdToggleReset) {
+            _mdToggleReset.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+            _mdToggleReset.title = '预览 Markdown';
+        }
+        // 显示复制按钮（可能在审查详情中被隐藏）
+        var _copyBtnReset = document.getElementById('gitViewerCopyBtn');
+        if (_copyBtnReset) _copyBtnReset.style.display = '';
+
         var lang = guessLang(filePath || fileName);
         var lines = (content || '').split('\n');
         var totalLines = lines.length;
@@ -415,17 +425,7 @@
         // 检测是否为 .md 文件
         var isMdFile = /\.md$/i.test(filePath || fileName || "");
 
-        // 信息栏
-        var infoBar = '<div class="file-view-info">'
-            + '<span>' + escapeHtml(fileName || '') + '</span>'
-            + '<span class="file-view-info-sep">|</span>'
-            + '<span>' + totalLines + ' 行</span>'
-            + '<span class="file-view-info-sep">|</span>'
-            + '<span>' + formatSize(fileSize || 0) + '</span>'
-            + (lang ? '<span class="file-view-info-sep">|</span><span>' + escapeHtml(lang) + '</span>' : '')
-            + '</div>';
-
-        gitViewerContent.innerHTML = infoBar
+        gitViewerContent.innerHTML = ''
             + '<div class="file-view-code' + (lang ? ' hljs-language-' + lang : '') + '">' + codeHtml + '</div>'
             + (isMdFile ? '<div class="file-view-md-frame-wrap" style="display:none;"><iframe class="file-view-md-frame" sandbox="allow-scripts"></iframe></div>' : '');
 
@@ -508,7 +508,7 @@
                             // 调整 iframe 高度
                             var iframe = wrap.querySelector('iframe');
                             if (iframe) {
-                                var headerHeight = gitViewerContent.querySelector('.file-view-info').offsetHeight || 36;
+                                var headerHeight = 8;
                                 var availHeight = gitViewerContent.clientHeight - headerHeight - 8;
                                 if (availHeight < 300) availHeight = 300;
                                 iframe.style.height = availHeight + 'px';
@@ -663,6 +663,12 @@
         // 显示 diff viewer
         gitDiffViewer.style.display = 'flex';
         diffViewerActive = true;
+
+        // 审查详情模式：隐藏"视图"和"复制"按钮
+        var _mdToggle = document.getElementById('gitViewerMdToggle');
+        var _copyBtn = document.getElementById('gitViewerCopyBtn');
+        if (_mdToggle) _mdToggle.style.display = 'none';
+        if (_copyBtn) _copyBtn.style.display = 'none';
 
         if (gitViewerLabel) gitViewerLabel.textContent = '变更详情';
         // 如果是挂载工作区，显示路径时带上 @xxx/ 前缀
