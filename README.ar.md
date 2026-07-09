@@ -30,26 +30,30 @@ curl -fsSL https://solon.noear.org/soloncode/setup.sh | bash
 irm https://solon.noear.org/soloncode/setup.ps1 | iex
 ```
 
-الإعداد (يجب تعديله بعد التثبيت):
+الإعداد (يُنصح المستخدمون الجدد بتكوين الصفحة باستخدام صفحة إعدادات الويب أولاً):
 
-* دليل التثبيت: `~/.soloncode/bin/`
-* حدد ملف التكوين `~/.soloncode/config.yml` وقم بتعديل تكوين `models` (بشكل أساسي)
-* للاطلاع على خيارات تكوين `models`، راجع: [تكوين النموذج وخيارات الطلب](https://solon.noear.org/article/1087)
+```bash
+soloncode web 0
+```
+
+بعد الدخول إلى الصفحة، افتح "الإعدادات -> نموذج اللغة الكبير (LLM)"، أضف النموذج واختبر الاتصال.
+
+<img height="260" src="SETTINGS-LLM.png">
 
 ## التشغيل
 
-قم بتشغيل الأمر `soloncode` (تفاعل CLI) أو `soloncode web 0` (تفاعل Web) من أي دليل في وحدة التحكم (أي مساحة العمل الخاصة بك).
+قم بتشغيل الأمر `soloncode cli` (تفاعل CLI) أو `soloncode web 0` (تفاعل Web) من أي دليل في وحدة التحكم (أي مساحة العمل الخاصة بك).
 
 * `soloncode` (تفاعل CLI)
 
 ```bash
-demo@MacBook-Pro ~ % soloncode
-SolonCode v2026.7.8 PID-74080 Model:deepseek-v4-flash
-/path/demo
-Tips: (esc) interrupt | /(tab) ls command | @(tab) ls agent
+demo@MacBook-Pro ~ % soloncode cli
+SolonCode v2026.7.8 PID-87950 Model:deepseek-v4-flash
+/Users/demo
+Tips: (esc) interrupt | /(tab) command | $(tab) skill | @(tab) agent
 
 User
-> 
+❯ 
 ```
 
 * `soloncode web 0` (تفاعل Web)
@@ -58,7 +62,7 @@ User
 demo@MacBook-Pro ~ % soloncode web 0
 SolonCode v2026.7.8 PID-73617 Model:deepseek-v4-flash
 /path/demo
-2026-05-20 09:35
+2026-07-09 11:26
 Web interface: http://localhost:50488/
 ```
 

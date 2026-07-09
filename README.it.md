@@ -28,26 +28,30 @@ curl -fsSL https://solon.noear.org/soloncode/setup.sh | bash
 irm https://solon.noear.org/soloncode/setup.ps1 | iex
 ```
 
-Configurazione (da modificare dopo l'installazione):
+Configurazione (si consiglia ai nuovi utenti di configurare prima tramite la pagina delle impostazioni Web):
 
-* Directory di installazione: `~/.soloncode/bin/`
-* Individuare il file di configurazione `~/.soloncode/config.yml` e modificare la configurazione `models` (principalmente)
-* Per le opzioni di configurazione di `models`, consultare: [Configurazione del Modello e Opzioni di Richiesta](https://solon.noear.org/article/1087)
+```
+soloncode web 0
+```
+
+Una volta entrati nella pagina, aprire "Impostazioni -> Modello Linguistico di Grandi Dimensioni (LLM)", aggiungere un modello e testare la connessione.
+
+<img height="260" src="SETTINGS-LLM.png">
 
 ## Esecuzione
 
-Eseguire il comando `soloncode` (CLI interattiva) o `soloncode web 0` (Web interattiva) da qualsiasi directory nella console (ovvero, la vostra area di lavoro).
+Eseguire il comando `soloncode cli` (CLI interattiva) o `soloncode web 0` (Web interattiva) da qualsiasi directory nella console (ovvero, la vostra area di lavoro).
 
-* `soloncode` (CLI interattiva)
+* `soloncode cli` (CLI interattiva)
 
 ```bash
-demo@MacBook-Pro ~ % soloncode
-SolonCode v2026.7.8 PID-74080 Model:deepseek-v4-flash
-/path/demo
-Tips: (esc) interrupt | /(tab) ls command | @(tab) ls agent
+demo@MacBook-Pro ~ % soloncode cli
+SolonCode v2026.7.8 PID-87950 Model:deepseek-v4-flash
+/Users/demo
+Tips: (esc) interrupt | /(tab) command | $(tab) skill | @(tab) agent
 
 User
-> 
+❯ 
 ```
 
 * `soloncode web 0` (Web interattiva)
@@ -56,7 +60,7 @@ User
 demo@MacBook-Pro ~ % soloncode web 0
 SolonCode v2026.7.8 PID-73617 Model:deepseek-v4-flash
 /path/demo
-2026-05-20 09:35
+2026-07-09 11:26
 Web interface: http://localhost:50488/
 ```
 

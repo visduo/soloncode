@@ -28,26 +28,30 @@ curl -fsSL https://solon.noear.org/soloncode/setup.sh | bash
 irm https://solon.noear.org/soloncode/setup.ps1 | iex
 ```
 
-Cấu hình (bắt buộc phải sửa sau khi cài đặt):
+Cấu hình (người dùng mới được khuyến nghị cấu hình trước qua trang cài đặt Web):
 
-* Thư mục cài đặt: `~/.soloncode/bin/`
-* Tìm tệp cấu hình `~/.soloncode/config.yml` và sửa cấu hình `models` (chủ yếu)
-* Đối với các tùy chọn cấu hình `models`, tham khảo: [Cấu hình Mô hình và Tùy chọn Yêu cầu](https://solon.noear.org/article/1087)
+```
+soloncode web 0
+```
+
+Sau khi vào trang, mở "Cài đặt -> Mô hình ngôn ngữ lớn (LLM)", thêm mô hình và kiểm tra kết nối.
+
+<img height="260" src="SETTINGS-LLM.png">
 
 ## Chạy
 
-Chạy lệnh `soloncode` (CLI tương tác) hoặc `soloncode web 0` (Web tương tác) từ bất kỳ thư mục nào trong bảng điều khiển (tức là không gian làm việc của bạn).
+Chạy lệnh `soloncode cli` (CLI tương tác) hoặc `soloncode web 0` (Web tương tác) từ bất kỳ thư mục nào trong bảng điều khiển (tức là không gian làm việc của bạn).
 
-* `soloncode` (CLI tương tác)
+* `soloncode cli` (CLI tương tác)
 
 ```bash
-demo@MacBook-Pro ~ % soloncode
-SolonCode v2026.7.8 PID-74080 Model:deepseek-v4-flash
-/path/demo
-Tips: (esc) interrupt | /(tab) ls command | @(tab) ls agent
+demo@MacBook-Pro ~ % soloncode cli
+SolonCode v2026.7.8 PID-87950 Model:deepseek-v4-flash
+/Users/demo
+Tips: (esc) interrupt | /(tab) command | $(tab) skill | @(tab) agent
 
 User
-> 
+❯ 
 ```
 
 * `soloncode web 0` (Web tương tác)
@@ -56,7 +60,7 @@ User
 demo@MacBook-Pro ~ % soloncode web 0
 SolonCode v2026.7.8 PID-73617 Model:deepseek-v4-flash
 /path/demo
-2026-05-20 09:35
+2026-07-09 11:26
 Web interface: http://localhost:50488/
 ```
 

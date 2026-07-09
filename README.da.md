@@ -28,26 +28,30 @@ curl -fsSL https://solon.noear.org/soloncode/setup.sh | bash
 irm https://solon.noear.org/soloncode/setup.ps1 | iex
 ```
 
-Konfiguration (skal ændres efter installation):
+Konfiguration (nye brugere anbefales at konfigurere via Web-indstillingssiden først):
 
-* Installationsmappe: `~/.soloncode/bin/`
-* Find konfigurationsfilen `~/.soloncode/config.yml` og rediger `models`-konfigurationen (primært)
-* For `models`-konfigurationsmuligheder, se: [Modelkonfiguration og anmodningsindstillinger](https://solon.noear.org/article/1087)
+```bash
+soloncode web 0
+```
+
+Når du er på siden, skal du åbne "Indstillinger -> LLM", tilføje en model og teste forbindelsen.
+
+<img height="260" src="SETTINGS-LLM.png">
 
 ## Kørsel
 
-Kør kommandoen `soloncode` (CLI-interaktiv) eller `soloncode web 0` (Web-interaktiv) fra en hvilken som helst mappe i konsollen (dvs. dit arbejdsområde).
+Kør kommandoen `soloncode cli` (CLI-interaktiv) eller `soloncode web 0` (Web-interaktiv) fra en hvilken som helst mappe i konsollen (dvs. dit arbejdsområde).
 
 * `soloncode` (CLI-interaktiv)
 
 ```bash
-demo@MacBook-Pro ~ % soloncode
-SolonCode v2026.7.8 PID-74080 Model:deepseek-v4-flash
-/path/demo
-Tips: (esc) interrupt | /(tab) ls command | @(tab) ls agent
+demo@MacBook-Pro ~ % soloncode cli
+SolonCode v2026.7.8 PID-87950 Model:deepseek-v4-flash
+/Users/demo
+Tips: (esc) interrupt | /(tab) command | $(tab) skill | @(tab) agent
 
 User
-> 
+❯ 
 ```
 
 * `soloncode web 0` (Web-interaktiv)
@@ -56,7 +60,7 @@ User
 demo@MacBook-Pro ~ % soloncode web 0
 SolonCode v2026.7.8 PID-73617 Model:deepseek-v4-flash
 /path/demo
-2026-05-20 09:35
+2026-07-09 11:26
 Web interface: http://localhost:50488/
 ```
 
