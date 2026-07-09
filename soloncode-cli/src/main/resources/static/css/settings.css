@@ -299,6 +299,49 @@
 /* MCP header 区域按钮组 */
 .mcp-header-actions { display: flex; gap: 6px; align-items: center; }
 
+/* MCP 导入下拉菜单 */
+.mcp-import-menu-wrap {
+    position: relative;
+    display: inline-block;
+}
+
+.mcp-import-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 160px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    z-index: 1000;
+    padding: 4px;
+}
+
+.mcp-import-menu.show {
+    display: block;
+}
+
+.mcp-import-menu-item {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    text-align: left;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+}
+
+.mcp-import-menu-item:hover {
+    background: var(--hover-bg, rgba(128,128,128,0.1));
+}
+
 /* ===== Skills Tab ===== */
 .skills-search-bar { padding: 0 0 14px 0; display: flex; gap: 6px; align-items: stretch; }
 .skills-market-wrap { position: relative; display: flex; align-items: center; flex-shrink: 0; }
@@ -1315,3 +1358,42 @@ select[disabled] {
     padding: 12px 20px;
     border-top: 1px solid var(--border-color);
 }
+
+/* ==================== 导入 JSON 字符串对话框 ==================== */
+.import-string-textarea {
+    width: 100%;
+    min-height: 200px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary, #f8f9fa);
+    color: var(--text-primary);
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.2s;
+}
+.import-string-textarea:focus {
+    border-color: var(--accent, #3b82f6);
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+.import-string-hint {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin-top: 8px;
+    line-height: 1.5;
+}
+.import-string-code {
+    display: inline-block;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 11px;
+    padding: 1px 5px;
+    background: var(--bg-secondary, #f0f0f0);
+    border-radius: 4px;
+    color: var(--accent, #3b82f6);
+    border: 1px solid var(--border-color);
+}
+
