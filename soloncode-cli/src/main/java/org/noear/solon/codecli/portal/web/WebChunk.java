@@ -111,6 +111,12 @@ public class WebChunk {
      */
     private String taskId;
 
+    /**
+     * 子代理任务描述，由 TaskWrapChuck.getTaskDescription() 传递。
+     * <p>用于前端 task-group 头部展示任务标题。</p>
+     */
+    private String taskDescription;
+
     /** 消息来源通道标识，如 "wechat" / "feishu" / "dingtalk" / "web"。 */
     private String source;
 

@@ -427,10 +427,21 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 
 /* Task group: wraps thinking-group + tool-cards for multitask subagent output */
 .task-group { margin: 0 0 12px; border-left: 4px solid var(--accent); border-radius: 10px; overflow: hidden; background: var(--thinking-block-bg); }
-.task-group .thinking-group { margin: 0; border: none; border-radius: 0; }
-.task-group .thinking-group .thinking-block-body { border-bottom: none; }
-.task-group .thinking-group .tool-card { border-left: 3px solid var(--accent); }
-.task-group .tool-card { margin: 0; border: none; border-radius: 0; border-top: 1px solid var(--border-color); border-left: 3px solid var(--accent); background: var(--bg-primary); }
+
+.task-group-header { display: flex; align-items: center; gap: 6px; padding: 8px 12px; cursor: pointer; user-select: none; font-size: 13px; color: var(--text-primary); background: var(--bg-primary); border-bottom: 1px solid var(--border-color); transition: background 0.15s; }
+.task-group-header:hover { background: var(--bg-hover); }
+.task-group-header .agent-badge { margin-left: 0; font-size: 9px; line-height: 15px; padding: 0 5px; }
+.task-group-header .agent-badge::before { content: none; }
+.task-group-title { flex: 1; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-group-toggle { transition: transform 0.2s; font-size: 16px !important; color: var(--text-tertiary); flex-shrink: 0; }
+.task-group.expanded .task-group-toggle { transform: rotate(90deg); }
+.task-group-body { display: block; }
+.task-group:not(.expanded) .task-group-body { display: none; }
+
+.task-group-body .thinking-group { margin: 0; border: none; border-radius: 0; }
+.task-group-body .thinking-group .thinking-block-body { border-bottom: none; }
+.task-group-body .thinking-group .tool-card { border-left: 3px solid var(--accent); }
+.task-group-body .tool-card { margin: 0; border: none; border-radius: 0; border-top: 1px solid var(--border-color); border-left: 3px solid var(--accent); background: var(--bg-primary); }
 
 /* Bottom Input */
 .input-wrap { padding: 12px 24px 22px; flex-shrink: 0; }

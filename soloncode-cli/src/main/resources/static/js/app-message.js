@@ -367,17 +367,35 @@ function finishThinkingBlock(sess, reasonId) {
 /**
  * 确保 task-group 容器存在，用于 multitask 并行输出时将同一子代理的所有 chunk 归组展示。
  * task-group 包裹 thinking-group 和 tool-card，使同一任务实例的输出在视觉上归入同一区块。
+ * 包含可折叠头部（标题 + agent badge + 折叠箭头），默认展开。
  */
-function ensureTaskGroup(sess, taskId) {
+function ensureTaskGroup(sess, taskId, taskDescription, agentName) {
     if (!taskId) return null;
     if (sess.taskGroups[taskId]) return sess.taskGroups[taskId];
 
     ensureAssistantBubble(sess);
-    var group = $('<div>').addClass('task-group')[0];
+    var group = $('<div>').addClass('task-group expanded')[0];
     group.setAttribute('data-task-id', taskId);
     if (sess.currentRunId) {
         group.setAttribute('data-run-id', sess.currentRunId);
     }
+
+    var titleText = taskDescription || agentName || '\u5b50\u4efb\u52a1';
+    var badgeHtml = agentName ? '<span class="agent-badge">' + escapeHtml(agentName) + '</span>' : '';
+
+    var header = $('<div>').addClass('task-group-header')[0];
+    header.innerHTML = '<span class="task-group-title">' + escapeHtml(titleText) + '</span>'
+        + badgeHtml
+        + '<i class="layui-icon layui-icon-right task-group-toggle"></i>';
+    $(header).on('click', function(e) {
+        e.stopPropagation();
+        $(group).toggleClass('expanded');
+    });
+
+    var body = $('<div>').addClass('task-group-body')[0];
+    $(group).append(header);
+    $(group).append(body);
+
     insertBeforeActions(sess, group);
     sess.taskGroups[taskId] = group;
     return group;
@@ -387,7 +405,7 @@ function clearThinkTags(text) {
     return text.replace(/<\s*\/?think\s*>/gi, '');
 }
 
-function appendReasonChunk(sess, text, reasonId, agentName, taskId) {
+function appendReasonChunk(sess, text, reasonId, agentName, taskId, taskDescription) {
     if (reasonId && sess.reasonGroups[reasonId]) {
         // 复用已有 reasonId 的思考块（同一轮次的新思考片段继续追加）
         var group = sess.reasonGroups[reasonId];
@@ -466,9 +484,9 @@ function appendReasonChunk(sess, text, reasonId, agentName, taskId) {
 
     // Task group wrapping：将 thinking-group 移入 task-group（如果 taskId 存在）
     if (taskId && sess.thinkingGroupEl) {
-        var taskGroup = ensureTaskGroup(sess, taskId);
+        var taskGroup = ensureTaskGroup(sess, taskId, taskDescription, agentName);
         if (!$(sess.thinkingGroupEl).parent().is(taskGroup)) {
-            $(taskGroup).append(sess.thinkingGroupEl);
+            $(taskGroup).find('.task-group-body').append(sess.thinkingGroupEl);
             // 更新 reasonGroups 中的 groupEl 引用
             for (var _rid in sess.reasonGroups) {
                 if (sess.reasonGroups[_rid].groupEl === sess.thinkingGroupEl) {
@@ -763,7 +781,7 @@ function formatToolArgsStr(args) {
 /* action_start：工具调用前（来源引擎 ActionChunk）提前渲染 loading 卡片骨架。
    存为 sess.pendingToolCard，待 action（ObservationChunk 结果）到达时由
    appendActionEndChunk 复用此卡片填充结果体并转完成态。 */
-function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId, agentName, taskId) {
+function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId, agentName, taskId, taskDescription) {
     // 如果提供了 reasonId，先结束该推理轮次的思考块（如果有的话）
     if (reasonId) {
         finishThinkingBlock(sess, reasonId);
@@ -819,8 +837,8 @@ function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId, agent
 
     // 如果 taskId 存在且卡片未在 task-group 内，移入 task-group
     if (taskId && !$(card).parent().closest('.task-group').length) {
-        var taskGroup = ensureTaskGroup(sess, taskId);
-        $(taskGroup).append(card);
+        var taskGroup = ensureTaskGroup(sess, taskId, taskDescription, agentName);
+        $(taskGroup).find('.task-group-body').append(card);
     }
 
     // 多槽 map：按 reasonId 存储 pending 卡片，支持并行任务交错流
@@ -831,7 +849,7 @@ function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId, agent
     if (sess.sessionId === activeSessionId) scrollToBottom();
 }
 
-function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, agentName, taskId) {
+function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, agentName, taskId, taskDescription) {
     // 根据 reasonId 查找分组容器
     function getGroupEl() {
         if (reasonId && sess.reasonGroups[reasonId]) {
@@ -989,8 +1007,8 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
 
     // 如果 taskId 存在且卡片未在 task-group 内，移入 task-group
     if (taskId && !$(card).parent().closest('.task-group').length) {
-        var taskGroup = ensureTaskGroup(sess, taskId);
-        $(taskGroup).append(card);
+        var taskGroup = ensureTaskGroup(sess, taskId, taskDescription, agentName);
+        $(taskGroup).find('.task-group-body').append(card);
     }
     // 新卡片存入多槽 map
     if (!sess.pendingToolCards) sess.pendingToolCards = {};

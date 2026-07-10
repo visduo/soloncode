@@ -19,6 +19,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
 import org.noear.solon.ai.agent.react.ReActChunk;
 import org.noear.solon.ai.agent.react.ReActTrace;
+import org.noear.solon.ai.agent.react.RunStartChunk;
 import org.noear.solon.ai.agent.react.intercept.ContextSizeChunk;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLTask;
@@ -163,6 +164,7 @@ public class WebStreamBuilder {
                     // 子代理任务包装解包：TaskWrapChuck 携带 taskAgentName/isMultitask
                     String taskAgentName = null;
                     String taskId = null;
+                    String taskDescription= null;
                     boolean isMultitask = false;
                     if (chunk instanceof TaskWrapChuck) {
                         TaskWrapChuck twc = (TaskWrapChuck) chunk;
@@ -171,9 +173,11 @@ public class WebStreamBuilder {
                                 twc.getRealChunk() instanceof ObservationChunk ||
                                 (twc.isMultitask() && twc.getRealChunk() instanceof ThoughtChunk) ||
                                 (twc.isMultitask() == false && twc.getRealChunk() instanceof ReasonChunk)) {
+                            // RunStartChunk
 
                             taskId = twc.getTaskId();
                             taskAgentName = twc.getTaskAgentName();
+                            taskDescription = twc.getTaskDescription();
                             isMultitask = twc.isMultitask();
                             chunk = twc.getRealChunk();
                         } else {
@@ -205,6 +209,7 @@ public class WebStreamBuilder {
                         }
                         if (taskId != null) {
                             webChunk.setTaskId(taskId);
+                            webChunk.setTaskDescription(taskDescription);
                         }
                         return webChunk;
                     }
@@ -326,12 +331,7 @@ public class WebStreamBuilder {
 
         // toolName 恒为裸名（供前端识别/查表）；toolTitle 为显示名（子代理时加 agentName 前缀）
         String toolName = chunk.getToolName();
-        String toolTitle;
-        if (engine.getName().equals(chunk.getAgentName())) {
-            toolTitle = toolName;
-        } else {
-            toolTitle = chunk.getAgentName() + "/" + toolName;
-        }
+        String toolTitle = toolName;
 
         Map<String, Object> args = chunk.getArgs() != null
                 ? new LinkedHashMap<>(chunk.getArgs())
