@@ -2,6 +2,9 @@
 
 * 添加 soloncode web mcp json 字符串导入方式
 * 添加 soloncode web 文件详情支持 md 视图模式和全屏模式
+* 添加 soloncode web 流式消息分组：思考与工具分组，子代理任务分组
+* 添加 soloncode web 输入面板技能搜索
+* 细节优化
 
 ### v2026.7.9
 

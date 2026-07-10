@@ -171,8 +171,7 @@ public class WebStreamBuilder {
                         if (twc.getRealChunk() instanceof ContextSizeChunk ||
                                 twc.getRealChunk() instanceof ActionChunk ||
                                 twc.getRealChunk() instanceof ObservationChunk ||
-                                (twc.isMultitask() && twc.getRealChunk() instanceof ThoughtChunk) ||
-                                (twc.isMultitask() == false && twc.getRealChunk() instanceof ReasonChunk)) {
+                                twc.getRealChunk() instanceof ReasonChunk) {
                             // RunStartChunk
 
                             taskId = twc.getTaskId();
@@ -348,6 +347,9 @@ public class WebStreamBuilder {
         WebChunk wc = WebChunk.ofActionStart(toolName, toolTitle, args);
         wc.setReasonId(chunk.getReasonId());
 
+        // 传入 callId 供前端精确配对工具卡片
+        wc.setCallId(chunk.getCallId());
+
         // 子代理标记
         if (taskAgentName != null) {
             wc.setAgentName(taskAgentName);
@@ -422,6 +424,9 @@ public class WebStreamBuilder {
             }
 
             webChunk.setReasonId(chunk.getReasonId());
+
+            // 传入 callId 供前端精确配对工具卡片
+            webChunk.setCallId(chunk.getCallId());
 
             // 子代理标记
             if (taskAgentName != null) {

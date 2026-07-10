@@ -416,6 +416,7 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 .thinking-group .thinking-block-body { border-bottom: none; }
 .thinking-group:has(.tool-card) .thinking-block-body { border-bottom: 1px solid var(--thinking-block-border); }
 .thinking-group .tool-card { margin: 0; border: none; border-radius: 0; border-top: 1px solid var(--border-color); border-left: 3px solid var(--thinking-block-border); background: var(--bg-primary); }
+.thinking-group > .reason-group-text { padding: 8px 14px; font-size: 14px; line-height: 1.7; color: var(--text-primary); }
 
 /* Sub-agent: accent-colored left border for thinking block and tool card */
 .thinking-group .thinking-block.is-subagent { border-left-color: var(--accent); }
@@ -426,7 +427,7 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 .thinking-block-header .agent-badge { font-size: 9px; line-height: 15px; padding: 0 5px; }
 
 /* Task group: wraps thinking-group + tool-cards for multitask subagent output */
-.task-group { margin: 0 0 12px; border: 1px solid var(--border-color); border-left: 4px solid var(--accent); border-radius: 10px; overflow: hidden; background: var(--thinking-block-bg); }
+.task-group { margin: 0 0 12px; border: 1px solid var(--border-color); border-left: 4px solid var(--thinking-block-border); border-radius: 10px; overflow: hidden; background: var(--thinking-block-bg); }
 
 .task-group-header { display: flex; align-items: center; gap: 6px; padding: 8px 12px; cursor: pointer; user-select: none; font-size: 13px; color: var(--text-primary); background: var(--bg-primary); border-bottom: 1px solid var(--border-color); transition: background 0.15s; }
 .task-group-header:hover { background: var(--bg-hover); }

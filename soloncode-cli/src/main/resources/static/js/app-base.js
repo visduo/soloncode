@@ -135,6 +135,12 @@ function resetStreamState(sess) {
     sess.thinkingBuffer = '';
     sess.thinkingGroupEl = null;
     sess.taskGroups = {};
+    // Cancel per-reasonId RAF IDs before clearing
+    for (var _rid in sess.reasonGroups) {
+        if (sess.reasonGroups[_rid].reasonRafId) {
+            cancelAnimationFrame(sess.reasonGroups[_rid].reasonRafId);
+        }
+    }
     sess.reasonGroups = {};
     if (sess.contentRafId) { cancelAnimationFrame(sess.contentRafId); sess.contentRafId = null; }
     if (sess.reasonRafId) { cancelAnimationFrame(sess.reasonRafId); sess.reasonRafId = null; }

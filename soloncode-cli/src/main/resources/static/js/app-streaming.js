@@ -191,8 +191,8 @@ function onWebChunk(sess, chunk) {
             case 'rewind': finishThinkingBlock(sess); finishPendingTool(sess); handleRewind(sess, parseInt(chunk.text) || 1); break;
             case 'reason': finishPendingTool(sess); appendReasonChunk(sess, chunk.text, chunk.reasonId, chunk.agentName, chunk.taskId, chunk.taskDescription); break;
             case 'text':   finishPendingTool(sess); appendContentChunk(sess, chunk.text, true, chunk.reasonId, chunk.taskId, chunk.taskDescription); break;
-            case 'action_end': appendActionEndChunk(sess, chunk.toolName, chunk.text, chunk.args, chunk.toolTitle, chunk.reasonId, chunk.agentName, chunk.taskId, chunk.taskDescription); if (window._todoChunkHandlers) window._todoChunkHandlers.forEach(function(h){h(chunk);}); break;
-            case 'action_start': appendActionStartChunk(sess, chunk.toolName, chunk.args, chunk.toolTitle, chunk.reasonId, chunk.agentName, chunk.taskId, chunk.taskDescription); break;
+            case 'action_end': appendActionEndChunk(sess, chunk.toolName, chunk.text, chunk.args, chunk.toolTitle, chunk.reasonId, chunk.agentName, chunk.taskId, chunk.taskDescription, chunk.callId); if (window._todoChunkHandlers) window._todoChunkHandlers.forEach(function(h){h(chunk);}); break;
+            case 'action_start': appendActionStartChunk(sess, chunk.toolName, chunk.args, chunk.toolTitle, chunk.reasonId, chunk.agentName, chunk.taskId, chunk.taskDescription, chunk.callId); break;
             case 'agent':  finishPendingTool(sess); appendContentChunk(sess, chunk.text, false, chunk.reasonId, chunk.taskId); break;
             case 'error':  finishThinkingBlock(sess); appendErrorChunk(sess, chunk.text); break;
             case 'hitl':   finishThinkingBlock(sess); finishPendingTool(sess); appendHitlCard(sess, chunk.toolName, chunk.command); break;
@@ -214,6 +214,13 @@ function finishStream(sess) {
     // 1. 取消还没跑的动画帧
     if (sess.contentRafId) { cancelAnimationFrame(sess.contentRafId); sess.contentRafId = null; }
     if (sess.reasonRafId) { cancelAnimationFrame(sess.reasonRafId); sess.reasonRafId = null; }
+    // Cancel per-reasonId RAF IDs
+    for (var _rid in sess.reasonGroups) {
+        if (sess.reasonGroups[_rid].reasonRafId) {
+            cancelAnimationFrame(sess.reasonGroups[_rid].reasonRafId);
+            sess.reasonGroups[_rid].reasonRafId = null;
+        }
+    }
 
     // 2. 立即把 Buffer 内容渲染出来
     if (sess.reasonBuffer) {
@@ -224,7 +231,19 @@ function finishStream(sess) {
         if (typeof highlightCodeBlocks === 'function') highlightCodeBlocks(el);
         if (typeof processMermaidBlocks === 'function') processMermaidBlocks(el);
     }
-    // 如果有思考中的内容，也刷一下
+    // 如果有思考中的内容，也刷一下（含 per-reasonId 分组）
+    for (var _rid in sess.reasonGroups) {
+        var group = sess.reasonGroups[_rid];
+        if (group.thinkingBlockEl && group.thinkingBuffer) {
+            var bodyMdEl = $(group.thinkingBlockEl).find('.thinking-block-body .md-content')[0];
+            if (bodyMdEl) {
+                $(bodyMdEl).html(renderMd(group.thinkingBuffer));
+                if (typeof addCodeBlockButtons === 'function') addCodeBlockButtons(bodyMdEl);
+                if (typeof highlightCodeBlocks === 'function') highlightCodeBlocks(bodyMdEl);
+                if (typeof processMermaidBlocks === 'function') processMermaidBlocks(bodyMdEl);
+            }
+        }
+    }
     if (sess.thinkingBlockEl && sess.thinkingBuffer) {
         if (sess.thinkingBodyMdEl) {
             $(sess.thinkingBodyMdEl).html(renderMd(sess.thinkingBuffer));

@@ -131,6 +131,13 @@ public class WebChunk {
      */
     private String reasonId;
 
+    /**
+     * 工具调用标识（callId），用于将 action_start 与 action_end 精确配对。
+     * <p>由引擎的 ActionChunk/ObservationChunk 携带，同一工具调用从开始到结束共享同一 ID。
+     * 前端据此在 pendingToolCards 中精确定位卡片，避免同 reasonId 下多个同名工具调用互相串扰。</p>
+     */
+    private String callId;
+
     /** 消息块创建时间戳（ epoch 毫秒），由工厂方法自动填充。 */
     private Long createdAt;
 

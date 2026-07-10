@@ -286,11 +286,11 @@ function finishThinkingBlock(sess, reasonId) {
             return;
         }
         stopThinkingTimer(sess, 'thinkingBlockTimerId', 'thinkingBlockStartTime');
-        if (sess.reasonRafId) {
-            cancelAnimationFrame(sess.reasonRafId);
-            sess.reasonRafId = null;
+        if (group.reasonRafId) {
+            cancelAnimationFrame(group.reasonRafId);
+            group.reasonRafId = null;
             if (group.thinkingBodyMdEl) {
-                group.thinkingBodyMdEl.innerHTML = renderMd(sess.thinkingBuffer);
+                group.thinkingBodyMdEl.innerHTML = renderMd(group.thinkingBuffer || '');
             }
         }
         if (group.thinkingBodyMdEl && typeof processMermaidBlocks === 'function') processMermaidBlocks(group.thinkingBodyMdEl);
@@ -311,6 +311,9 @@ function finishThinkingBlock(sess, reasonId) {
         group.thinkingBlockEl = null;
         group.thinkingBodyMdEl = null;
         group.thinkingBodyWrapEl = null;
+        group.groupContentEl = null;
+        group.groupBuffer = '';
+        group.thinkingBuffer = '';
         sess.thinkingBlockEl = null;
         sess.thinkingBodyMdEl = null;
         sess.thinkingBodyWrapEl = null;
@@ -422,7 +425,9 @@ function appendReasonChunk(sess, text, reasonId, agentName, taskId, taskDescript
                     groupEl: newGroup,
                     thinkingBlockEl: sess.thinkingBlockEl,
                     thinkingBodyMdEl: sess.thinkingBodyMdEl,
-                    thinkingBodyWrapEl: sess.thinkingBodyWrapEl
+                    thinkingBodyWrapEl: sess.thinkingBodyWrapEl,
+                    thinkingBuffer: '',
+                    reasonRafId: null
                 };
             } else {
                 var newGroup = $('<div>').addClass('thinking-group')[0];
@@ -436,7 +441,9 @@ function appendReasonChunk(sess, text, reasonId, agentName, taskId, taskDescript
                     groupEl: newGroup,
                     thinkingBlockEl: sess.thinkingBlockEl,
                     thinkingBodyMdEl: sess.thinkingBodyMdEl,
-                    thinkingBodyWrapEl: sess.thinkingBodyWrapEl
+                    thinkingBodyWrapEl: sess.thinkingBodyWrapEl,
+                    thinkingBuffer: '',
+                    reasonRafId: null
                 };
             }
         } else {
@@ -462,7 +469,9 @@ function appendReasonChunk(sess, text, reasonId, agentName, taskId, taskDescript
                     groupEl: group,
                     thinkingBlockEl: sess.thinkingBlockEl,
                     thinkingBodyMdEl: sess.thinkingBodyMdEl,
-                    thinkingBodyWrapEl: sess.thinkingBodyWrapEl
+                    thinkingBodyWrapEl: sess.thinkingBodyWrapEl,
+                    thinkingBuffer: '',
+                    reasonRafId: null
                 };
             } else {
                 var group = $('<div>').addClass('thinking-group')[0];
@@ -476,7 +485,9 @@ function appendReasonChunk(sess, text, reasonId, agentName, taskId, taskDescript
                     groupEl: group,
                     thinkingBlockEl: sess.thinkingBlockEl,
                     thinkingBodyMdEl: sess.thinkingBodyMdEl,
-                    thinkingBodyWrapEl: sess.thinkingBodyWrapEl
+                    thinkingBodyWrapEl: sess.thinkingBodyWrapEl,
+                    thinkingBuffer: '',
+                    reasonRafId: null
                 };
             }
         }
@@ -505,19 +516,39 @@ function appendReasonChunk(sess, text, reasonId, agentName, taskId, taskDescript
         $(sess.thinkingBlockEl).addClass('is-subagent');
     }
 
-    sess.thinkingBuffer += clearThinkTags(text);
-    if (!sess.reasonRafId) {
-        sess.reasonRafId = requestAnimationFrame(function() {
-            sess.reasonRafId = null;
-            if (!sess.thinkingBlockEl) return;
-            if (sess.thinkingBodyMdEl) {
-                sess.thinkingBodyMdEl.innerHTML = renderMd(sess.thinkingBuffer);
-            }
-            if (sess.thinkingBodyWrapEl) {
-                sess.thinkingBodyWrapEl.scrollTop = sess.thinkingBodyWrapEl.scrollHeight;
-            }
-            if (sess.sessionId === activeSessionId) scrollToBottom();
-        });
+    // Use per-reasonId buffer and RAF ID to prevent interleaving issues
+    if (reasonId && sess.reasonGroups[reasonId]) {
+        var group = sess.reasonGroups[reasonId];
+        if (!group.thinkingBuffer) group.thinkingBuffer = '';
+        group.thinkingBuffer += clearThinkTags(text);
+        if (!group.reasonRafId) {
+            group.reasonRafId = requestAnimationFrame(function() {
+                group.reasonRafId = null;
+                if (!group.thinkingBlockEl) return;
+                if (group.thinkingBodyMdEl) {
+                    group.thinkingBodyMdEl.innerHTML = renderMd(group.thinkingBuffer);
+                }
+                if (group.thinkingBodyWrapEl) {
+                    group.thinkingBodyWrapEl.scrollTop = group.thinkingBodyWrapEl.scrollHeight;
+                }
+                if (sess.sessionId === activeSessionId) scrollToBottom();
+            });
+        }
+    } else {
+        sess.thinkingBuffer += clearThinkTags(text);
+        if (!sess.reasonRafId) {
+            sess.reasonRafId = requestAnimationFrame(function() {
+                sess.reasonRafId = null;
+                if (!sess.thinkingBlockEl) return;
+                if (sess.thinkingBodyMdEl) {
+                    sess.thinkingBodyMdEl.innerHTML = renderMd(sess.thinkingBuffer);
+                }
+                if (sess.thinkingBodyWrapEl) {
+                    sess.thinkingBodyWrapEl.scrollTop = sess.thinkingBodyWrapEl.scrollHeight;
+                }
+                if (sess.sessionId === activeSessionId) scrollToBottom();
+            });
+        }
     }
 }
 
@@ -781,7 +812,7 @@ function formatToolArgsStr(args) {
 /* action_start：工具调用前（来源引擎 ActionChunk）提前渲染 loading 卡片骨架。
    存为 sess.pendingToolCard，待 action（ObservationChunk 结果）到达时由
    appendActionEndChunk 复用此卡片填充结果体并转完成态。 */
-function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId, agentName, taskId, taskDescription) {
+function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId, agentName, taskId, taskDescription, callId) {
     // 如果提供了 reasonId，先结束该推理轮次的思考块（如果有的话）
     if (reasonId) {
         finishThinkingBlock(sess, reasonId);
@@ -841,15 +872,18 @@ function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId, agent
         $(taskGroup).find('.task-group-body').append(card);
     }
 
-    // 多槽 map：按 reasonId 存储 pending 卡片，支持并行任务交错流
-    var key = reasonId || '__default';
+    // 多槽 map：按 callId 存储 pending 卡片，确保同一 reasonId 下多个同名工具调用互不串扰
+    var key = callId || reasonId || '__default';
     if (!sess.pendingToolCards) sess.pendingToolCards = {};
     sess.pendingToolCards[key] = { card: card, started: true };
+
+    // 同时存储 callId 到卡片元素，方便 debug
+    if (callId) card.setAttribute('data-call-id', callId);
 
     if (sess.sessionId === activeSessionId) scrollToBottom();
 }
 
-function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, agentName, taskId, taskDescription) {
+function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, agentName, taskId, taskDescription, callId) {
     // 根据 reasonId 查找分组容器
     function getGroupEl() {
         if (reasonId && sess.reasonGroups[reasonId]) {
@@ -858,9 +892,12 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
         return sess.thinkingGroupEl;
     }
 
-    // 多槽 map：按 reasonId 查找 pending 卡片，支持并行任务交错流
-    var key = reasonId || '__default';
+    // 多槽 map：优先按 callId 查找 pending 卡片（精确匹配），fallback 到 reasonId（兼容旧流）
+    var key = callId || reasonId || '__default';
     var pending = (sess.pendingToolCards || {})[key];
+
+    // 如果按 callId 查到且是主动创建的（started=true），直接复用
+    // 如果按 callId 没查到但按 reasonId 有（无 callId 的旧流），fallback
 
     // 复用分支：若该工具卡由 action_start 提前创建（loading 中），直接填充结果体并转完成态，避免重复建卡
     if (pending && pending.started) {
@@ -1010,9 +1047,11 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
         var taskGroup = ensureTaskGroup(sess, taskId, taskDescription, agentName);
         $(taskGroup).find('.task-group-body').append(card);
     }
-    // 新卡片存入多槽 map
+    // 新卡片存入多槽 map（按 callId 精确匹配）
+    var key = callId || reasonId || '__default';
     if (!sess.pendingToolCards) sess.pendingToolCards = {};
     sess.pendingToolCards[key] = { card: card, started: false };
+    if (callId) card.setAttribute('data-call-id', callId);
 
     sess.reasonBuffer = '';
     var newMd = $('<div>').addClass('md-content')[0];
@@ -1035,7 +1074,48 @@ function appendContentChunk(sess, text, append, reasonId, taskId) {
         sess.thinkingGroupEl = null;
         sess.reasonGroups = {};
     }
-    // 有 reasonId 的文本块属于推理过程中的非思考输出，保留分组引用
+    // 有 reasonId 且存在对应分组 → 文本渲染在分组内（思考块与工具卡片之间）
+    if (reasonId && sess.reasonGroups[reasonId] && sess.reasonGroups[reasonId].groupEl) {
+        var group = sess.reasonGroups[reasonId];
+        var groupEl = group.groupEl;
+
+        // ★ 如果文本 chunk 没有 taskId，但 groupEl 当前在 task-group 内，移出
+        //   避免无 taskId 的文本被误包入子代理分组
+        if (!taskId) {
+            var $taskGroup = $(groupEl).closest('.task-group');
+            if ($taskGroup.length > 0) {
+                $taskGroup.before(groupEl);
+                // 如果 task-group 空了，移除空容器
+                var $body = $taskGroup.find('.task-group-body');
+                if ($body.children().length === 0) {
+                    $taskGroup.remove();
+                }
+            }
+        }
+        // 确保组内文本容器存在
+        if (!group.groupContentEl) {
+            var contentEl = $('<div>').addClass('md-content reason-group-text')[0];
+            // 插入到思考块之后、工具卡片之前（或末尾）
+            var firstTool = $(groupEl).find('.tool-card').first()[0];
+            if (firstTool) {
+                $(firstTool).before(contentEl);
+            } else {
+                $(groupEl).append(contentEl);
+            }
+            group.groupContentEl = contentEl;
+            group.groupBuffer = '';
+        }
+        var clean = clearThinkTags(text);
+        group.groupBuffer = append ? group.groupBuffer + clean : clean;
+        group.groupContentEl.innerHTML = renderMd(group.groupBuffer);
+        if (typeof addCodeBlockButtons === 'function') addCodeBlockButtons(group.groupContentEl);
+        if (typeof highlightCodeBlocks === 'function') highlightCodeBlocks(group.groupContentEl);
+        if (typeof processMermaidBlocks === 'function') processMermaidBlocks(group.groupContentEl);
+        if (sess.sessionId === activeSessionId) scrollToBottom();
+        return;
+    }
+
+    // 无 reasonId 或没有对应分组 → 正常渲染到主气泡
     var clean = clearThinkTags(text);
     sess.reasonBuffer = append ? sess.reasonBuffer + clean : clean;
     if (!sess.contentRafId) {
