@@ -189,11 +189,11 @@ function onWebChunk(sess, chunk) {
         switch (chunk.type) {
             case 'command': finishThinkingBlock(sess); finishPendingTool(sess); appendCommandOutput(sess, chunk.text); break;
             case 'rewind': finishThinkingBlock(sess); finishPendingTool(sess); handleRewind(sess, parseInt(chunk.text) || 1); break;
-            case 'reason': finishPendingTool(sess); appendReasonChunk(sess, chunk.text, chunk.reasonId); break;
-            case 'text':   finishPendingTool(sess); appendContentChunk(sess, chunk.text, true, chunk.reasonId); break;
-            case 'action_end': appendActionEndChunk(sess, chunk.toolName, chunk.text, chunk.args, chunk.toolTitle, chunk.reasonId); if (window._todoChunkHandlers) window._todoChunkHandlers.forEach(function(h){h(chunk);}); break;
-            case 'action_start': appendActionStartChunk(sess, chunk.toolName, chunk.args, chunk.toolTitle, chunk.reasonId); break;
-            case 'agent':  finishPendingTool(sess); appendContentChunk(sess, chunk.text, false, chunk.reasonId); break;
+            case 'reason': finishPendingTool(sess); appendReasonChunk(sess, chunk.text, chunk.reasonId, chunk.agentName, chunk.taskId); break;
+            case 'text':   finishPendingTool(sess); appendContentChunk(sess, chunk.text, true, chunk.reasonId, chunk.taskId); break;
+            case 'action_end': appendActionEndChunk(sess, chunk.toolName, chunk.text, chunk.args, chunk.toolTitle, chunk.reasonId, chunk.agentName, chunk.taskId); if (window._todoChunkHandlers) window._todoChunkHandlers.forEach(function(h){h(chunk);}); break;
+            case 'action_start': appendActionStartChunk(sess, chunk.toolName, chunk.args, chunk.toolTitle, chunk.reasonId, chunk.agentName, chunk.taskId); break;
+            case 'agent':  finishPendingTool(sess); appendContentChunk(sess, chunk.text, false, chunk.reasonId, chunk.taskId); break;
             case 'error':  finishThinkingBlock(sess); appendErrorChunk(sess, chunk.text); break;
             case 'hitl':   finishThinkingBlock(sess); finishPendingTool(sess); appendHitlCard(sess, chunk.toolName, chunk.command); break;
             case 'trace':  finishThinkingBlock(sess); finishPendingTool(sess); appendTraceBadge(sess, chunk); break;

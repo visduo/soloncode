@@ -100,6 +100,17 @@ public class WebChunk {
     /** 最终答案正文，仅在 type 为 {@code trace} 时使用，携带 ReAct 完成时的全量最终答复，供前端复制使用。 */
     private String finalAnswer;
 
+    /** 代理名称，仅子代理的 thinking/tool 块时使用，用于前端区分输出归属。主代理时为空。 */
+    private String agentName;
+
+    /**
+     * 子代理任务标识（taskId），用于在 multitask 并行输出时将同一子代理的所有 chunk 归组展示。
+     * <p>由 {@link org.noear.solon.ai.harness.agent.TaskWrapChuck#getTaskId()} 生成，
+     * 同一个子代理任务实例在完整生命周期内共享同一 ID。
+     * 前端据此创建 {@code .task-group} 容器包裹所有该任务的输出块。</p>
+     */
+    private String taskId;
+
     /** 消息来源通道标识，如 "wechat" / "feishu" / "dingtalk" / "web"。 */
     private String source;
 

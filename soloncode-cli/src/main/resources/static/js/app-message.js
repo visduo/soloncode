@@ -364,11 +364,30 @@ function finishThinkingBlock(sess, reasonId) {
     }
 }
 
+/**
+ * 确保 task-group 容器存在，用于 multitask 并行输出时将同一子代理的所有 chunk 归组展示。
+ * task-group 包裹 thinking-group 和 tool-card，使同一任务实例的输出在视觉上归入同一区块。
+ */
+function ensureTaskGroup(sess, taskId) {
+    if (!taskId) return null;
+    if (sess.taskGroups[taskId]) return sess.taskGroups[taskId];
+
+    ensureAssistantBubble(sess);
+    var group = $('<div>').addClass('task-group')[0];
+    group.setAttribute('data-task-id', taskId);
+    if (sess.currentRunId) {
+        group.setAttribute('data-run-id', sess.currentRunId);
+    }
+    insertBeforeActions(sess, group);
+    sess.taskGroups[taskId] = group;
+    return group;
+}
+
 function clearThinkTags(text) {
     return text.replace(/<\s*\/?think\s*>/gi, '');
 }
 
-function appendReasonChunk(sess, text, reasonId) {
+function appendReasonChunk(sess, text, reasonId, agentName, taskId) {
     if (reasonId && sess.reasonGroups[reasonId]) {
         // 复用已有 reasonId 的思考块（同一轮次的新思考片段继续追加）
         var group = sess.reasonGroups[reasonId];
@@ -445,6 +464,29 @@ function appendReasonChunk(sess, text, reasonId) {
         }
     }
 
+    // Task group wrapping：将 thinking-group 移入 task-group（如果 taskId 存在）
+    if (taskId && sess.thinkingGroupEl) {
+        var taskGroup = ensureTaskGroup(sess, taskId);
+        if (!$(sess.thinkingGroupEl).parent().is(taskGroup)) {
+            $(taskGroup).append(sess.thinkingGroupEl);
+            // 更新 reasonGroups 中的 groupEl 引用
+            for (var _rid in sess.reasonGroups) {
+                if (sess.reasonGroups[_rid].groupEl === sess.thinkingGroupEl) {
+                    sess.reasonGroups[_rid].groupEl = sess.thinkingGroupEl;
+                }
+            }
+        }
+    }
+
+    // 子代理标记：添加 agent badge + is-subagent class
+    if (agentName && sess.thinkingBlockEl) {
+        var header = $(sess.thinkingBlockEl).find('.thinking-block-header')[0];
+        if (header && !$(header).find('.agent-badge').length) {
+            $(header).find('.thinking-block-label').after('<span class="agent-badge">' + escapeHtml(agentName) + '</span>');
+        }
+        $(sess.thinkingBlockEl).addClass('is-subagent');
+    }
+
     sess.thinkingBuffer += clearThinkTags(text);
     if (!sess.reasonRafId) {
         sess.reasonRafId = requestAnimationFrame(function() {
@@ -462,12 +504,22 @@ function appendReasonChunk(sess, text, reasonId) {
 }
 
 function finishPendingTool(sess) {
+    // 兼容旧单槽：标记并清除
     if (sess.pendingToolCard) {
         var icon = $(sess.pendingToolCard).find('.tool-status-icon')[0];
         if (icon) { icon.className = 'tool-status-icon done'; icon.innerHTML = '<i class="layui-icon layui-icon-ok" style="font-size:12px"></i>'; }
-
         sess.pendingToolCard = null;
     }
+    // 多槽 map：标记所有未完成的 pending 卡片为 done
+    for (var _key in sess.pendingToolCards) {
+        var pending = sess.pendingToolCards[_key];
+        if (pending && pending.card) {
+            var icon = $(pending.card).find('.tool-status-icon')[0];
+            if (icon) { icon.className = 'tool-status-icon done'; icon.innerHTML = '<i class="layui-icon layui-icon-ok" style="font-size:12px"></i>'; }
+        }
+        delete sess.pendingToolCards[_key];
+    }
+    sess.pendingToolCards = {};
 }
 
 /* ===== Tool Body Renderer Registry =====
@@ -711,10 +763,7 @@ function formatToolArgsStr(args) {
 /* action_start：工具调用前（来源引擎 ActionChunk）提前渲染 loading 卡片骨架。
    存为 sess.pendingToolCard，待 action（ObservationChunk 结果）到达时由
    appendActionEndChunk 复用此卡片填充结果体并转完成态。 */
-function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId) {
-    // 若已有未完成的 pending 卡（异常时序/重复 start），先收尾避免悬挂
-    finishPendingTool(sess);
-
+function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId, agentName, taskId) {
     // 如果提供了 reasonId，先结束该推理轮次的思考块（如果有的话）
     if (reasonId) {
         finishThinkingBlock(sess, reasonId);
@@ -741,6 +790,15 @@ function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId) {
         + '</div>'
         + '<div class="tool-card-body"></div>';
 
+    // 子代理标记：添加 agent badge + is-subagent class
+    if (agentName) {
+        $(card).addClass('is-subagent');
+        var nameEl = $(card).find('.tool-name')[0];
+        if (nameEl && !$(nameEl).next('.agent-badge').length) {
+            $(nameEl).after('<span class="agent-badge">' + escapeHtml(agentName) + '</span>');
+        }
+    }
+
     $(card).find('.tool-card-header').on('click', function() {
         $(card).toggleClass('expanded');
     });
@@ -758,13 +816,22 @@ function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId) {
     } else {
         insertBeforeActions(sess, card);
     }
-    sess.pendingToolCard = card;
-    // 标记该卡由 action_start 提前创建，等待结果填充
-    sess.pendingToolStarted = true;
+
+    // 如果 taskId 存在且卡片未在 task-group 内，移入 task-group
+    if (taskId && !$(card).parent().closest('.task-group').length) {
+        var taskGroup = ensureTaskGroup(sess, taskId);
+        $(taskGroup).append(card);
+    }
+
+    // 多槽 map：按 reasonId 存储 pending 卡片，支持并行任务交错流
+    var key = reasonId || '__default';
+    if (!sess.pendingToolCards) sess.pendingToolCards = {};
+    sess.pendingToolCards[key] = { card: card, started: true };
+
     if (sess.sessionId === activeSessionId) scrollToBottom();
 }
 
-function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId) {
+function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, agentName, taskId) {
     // 根据 reasonId 查找分组容器
     function getGroupEl() {
         if (reasonId && sess.reasonGroups[reasonId]) {
@@ -773,12 +840,24 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId) {
         return sess.thinkingGroupEl;
     }
 
+    // 多槽 map：按 reasonId 查找 pending 卡片，支持并行任务交错流
+    var key = reasonId || '__default';
+    var pending = (sess.pendingToolCards || {})[key];
+
     // 复用分支：若该工具卡由 action_start 提前创建（loading 中），直接填充结果体并转完成态，避免重复建卡
-    if (sess.pendingToolStarted && sess.pendingToolCard) {
-        var pc = sess.pendingToolCard;
-        sess.pendingToolStarted = false;
+    if (pending && pending.started) {
+        var pc = pending.card;
+        delete sess.pendingToolCards[key];
         var pcArgsStr = formatToolArgsStr(args);
         $(pc).find('.tool-name').text(toolTitle || toolName || 'tool');
+        // 子代理标记（如 pending 卡已由 action_start 添加则跳过）
+        if (agentName && !$(pc).find('.agent-badge').length) {
+            $(pc).addClass('is-subagent');
+            var nameEl = $(pc).find('.tool-name')[0];
+            if (nameEl) {
+                $(nameEl).after('<span class="agent-badge">' + escapeHtml(agentName) + '</span>');
+            }
+        }
         var pcArgsEl = $(pc).find('.tool-args')[0];
         if (pcArgsStr) {
             if (pcArgsEl) { pcArgsEl.textContent = pcArgsStr; }
@@ -790,7 +869,10 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId) {
             pcBody.innerHTML = '';
             if (!renderToolBody(pcBody, toolName, text, args)) { pcBody.textContent = text || ''; }
         }
-        finishPendingTool(sess);
+        // 标记卡片完成态
+        var icon = $(pc).find('.tool-status-icon')[0];
+        if (icon) { icon.className = 'tool-status-icon done'; icon.innerHTML = '<i class="layui-icon layui-icon-ok" style="font-size:12px"></i>'; }
+
         if (window._todoChunkHandlers) { /* todo 由 streaming 层单独处理，这里不重复 */ }
         sess.reasonBuffer = '';
         var pcMd = $('<div>').addClass('md-content')[0];
@@ -799,7 +881,6 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId) {
         if (sess.sessionId === activeSessionId) scrollToBottom();
         return;
     }
-    finishPendingTool(sess);
 
     // 如果提供了 reasonId，先结束该推理轮次的思考块（如果有的话）
     if (reasonId) {
@@ -879,6 +960,15 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId) {
         + '</div>'
         + '<div class="tool-card-body"></div>';
 
+    // 子代理标记：添加 agent badge + is-subagent class
+    if (agentName) {
+        $(card).addClass('is-subagent');
+        var nameEl = $(card).find('.tool-name')[0];
+        if (nameEl && !$(nameEl).next('.agent-badge').length) {
+            $(nameEl).after('<span class="agent-badge">' + escapeHtml(agentName) + '</span>');
+        }
+    }
+
     // 工具结果渲染：委托注册表分发，未命中专用 renderer 则纯文本兜底
     var toolBody = $(card).find('.tool-card-body')[0];
     if (!renderToolBody(toolBody, toolName, text, args)) {
@@ -896,7 +986,15 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId) {
     } else {
         insertBeforeActions(sess, card);
     }
-    sess.pendingToolCard = card;
+
+    // 如果 taskId 存在且卡片未在 task-group 内，移入 task-group
+    if (taskId && !$(card).parent().closest('.task-group').length) {
+        var taskGroup = ensureTaskGroup(sess, taskId);
+        $(taskGroup).append(card);
+    }
+    // 新卡片存入多槽 map
+    if (!sess.pendingToolCards) sess.pendingToolCards = {};
+    sess.pendingToolCards[key] = { card: card, started: false };
 
     sess.reasonBuffer = '';
     var newMd = $('<div>').addClass('md-content')[0];
@@ -905,7 +1003,7 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId) {
     if (sess.sessionId === activeSessionId) scrollToBottom();
 }
 
-function appendContentChunk(sess, text, append, reasonId) {
+function appendContentChunk(sess, text, append, reasonId, taskId) {
     // 没有 reasonId 的文本块属于最终回答，关闭思考块并清除分组引用
     if (!reasonId) {
         // ★ 先关闭所有未关闭的 reasonGroups，其 thinkingBlockEl 会被清空

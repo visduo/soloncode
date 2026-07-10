@@ -27,6 +27,7 @@ import org.noear.solon.ai.chat.ChatModel;
 import org.noear.solon.ai.chat.prompt.Prompt;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.ai.harness.agent.TaskTalent;
+import org.noear.solon.ai.harness.agent.TaskWrapChuck;
 import org.noear.solon.ai.talents.cli.TerminalTalent;
 import org.noear.solon.ai.talents.cli.TodoTalent;
 import org.noear.solon.ai.talents.memory.MemoryTalent;
@@ -159,17 +160,38 @@ public class WebStreamBuilder {
                 })
                 .stream()
                 .map(chunk -> {
+                    // 子代理任务包装解包：TaskWrapChuck 携带 taskAgentName/isMultitask
+                    String taskAgentName = null;
+                    String taskId = null;
+                    boolean isMultitask = false;
+                    if (chunk instanceof TaskWrapChuck) {
+                        TaskWrapChuck twc = (TaskWrapChuck) chunk;
+                        if (twc.getRealChunk() instanceof ContextSizeChunk ||
+                                twc.getRealChunk() instanceof ActionChunk ||
+                                twc.getRealChunk() instanceof ObservationChunk ||
+                                (twc.isMultitask() && twc.getRealChunk() instanceof ThoughtChunk) ||
+                                (twc.isMultitask() == false && twc.getRealChunk() instanceof ReasonChunk)) {
+
+                            taskId = twc.getTaskId();
+                            taskAgentName = twc.getTaskAgentName();
+                            isMultitask = twc.isMultitask();
+                            chunk = twc.getRealChunk();
+                        } else {
+                            return WebChunk.EMPTY;
+                        }
+                    }
+
                     WebChunk webChunk = null;
                     if (chunk instanceof ContextSizeChunk) {
                         webChunk = onContextSizeChunk(chatModel, (ContextSizeChunk) chunk);
                     } else if (chunk instanceof ReasonChunk) {
-                        webChunk = onReasonChunk((ReasonChunk) chunk);
+                        webChunk = onReasonChunk((ReasonChunk) chunk, taskAgentName);
                     } else if (chunk instanceof ThoughtChunk) {
-                        webChunk = onThoughtChunk(session, (ThoughtChunk) chunk);
+                        webChunk = onThoughtChunk(session, (ThoughtChunk) chunk, taskAgentName, isMultitask);
                     } else if (chunk instanceof ActionChunk) {
-                        webChunk = onActionChunk((ActionChunk) chunk);
+                        webChunk = onActionChunk((ActionChunk) chunk, taskAgentName);
                     } else if (chunk instanceof ObservationChunk) {
-                        webChunk = onObservationChunk((ObservationChunk) chunk);
+                        webChunk = onObservationChunk((ObservationChunk) chunk, taskAgentName);
                     } else if (chunk instanceof ReActChunk) {
                         webChunk = onFinalChunk(session, (ReActChunk) chunk);
                     }
@@ -178,6 +200,12 @@ public class WebStreamBuilder {
                         return WebChunk.EMPTY;
                     } else {
                         webChunk.setRunId(chunk.getRunId());
+                        if (taskAgentName != null) {
+                            webChunk.setAgentName(taskAgentName);
+                        }
+                        if (taskId != null) {
+                            webChunk.setTaskId(taskId);
+                        }
                         return webChunk;
                     }
                 })
@@ -247,7 +275,7 @@ public class WebStreamBuilder {
      * @param chunk 推理阶段的 chunk 数据
      * @return 映射后的 WebChunk，或 {@link WebChunk#EMPTY}
      */
-    private WebChunk onReasonChunk(ReasonChunk chunk) {
+    private WebChunk onReasonChunk(ReasonChunk chunk, String taskAgentName) {
         if (!chunk.isToolCalls() && chunk.hasContent()) {
             WebChunk wc;
             if (chunk.getMessage().isThinking()) {
@@ -256,6 +284,12 @@ public class WebStreamBuilder {
                 wc = WebChunk.ofText(chunk.getContent());
             }
             wc.setReasonId(chunk.getReasonId());
+
+            // 子代理标记：下游前端据此识别 chunk 归属
+            if (taskAgentName != null) {
+                wc.setAgentName(taskAgentName);
+            }
+
             return wc;
         }
 
@@ -273,7 +307,7 @@ public class WebStreamBuilder {
      * @param chunk 工具调用开始的 chunk 数据
      * @return 映射后的 WebChunk（含工具名与参数），或 {@link WebChunk#EMPTY}（内部工具或无名称时）
      */
-    private WebChunk onActionChunk(ActionChunk chunk) {
+    private WebChunk onActionChunk(ActionChunk chunk, String taskAgentName) {
         if (Assert.isEmpty(chunk.getToolName())) {
             return WebChunk.EMPTY;
         }
@@ -308,6 +342,12 @@ public class WebStreamBuilder {
 
         WebChunk wc = WebChunk.ofActionStart(toolName, toolTitle, args);
         wc.setReasonId(chunk.getReasonId());
+
+        // 子代理标记
+        if (taskAgentName != null) {
+            wc.setAgentName(taskAgentName);
+        }
+
         return wc;
     }
 
@@ -325,7 +365,7 @@ public class WebStreamBuilder {
      * @param chunk 工具调用结束的 chunk 数据
      * @return 映射后的 WebChunk（含工具信息），或 {@link WebChunk#EMPTY}（内部工具或无名称时）
      */
-    private WebChunk onObservationChunk(ObservationChunk chunk) {
+    private WebChunk onObservationChunk(ObservationChunk chunk, String taskAgentName) {
         if(chunk.getError() != null){
             return WebChunk.EMPTY;
         }
@@ -377,6 +417,12 @@ public class WebStreamBuilder {
             }
 
             webChunk.setReasonId(chunk.getReasonId());
+
+            // 子代理标记
+            if (taskAgentName != null) {
+                webChunk.setAgentName(taskAgentName);
+            }
+
             return webChunk;
         }
 
@@ -480,7 +526,7 @@ public class WebStreamBuilder {
      * @param chunk 思考轮次的 chunk 数据，包含助手消息和追踪信息
      * @return 映射后的 WebChunk（多任务并行时有内容），或 {@link WebChunk#EMPTY}
      */
-    private WebChunk onThoughtChunk(AgentSession session, ThoughtChunk chunk) {
+    private WebChunk onThoughtChunk(AgentSession session, ThoughtChunk chunk, String taskAgentName, boolean isMultitask) {
         ReActTrace trace = chunk.getTrace();
         String sessionId = session.getSessionId();
         String resultContent = chunk.getAssistantMessage().getResultContent();
@@ -506,9 +552,16 @@ public class WebStreamBuilder {
             }
 
 
-            if (chunk.hasMeta(TaskTalent.TOOL_MULTITASK)) {
+            if (isMultitask) {
                 // 仅在多任务并行且有内容时输出
-                return WebChunk.ofText("\n" + resultContent);
+                WebChunk wc = WebChunk.ofText("\n" + resultContent);
+
+                // 子代理标记
+                if (taskAgentName != null) {
+                    wc.setAgentName(taskAgentName);
+                }
+
+                return wc;
             }
         }
 

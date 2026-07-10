@@ -52,6 +52,7 @@ function SessionState(sessionId) {
     this.userMsgCounter = 0;
     this.reasonGroups = {};  // reasonId → { groupEl, thinkingBlockEl }
     this.thinkingGroupEl = null;
+    this.taskGroups = {};  // taskId → { groupEl }
 }
 
 var sessionMap = {};
@@ -126,12 +127,14 @@ function scrollToBottom(force) {
 function resetStreamState(sess) {
     sess.currentBubbleEl = null;
     sess.pendingToolStarted = false;
+    sess.pendingToolCards = {};
     sess.reasonBuffer = '';
     sess.thinkingBlockEl = null;
     sess.thinkingBodyMdEl = null;
     sess.thinkingBodyWrapEl = null;
     sess.thinkingBuffer = '';
     sess.thinkingGroupEl = null;
+    sess.taskGroups = {};
     sess.reasonGroups = {};
     if (sess.contentRafId) { cancelAnimationFrame(sess.contentRafId); sess.contentRafId = null; }
     if (sess.reasonRafId) { cancelAnimationFrame(sess.reasonRafId); sess.reasonRafId = null; }
