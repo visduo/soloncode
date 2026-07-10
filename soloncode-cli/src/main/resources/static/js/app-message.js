@@ -239,7 +239,7 @@ function ensureThinkingBlock(sess) {
             block.setAttribute('data-run-id', sess.currentRunId);
         }
         block.innerHTML = '<div class="thinking-block-header">'
-            + '<span class="thinking-block-label">思考中</span>'
+            + '<span class="thinking-block-label">思考</span>'
             + '<span class="thinking-timer-wrap" style="margin-left:4px">'
             + '<span class="thinking-current-timer">0s</span>'
             + '</span>'
@@ -303,7 +303,7 @@ function finishThinkingBlock(sess, reasonId) {
             elapsed = ' (' + Math.floor((Date.now() - sess.thinkingBlockStartTime) / 1000) + 's)';
         }
         var label = $(group.thinkingBlockEl).find('.thinking-block-label')[0];
-        if (label) $(label).text('思考结束' + elapsed);
+        if (label) $(label).text('思考' + elapsed);
         $(group.thinkingBlockEl).find('.thinking-block-dots').remove();
         $(group.thinkingBlockEl).find('.thinking-timer-wrap').remove();
 
@@ -338,19 +338,24 @@ function finishThinkingBlock(sess, reasonId) {
             elapsed = ' (' + Math.floor((Date.now() - sess.thinkingBlockStartTime) / 1000) + 's)';
         }
         var label = $(sess.thinkingBlockEl).find('.thinking-block-label')[0];
-        if (label) $(label).text('思考结束' + elapsed);
+        if (label) $(label).text('思考' + elapsed);
         $(sess.thinkingBlockEl).find('.thinking-block-dots').remove();
         $(sess.thinkingBlockEl).find('.thinking-timer-wrap').remove();
 
         // 将思考块包裹在分组容器中，后续工具调用将追加到该分组内
+        // ★ 防止重复包裹：如果 thinking-block 已在 thinking-group 内，跳过
         var thinkBlockEl = sess.thinkingBlockEl;
-        var group = $('<div>').addClass('thinking-group')[0];
-        if (sess.currentRunId) {
-            group.setAttribute('data-run-id', sess.currentRunId);
+        if (thinkBlockEl.parentNode && $(thinkBlockEl).parent().hasClass('thinking-group')) {
+            sess.thinkingGroupEl = thinkBlockEl.parentNode;
+        } else {
+            var group = $('<div>').addClass('thinking-group')[0];
+            if (sess.currentRunId) {
+                group.setAttribute('data-run-id', sess.currentRunId);
+            }
+            $(thinkBlockEl).before(group);
+            $(group).append(thinkBlockEl);
+            sess.thinkingGroupEl = group;
         }
-        $(thinkBlockEl).before(group);
-        $(group).append(thinkBlockEl);
-        sess.thinkingGroupEl = group;
 
         sess.thinkingBlockEl = null;
         sess.thinkingBodyMdEl = null;
@@ -368,24 +373,35 @@ function appendReasonChunk(sess, text, reasonId) {
         // 复用已有 reasonId 的思考块（同一轮次的新思考片段继续追加）
         var group = sess.reasonGroups[reasonId];
         if (!group.thinkingBlockEl) {
-            // 思考块已被结束（安全兜底），重新创建
             sess.thinkingGroupEl = null;
             removeThinking(sess);
             ensureThinkingBlock(sess);
             var thinkBlockEl = sess.thinkingBlockEl;
-            var newGroup = $('<div>').addClass('thinking-group')[0];
-            if (sess.currentRunId) {
-                newGroup.setAttribute('data-run-id', sess.currentRunId);
+            // ★ 防止重复包裹：如果已在 thinking-group 内，复用父容器
+            if (thinkBlockEl.parentNode && $(thinkBlockEl).parent().hasClass('thinking-group')) {
+                var newGroup = thinkBlockEl.parentNode;
+                sess.thinkingGroupEl = newGroup;
+                sess.reasonGroups[reasonId] = {
+                    groupEl: newGroup,
+                    thinkingBlockEl: sess.thinkingBlockEl,
+                    thinkingBodyMdEl: sess.thinkingBodyMdEl,
+                    thinkingBodyWrapEl: sess.thinkingBodyWrapEl
+                };
+            } else {
+                var newGroup = $('<div>').addClass('thinking-group')[0];
+                if (sess.currentRunId) {
+                    newGroup.setAttribute('data-run-id', sess.currentRunId);
+                }
+                $(thinkBlockEl).before(newGroup);
+                $(newGroup).append(thinkBlockEl);
+                sess.thinkingGroupEl = newGroup;
+                sess.reasonGroups[reasonId] = {
+                    groupEl: newGroup,
+                    thinkingBlockEl: sess.thinkingBlockEl,
+                    thinkingBodyMdEl: sess.thinkingBodyMdEl,
+                    thinkingBodyWrapEl: sess.thinkingBodyWrapEl
+                };
             }
-            $(thinkBlockEl).before(newGroup);
-            $(newGroup).append(thinkBlockEl);
-            sess.thinkingGroupEl = newGroup;
-            sess.reasonGroups[reasonId] = {
-                groupEl: newGroup,
-                thinkingBlockEl: sess.thinkingBlockEl,
-                thinkingBodyMdEl: sess.thinkingBodyMdEl,
-                thinkingBodyWrapEl: sess.thinkingBodyWrapEl
-            };
         } else {
             sess.thinkingBlockEl = group.thinkingBlockEl;
             sess.thinkingBodyMdEl = group.thinkingBodyMdEl;
@@ -401,19 +417,31 @@ function appendReasonChunk(sess, text, reasonId) {
         // 如果有 reasonId，立即将思考块包裹到分组容器中
         if (reasonId) {
             var thinkBlockEl = sess.thinkingBlockEl;
-            var group = $('<div>').addClass('thinking-group')[0];
-            if (sess.currentRunId) {
-                group.setAttribute('data-run-id', sess.currentRunId);
+            // ★ 防止重复包裹：如果 thinking-block 已在 thinking-group 内，复用父容器
+            if (thinkBlockEl.parentNode && $(thinkBlockEl).parent().hasClass('thinking-group')) {
+                var group = thinkBlockEl.parentNode;
+                sess.thinkingGroupEl = group;
+                sess.reasonGroups[reasonId] = {
+                    groupEl: group,
+                    thinkingBlockEl: sess.thinkingBlockEl,
+                    thinkingBodyMdEl: sess.thinkingBodyMdEl,
+                    thinkingBodyWrapEl: sess.thinkingBodyWrapEl
+                };
+            } else {
+                var group = $('<div>').addClass('thinking-group')[0];
+                if (sess.currentRunId) {
+                    group.setAttribute('data-run-id', sess.currentRunId);
+                }
+                $(thinkBlockEl).before(group);
+                $(group).append(thinkBlockEl);
+                sess.thinkingGroupEl = group;
+                sess.reasonGroups[reasonId] = {
+                    groupEl: group,
+                    thinkingBlockEl: sess.thinkingBlockEl,
+                    thinkingBodyMdEl: sess.thinkingBodyMdEl,
+                    thinkingBodyWrapEl: sess.thinkingBodyWrapEl
+                };
             }
-            $(thinkBlockEl).before(group);
-            $(group).append(thinkBlockEl);
-            sess.thinkingGroupEl = group;
-            sess.reasonGroups[reasonId] = {
-                groupEl: group,
-                thinkingBlockEl: sess.thinkingBlockEl,
-                thinkingBodyMdEl: sess.thinkingBodyMdEl,
-                thinkingBodyWrapEl: sess.thinkingBodyWrapEl
-            };
         }
     }
 
@@ -880,6 +908,13 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId) {
 function appendContentChunk(sess, text, append, reasonId) {
     // 没有 reasonId 的文本块属于最终回答，关闭思考块并清除分组引用
     if (!reasonId) {
+        // ★ 先关闭所有未关闭的 reasonGroups，其 thinkingBlockEl 会被清空
+        //   确保后续旧式 finishThinkingBlock(sess) 不会重复包裹
+        for (var _rid in sess.reasonGroups) {
+            if (sess.reasonGroups[_rid].thinkingBlockEl) {
+                finishThinkingBlock(sess, _rid);
+            }
+        }
         finishThinkingBlock(sess);
         sess.thinkingGroupEl = null;
         sess.reasonGroups = {};
