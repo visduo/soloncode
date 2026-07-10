@@ -276,7 +276,49 @@ function insertBeforeActions(sess, el) {
     $(sess.currentBubbleEl.parentNode).find('.msg-actions').first().before(el);
 }
 
-function finishThinkingBlock(sess) {
+function finishThinkingBlock(sess, reasonId) {
+    // 如果指定了 reasonId，只结束该 reasonId 对应的思考块
+    if (reasonId && sess.reasonGroups[reasonId]) {
+        var group = sess.reasonGroups[reasonId];
+        if (!group.thinkingBlockEl) {
+            // 思考块已被处理（如双重回调），直接返回
+            sess.thinkingBuffer = '';
+            return;
+        }
+        stopThinkingTimer(sess, 'thinkingBlockTimerId', 'thinkingBlockStartTime');
+        if (sess.reasonRafId) {
+            cancelAnimationFrame(sess.reasonRafId);
+            sess.reasonRafId = null;
+            if (group.thinkingBodyMdEl) {
+                group.thinkingBodyMdEl.innerHTML = renderMd(sess.thinkingBuffer);
+            }
+        }
+        if (group.thinkingBodyMdEl && typeof processMermaidBlocks === 'function') processMermaidBlocks(group.thinkingBodyMdEl);
+        $(group.thinkingBlockEl).removeClass('streaming');
+        if (window.cliPrintSimplified !== false) {
+            $(group.thinkingBlockEl).removeClass('expanded');
+        }
+        var elapsed = '';
+        if (sess.thinkingBlockStartTime) {
+            elapsed = ' (' + Math.floor((Date.now() - sess.thinkingBlockStartTime) / 1000) + 's)';
+        }
+        var label = $(group.thinkingBlockEl).find('.thinking-block-label')[0];
+        if (label) $(label).text('思考结束' + elapsed);
+        $(group.thinkingBlockEl).find('.thinking-block-dots').remove();
+        $(group.thinkingBlockEl).find('.thinking-timer-wrap').remove();
+
+        // ★ 清空组内引用 + 顶层引用，防止 finishStream 再次包裹
+        group.thinkingBlockEl = null;
+        group.thinkingBodyMdEl = null;
+        group.thinkingBodyWrapEl = null;
+        sess.thinkingBlockEl = null;
+        sess.thinkingBodyMdEl = null;
+        sess.thinkingBodyWrapEl = null;
+        sess.thinkingBuffer = '';
+        return;
+    }
+
+    // 旧式逻辑（无 reasonId 时）：结束当前 thinkingBlockEl 并包裹分组
     if (sess.thinkingBlockEl) {
         stopThinkingTimer(sess, 'thinkingBlockTimerId', 'thinkingBlockStartTime');
         if (sess.reasonRafId) {
@@ -299,6 +341,17 @@ function finishThinkingBlock(sess) {
         if (label) $(label).text('思考结束' + elapsed);
         $(sess.thinkingBlockEl).find('.thinking-block-dots').remove();
         $(sess.thinkingBlockEl).find('.thinking-timer-wrap').remove();
+
+        // 将思考块包裹在分组容器中，后续工具调用将追加到该分组内
+        var thinkBlockEl = sess.thinkingBlockEl;
+        var group = $('<div>').addClass('thinking-group')[0];
+        if (sess.currentRunId) {
+            group.setAttribute('data-run-id', sess.currentRunId);
+        }
+        $(thinkBlockEl).before(group);
+        $(group).append(thinkBlockEl);
+        sess.thinkingGroupEl = group;
+
         sess.thinkingBlockEl = null;
         sess.thinkingBodyMdEl = null;
         sess.thinkingBodyWrapEl = null;
@@ -310,9 +363,60 @@ function clearThinkTags(text) {
     return text.replace(/<\s*\/?think\s*>/gi, '');
 }
 
-function appendReasonChunk(sess, text) {
-    removeThinking(sess);
-    ensureThinkingBlock(sess);
+function appendReasonChunk(sess, text, reasonId) {
+    if (reasonId && sess.reasonGroups[reasonId]) {
+        // 复用已有 reasonId 的思考块（同一轮次的新思考片段继续追加）
+        var group = sess.reasonGroups[reasonId];
+        if (!group.thinkingBlockEl) {
+            // 思考块已被结束（安全兜底），重新创建
+            sess.thinkingGroupEl = null;
+            removeThinking(sess);
+            ensureThinkingBlock(sess);
+            var thinkBlockEl = sess.thinkingBlockEl;
+            var newGroup = $('<div>').addClass('thinking-group')[0];
+            if (sess.currentRunId) {
+                newGroup.setAttribute('data-run-id', sess.currentRunId);
+            }
+            $(thinkBlockEl).before(newGroup);
+            $(newGroup).append(thinkBlockEl);
+            sess.thinkingGroupEl = newGroup;
+            sess.reasonGroups[reasonId] = {
+                groupEl: newGroup,
+                thinkingBlockEl: sess.thinkingBlockEl,
+                thinkingBodyMdEl: sess.thinkingBodyMdEl,
+                thinkingBodyWrapEl: sess.thinkingBodyWrapEl
+            };
+        } else {
+            sess.thinkingBlockEl = group.thinkingBlockEl;
+            sess.thinkingBodyMdEl = group.thinkingBodyMdEl;
+            sess.thinkingBodyWrapEl = group.thinkingBodyWrapEl;
+            sess.thinkingGroupEl = group.groupEl;
+        }
+    } else {
+        // 新的思考开始，清除旧分组引用
+        sess.thinkingGroupEl = null;
+        removeThinking(sess);
+        ensureThinkingBlock(sess);
+
+        // 如果有 reasonId，立即将思考块包裹到分组容器中
+        if (reasonId) {
+            var thinkBlockEl = sess.thinkingBlockEl;
+            var group = $('<div>').addClass('thinking-group')[0];
+            if (sess.currentRunId) {
+                group.setAttribute('data-run-id', sess.currentRunId);
+            }
+            $(thinkBlockEl).before(group);
+            $(group).append(thinkBlockEl);
+            sess.thinkingGroupEl = group;
+            sess.reasonGroups[reasonId] = {
+                groupEl: group,
+                thinkingBlockEl: sess.thinkingBlockEl,
+                thinkingBodyMdEl: sess.thinkingBodyMdEl,
+                thinkingBodyWrapEl: sess.thinkingBodyWrapEl
+            };
+        }
+    }
+
     sess.thinkingBuffer += clearThinkTags(text);
     if (!sess.reasonRafId) {
         sess.reasonRafId = requestAnimationFrame(function() {
@@ -579,9 +683,17 @@ function formatToolArgsStr(args) {
 /* action_start：工具调用前（来源引擎 ActionChunk）提前渲染 loading 卡片骨架。
    存为 sess.pendingToolCard，待 action（ObservationChunk 结果）到达时由
    appendActionEndChunk 复用此卡片填充结果体并转完成态。 */
-function appendActionStartChunk(sess, toolName, args, toolTitle) {
+function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId) {
     // 若已有未完成的 pending 卡（异常时序/重复 start），先收尾避免悬挂
     finishPendingTool(sess);
+
+    // 如果提供了 reasonId，先结束该推理轮次的思考块（如果有的话）
+    if (reasonId) {
+        finishThinkingBlock(sess, reasonId);
+    } else {
+        finishThinkingBlock(sess);
+    }
+
     ensureAssistantBubble(sess);
 
     var argsStr = formatToolArgsStr(args);
@@ -605,14 +717,34 @@ function appendActionStartChunk(sess, toolName, args, toolTitle) {
         $(card).toggleClass('expanded');
     });
 
-    insertBeforeActions(sess, card);
+    // 根据 reasonId 查找分组，将工具卡片追加到正确的位置
+    var groupEl = null;
+    if (reasonId && sess.reasonGroups[reasonId]) {
+        groupEl = sess.reasonGroups[reasonId].groupEl;
+    } else {
+        groupEl = sess.thinkingGroupEl;
+    }
+
+    if (groupEl) {
+        $(groupEl).append(card);
+    } else {
+        insertBeforeActions(sess, card);
+    }
     sess.pendingToolCard = card;
     // 标记该卡由 action_start 提前创建，等待结果填充
     sess.pendingToolStarted = true;
     if (sess.sessionId === activeSessionId) scrollToBottom();
 }
 
-function appendActionEndChunk(sess, toolName, text, args, toolTitle) {
+function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId) {
+    // 根据 reasonId 查找分组容器
+    function getGroupEl() {
+        if (reasonId && sess.reasonGroups[reasonId]) {
+            return sess.reasonGroups[reasonId].groupEl;
+        }
+        return sess.thinkingGroupEl;
+    }
+
     // 复用分支：若该工具卡由 action_start 提前创建（loading 中），直接填充结果体并转完成态，避免重复建卡
     if (sess.pendingToolStarted && sess.pendingToolCard) {
         var pc = sess.pendingToolCard;
@@ -640,6 +772,12 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle) {
         return;
     }
     finishPendingTool(sess);
+
+    // 如果提供了 reasonId，先结束该推理轮次的思考块（如果有的话）
+    if (reasonId) {
+        finishThinkingBlock(sess, reasonId);
+    }
+
     ensureAssistantBubble(sess);
 
     // 参考 CliShell 简化打印方式，将 args 拼接为短字符串
@@ -723,7 +861,13 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle) {
         $(card).toggleClass('expanded');
     });
 
-    insertBeforeActions(sess, card);
+    // 根据 reasonId 查找分组，将工具卡片追加到正确的位置
+    var groupEl = getGroupEl();
+    if (groupEl) {
+        $(groupEl).append(card);
+    } else {
+        insertBeforeActions(sess, card);
+    }
     sess.pendingToolCard = card;
 
     sess.reasonBuffer = '';
@@ -733,7 +877,14 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle) {
     if (sess.sessionId === activeSessionId) scrollToBottom();
 }
 
-function appendContentChunk(sess, text, append) {
+function appendContentChunk(sess, text, append, reasonId) {
+    // 没有 reasonId 的文本块属于最终回答，关闭思考块并清除分组引用
+    if (!reasonId) {
+        finishThinkingBlock(sess);
+        sess.thinkingGroupEl = null;
+        sess.reasonGroups = {};
+    }
+    // 有 reasonId 的文本块属于推理过程中的非思考输出，保留分组引用
     var clean = clearThinkTags(text);
     sess.reasonBuffer = append ? sess.reasonBuffer + clean : clean;
     if (!sess.contentRafId) {

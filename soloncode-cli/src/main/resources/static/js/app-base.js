@@ -50,6 +50,8 @@ function SessionState(sessionId) {
     this.thinkingBlockStartTime = null;
     this.messageStartTime = null;
     this.userMsgCounter = 0;
+    this.reasonGroups = {};  // reasonId → { groupEl, thinkingBlockEl }
+    this.thinkingGroupEl = null;
 }
 
 var sessionMap = {};
@@ -129,6 +131,8 @@ function resetStreamState(sess) {
     sess.thinkingBodyMdEl = null;
     sess.thinkingBodyWrapEl = null;
     sess.thinkingBuffer = '';
+    sess.thinkingGroupEl = null;
+    sess.reasonGroups = {};
     if (sess.contentRafId) { cancelAnimationFrame(sess.contentRafId); sess.contentRafId = null; }
     if (sess.reasonRafId) { cancelAnimationFrame(sess.reasonRafId); sess.reasonRafId = null; }
 }

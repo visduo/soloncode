@@ -106,6 +106,14 @@ public class WebChunk {
     /** 消息来源通道显示标签，如 "微信" / "飞书" / "钉钉" / "Web"。 */
     private String sourceLabel;
 
+    /**
+     * 关联的推理标识（reasonId），用于将同一个推理轮次中的思考与工具调用分组关联。
+     * <p>由 {@link org.noear.solon.ai.agent.react.ReActTrace#getCurrentReasonId()} 生成，
+     * 同一轮次中的 {@code reason}、{@code action_start}、{@code action_end} 共享同一 ID。
+     * 前端据此将思考块与工具卡片包裹在同一个 {@code .thinking-group} 容器中。</p>
+     */
+    private String reasonId;
+
     /** 消息块创建时间戳（ epoch 毫秒），由工厂方法自动填充。 */
     private Long createdAt;
 

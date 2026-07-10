@@ -189,11 +189,11 @@ function onWebChunk(sess, chunk) {
         switch (chunk.type) {
             case 'command': finishThinkingBlock(sess); finishPendingTool(sess); appendCommandOutput(sess, chunk.text); break;
             case 'rewind': finishThinkingBlock(sess); finishPendingTool(sess); handleRewind(sess, parseInt(chunk.text) || 1); break;
-            case 'reason': finishPendingTool(sess); appendReasonChunk(sess, chunk.text); break;
-            case 'text':   finishThinkingBlock(sess); finishPendingTool(sess); appendContentChunk(sess, chunk.text, true); break;
-            case 'action_end': finishThinkingBlock(sess); appendActionEndChunk(sess, chunk.toolName, chunk.text, chunk.args, chunk.toolTitle); if (window._todoChunkHandlers) window._todoChunkHandlers.forEach(function(h){h(chunk);}); break;
-            case 'action_start': finishThinkingBlock(sess); appendActionStartChunk(sess, chunk.toolName, chunk.args, chunk.toolTitle); break;
-            case 'agent':  finishThinkingBlock(sess); finishPendingTool(sess); appendContentChunk(sess, chunk.text, false); break;
+            case 'reason': finishPendingTool(sess); appendReasonChunk(sess, chunk.text, chunk.reasonId); break;
+            case 'text':   finishPendingTool(sess); appendContentChunk(sess, chunk.text, true, chunk.reasonId); break;
+            case 'action_end': appendActionEndChunk(sess, chunk.toolName, chunk.text, chunk.args, chunk.toolTitle, chunk.reasonId); if (window._todoChunkHandlers) window._todoChunkHandlers.forEach(function(h){h(chunk);}); break;
+            case 'action_start': appendActionStartChunk(sess, chunk.toolName, chunk.args, chunk.toolTitle, chunk.reasonId); break;
+            case 'agent':  finishPendingTool(sess); appendContentChunk(sess, chunk.text, false, chunk.reasonId); break;
             case 'error':  finishThinkingBlock(sess); appendErrorChunk(sess, chunk.text); break;
             case 'hitl':   finishThinkingBlock(sess); finishPendingTool(sess); appendHitlCard(sess, chunk.toolName, chunk.command); break;
             case 'trace':  finishThinkingBlock(sess); finishPendingTool(sess); appendTraceBadge(sess, chunk); break;
@@ -237,6 +237,13 @@ function finishStream(sess) {
 
     removeThinking(sess);
     purgeInlineThinking(sess);
+    // 关闭所有未完成的 reasonId 分组思考块，确保它们被正确收尾
+    // 避免 finishThinkingBlock(sess) 对已分组的思考块第二次包裹
+    for (var _rid in sess.reasonGroups) {
+        if (sess.reasonGroups[_rid].thinkingBlockEl) {
+            finishThinkingBlock(sess, _rid);
+        }
+    }
     finishThinkingBlock(sess);
     finishPendingTool(sess);
     sess.approvedToolCard = null;

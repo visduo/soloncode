@@ -167,7 +167,7 @@ public class WebStreamBuilder {
                     } else if (chunk instanceof ThoughtChunk) {
                         webChunk = onThoughtChunk(session, (ThoughtChunk) chunk);
                     } else if (chunk instanceof ActionChunk) {
-                        webChunk = onActionStartChunk((ActionChunk) chunk);
+                        webChunk = onActionChunk((ActionChunk) chunk);
                     } else if (chunk instanceof ObservationChunk) {
                         webChunk = onObservationChunk((ObservationChunk) chunk);
                     } else if (chunk instanceof ReActChunk) {
@@ -249,11 +249,14 @@ public class WebStreamBuilder {
      */
     private WebChunk onReasonChunk(ReasonChunk chunk) {
         if (!chunk.isToolCalls() && chunk.hasContent()) {
+            WebChunk wc;
             if (chunk.getMessage().isThinking()) {
-                return WebChunk.ofReason(chunk.getContent());
+                wc = WebChunk.ofReason(chunk.getContent());
             } else {
-                return WebChunk.ofText(chunk.getContent());
+                wc = WebChunk.ofText(chunk.getContent());
             }
+            wc.setReasonId(chunk.getReasonId());
+            return wc;
         }
 
         return WebChunk.EMPTY;
@@ -270,7 +273,7 @@ public class WebStreamBuilder {
      * @param chunk 工具调用开始的 chunk 数据
      * @return 映射后的 WebChunk（含工具名与参数），或 {@link WebChunk#EMPTY}（内部工具或无名称时）
      */
-    private WebChunk onActionStartChunk(ActionChunk chunk) {
+    private WebChunk onActionChunk(ActionChunk chunk) {
         if (Assert.isEmpty(chunk.getToolName())) {
             return WebChunk.EMPTY;
         }
@@ -303,7 +306,9 @@ public class WebStreamBuilder {
         // edit 开始阶段即重建 diff，让 loading 骨架卡也能预览改动
         fillEditDiff(args);
 
-        return WebChunk.ofActionStart(toolName, toolTitle, args);
+        WebChunk wc = WebChunk.ofActionStart(toolName, toolTitle, args);
+        wc.setReasonId(chunk.getReasonId());
+        return wc;
     }
 
 
@@ -371,6 +376,7 @@ public class WebStreamBuilder {
                 fillEditDiff(webChunk.getArgs());
             }
 
+            webChunk.setReasonId(chunk.getReasonId());
             return webChunk;
         }
 
