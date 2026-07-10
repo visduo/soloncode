@@ -331,7 +331,12 @@ public class WebStreamBuilder {
 
         // toolName 恒为裸名（供前端识别/查表）；toolTitle 为显示名（子代理时加 agentName 前缀）
         String toolName = chunk.getToolName();
-        String toolTitle = toolName;
+        String toolTitle;
+        if (engine.getName().equals(chunk.getAgentName())) {
+            toolTitle = toolName;
+        } else {
+            toolTitle = chunk.getAgentName() + "/" + toolName;
+        }
 
         Map<String, Object> args = chunk.getArgs() != null
                 ? new LinkedHashMap<>(chunk.getArgs())

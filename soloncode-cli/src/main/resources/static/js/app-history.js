@@ -400,6 +400,13 @@ function showCmdComplete(inputEl, completeEl, prefix) {
     cmdVisibleItems = [];
     var html = '';
 
+    // Add search bar for skills
+    if (filterType === 'skill') {
+        html += '<div class="cmd-complete-search">'
+            + '<input type="text" class="cmd-search-input" placeholder="搜索技能..." autocomplete="off" />'
+            + '</div>';
+    }
+
     for (var i = 0; i < commandList.length; i++) {
         var cmd = commandList[i];
         // Filter by type based on trigger
@@ -422,6 +429,50 @@ function showCmdComplete(inputEl, completeEl, prefix) {
     cmdTrigger = trigger;
     cmdActiveIndex = -1;
     $(completeEl).html(html).addClass('show');
+
+    // Bind search for skills
+    if (filterType === 'skill') {
+        var $searchInput = $(completeEl).find('.cmd-search-input');
+        if ($searchInput.length) {
+            $searchInput.on('input', function() {
+                var q = this.value.trim().toLowerCase();
+                var $items = $(completeEl).find('.cmd-complete-item');
+                var newVisible = [];
+                $items.each(function() {
+                    var $item = $(this);
+                    var name = $item.find('.cmd-name').text().toLowerCase().replace(/^\$/, '');
+                    if (!q || name.indexOf(q) >= 0) {
+                        $item.show();
+                        newVisible.push(cmdVisibleItems[parseInt($item.attr('data-index'))]);
+                    } else {
+                        $item.hide();
+                    }
+                });
+                cmdVisibleItems = newVisible;
+                $items.filter(':visible').each(function(i) {
+                    $(this).attr('data-index', i);
+                });
+                cmdActiveIndex = -1;
+                $items.removeClass('active');
+            });
+            $searchInput.on('mousedown', function(e) {
+                e.stopPropagation();
+            });
+            $searchInput.on('click', function(e) {
+                e.stopPropagation();
+            });
+            $searchInput.on('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    hideCmdComplete();
+                    inputEl.focus();
+                    e.stopPropagation();
+                    e.preventDefault();
+                    return;
+                }
+                e.stopPropagation();
+            });
+        }
+    }
 }
 
 function hideCmdComplete() {
