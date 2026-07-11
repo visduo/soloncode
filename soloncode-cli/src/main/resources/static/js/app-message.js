@@ -286,6 +286,72 @@ function ensureThinkingBlock(sess) {
     return sess.thinkingBlockEl;
 }
 
+/**
+ * 确保指定 reasonId 的 reason-group 容器存在（不含思考块）。
+ * 任何携带 reasonId 的数据（text/action_start/action_end）到达时，
+ * 如果对应的 reason-group 不存在，则自动创建裸容器。
+ * 已存在则直接返回，不重复创建。
+ */
+function ensureReasonGroup(sess, reasonId) {
+    if (!reasonId) return null;
+    if (sess.reasonGroups[reasonId] && sess.reasonGroups[reasonId].groupEl) {
+        return sess.reasonGroups[reasonId];
+    }
+    ensureAssistantBubble(sess);
+    var group = $('<div>').addClass('reason-group')[0];
+    if (sess.currentRunId) {
+        group.setAttribute('data-run-id', sess.currentRunId);
+    }
+    $(sess.currentBubbleEl).before(group);
+    sess.reasonGroups[reasonId] = {
+        groupEl: group,
+        thinkingBlockEl: null,
+        thinkingBodyMdEl: null,
+        thinkingBodyWrapEl: null,
+        thinkingBuffer: '',
+        groupContentEl: null,
+        groupBuffer: '',
+        reasonRafId: null
+    };
+    sess.thinkingGroupEl = group;
+    return sess.reasonGroups[reasonId];
+}
+
+/**
+ * 在已有的 reason-group 容器内创建思考块（reason-group-think）。
+ * 用于 appendReasonChunk 复用已关闭的 reasonId 场景：
+ * 不创建新的 reason-group，而是在原 group 内追加新的思考块。
+ */
+function ensureThinkingBlockInGroup(sess, groupEl) {
+    if (!sess.thinkingBlockEl) {
+        ensureAssistantBubble(sess);
+        var block = $('<div>').addClass('reason-group-think streaming expanded')[0];
+        if (sess.currentRunId) {
+            block.setAttribute('data-run-id', sess.currentRunId);
+        }
+        block.innerHTML = '<div class="reason-group-think-header">'
+            + '<span class="reason-group-think-label">思考</span>'
+            + '<span class="thinking-timer-wrap" style="margin-left:4px">'
+            + '<span class="thinking-current-timer">0s</span>'
+            + '</span>'
+            + '<i class="layui-icon layui-icon-right reason-group-think-toggle"></i>'
+            + '</div>'
+            + '<div class="reason-group-think-body"><div class="md-content"></div></div>';
+        $(groupEl).append(block);
+        $(block).find('.reason-group-think-header').on('click', function() {
+            $(block).toggleClass('expanded');
+        });
+        sess.thinkingBlockEl = block;
+        sess.thinkingGroupEl = groupEl;
+        sess.thinkingBodyMdEl = $(block).find('.reason-group-think-body .md-content')[0];
+        sess.thinkingBodyWrapEl = $(block).find('.reason-group-think-body')[0];
+        sess.thinkingBuffer = '';
+        var currentTimerSpan = $(block).find('.thinking-current-timer')[0];
+        startThinkingTimerDual(sess, 'thinkingBlockTimerId', 'thinkingBlockStartTime', currentTimerSpan, null);
+    }
+    return sess.thinkingBlockEl;
+}
+
 function setAssistantTime(sess, ts) {
     var row = sess.currentBubbleEl ? $(sess.currentBubbleEl).closest('.msg-row')[0] : null;
     if (!row) return;
@@ -433,23 +499,16 @@ function appendReasonChunk(sess, text, reasonId, agentName, taskId, taskDescript
         // 复用已有 reasonId 的思考块（同一轮次的新思考片段继续追加）
         var group = sess.reasonGroups[reasonId];
         if (!group.thinkingBlockEl) {
-            sess.thinkingGroupEl = null;
+            // 思考块已被 finishThinkingBlock 关闭，在原 reason-group 内创建新思考块
+            // BUG 9 修复：复用已有 groupEl，避免创建新 reason-group 导致旧 DOM 孤立
+            sess.thinkingGroupEl = group.groupEl;
             removeThinking(sess);
-            ensureThinkingBlock(sess);
-            var thinkBlockEl = sess.thinkingBlockEl;
-            // thinkBlock 已在 ensureThinkingBlock 中预创建在 reason-group 内
-            if (thinkBlockEl && thinkBlockEl.parentNode) {
-                var newGroup = thinkBlockEl.parentNode;
-                sess.thinkingGroupEl = newGroup;
-                sess.reasonGroups[reasonId] = {
-                    groupEl: newGroup,
-                    thinkingBlockEl: sess.thinkingBlockEl,
-                    thinkingBodyMdEl: sess.thinkingBodyMdEl,
-                    thinkingBodyWrapEl: sess.thinkingBodyWrapEl,
-                    thinkingBuffer: '',
-                    reasonRafId: null
-                };
-            }
+            ensureThinkingBlockInGroup(sess, group.groupEl);
+            group.thinkingBlockEl = sess.thinkingBlockEl;
+            group.thinkingBodyMdEl = sess.thinkingBodyMdEl;
+            group.thinkingBodyWrapEl = sess.thinkingBodyWrapEl;
+            group.thinkingBuffer = '';
+            group.reasonRafId = null;
         } else {
             sess.thinkingBlockEl = group.thinkingBlockEl;
             sess.thinkingBodyMdEl = group.thinkingBodyMdEl;
@@ -868,6 +927,10 @@ function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId, agent
         $(card).toggleClass('expanded');
     });
 
+    // BUG 2 修复：有 reasonId 但分组不存在时，自动创建 reason-group（不含思考块）
+    if (reasonId && (!sess.reasonGroups[reasonId] || !sess.reasonGroups[reasonId].groupEl)) {
+        ensureReasonGroup(sess, reasonId);
+    }
     // 根据 reasonId 查找分组，将工具卡片追加到正确的位置
     var groupEl = null;
     if (reasonId && sess.reasonGroups[reasonId]) {
@@ -903,6 +966,10 @@ function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId, agent
 }
 
 function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, agentName, taskId, taskDescription, callId) {
+    // BUG 3 修复：有 reasonId 但分组不存在时，自动创建 reason-group（不含思考块）
+    if (reasonId && (!sess.reasonGroups[reasonId] || !sess.reasonGroups[reasonId].groupEl)) {
+        ensureReasonGroup(sess, reasonId);
+    }
     // 根据 reasonId 查找分组容器
     function getGroupEl() {
         if (reasonId && sess.reasonGroups[reasonId]) {
@@ -926,7 +993,6 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
             }
         }
     }
-    var pending = (sess.pendingToolCards || {})[key];
 
     // 如果按 callId 查到且是主动创建的（started=true），直接复用
     // 如果按 callId 没查到但按 reasonId 有（无 callId 的旧流），fallback
@@ -983,35 +1049,9 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
 
     ensureAssistantBubble(sess);
 
-    // 参考 CliShell 简化打印方式，将 args 拼接为短字符串
-    function formatArgValue(v) {
-        if (v === null) return 'null';
-        if (v === undefined) return 'undefined';
-        if (typeof v === 'string') return v.replace(/\n/g, ' ');
-        if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-        if (Array.isArray(v)) return '[' + v.length + '项]';
-        if (typeof v === 'object') {
-            var keys = Object.keys(v);
-            if (keys.length === 0) return '{}';
-            if (keys.length > 3) return '{' + keys.slice(0, 2).join(',') + ',...}';
-            var inner = [];
-            keys.forEach(function(k) { inner.push(k + ':' + formatArgValue(v[k])); });
-            var s = '{' + inner.join(',') + '}';
-            return s.length > 30 ? '{' + keys.join(',') + '}' : s;
-        }
-        return String(v);
-    }
-    var argsHtml = '';
-    if (args && typeof args === 'object') {
-        var parts = [];
-        var skipArgs = { diff: 1, content: 1, todos: 1 };
-        Object.keys(args).forEach(function(k) {
-            if (skipArgs[k]) return; parts.push(k + '=' + formatArgValue(args[k]));
-        });
-        var argsStr = parts.join(' ');
-        if (argsStr.length > 80) argsStr = argsStr.substring(0, 77) + '...';
-        if (argsStr) argsHtml = '<span class="tool-args">' + escapeHtml(argsStr) + '</span>';
-    }
+    // BUG 14 修复：统一使用 formatToolArgsStr，删除重复的 formatArgValue 定义
+    var argsStr = formatToolArgsStr(args);
+    var argsHtml = argsStr ? '<span class="tool-args">' + escapeHtml(argsStr) + '</span>' : '';
 
     // 复用分支：若刚批准过 HITL，结果渲染进同一张审批卡片，避免出现两张卡
     if (sess.approvedToolCard) {
@@ -1063,6 +1103,8 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
         }
     }
 
+    // BUG 4 修复：补全 toolBody 变量声明
+    var toolBody = $(card).find('.tool-card-body')[0];
     // 工具结果渲染：委托注册表分发，未命中专用 renderer 则纯文本兜底
     if (!renderToolBody(toolBody, toolName, text, args)) {
         toolBody.textContent = text || '';
@@ -1086,10 +1128,13 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
         var taskGroup = ensureTaskGroup(sess, taskId, taskDescription, agentName);
         $(taskGroup).find('.task-group-body').append(card);
     }
-    // 新卡片存入多槽 map（按 callId 精确匹配）
-    var key = callId || reasonId || '__default';
+    // BUG 6+7 修复：统一 pending key 格式（含 seq 后缀），与 appendActionStartChunk 保持一致
+    if (!sess._toolCallSeq) sess._toolCallSeq = 0;
+    var seq = ++sess._toolCallSeq;
+    var key = (callId || reasonId || '__default') + ':' + seq;
     if (!sess.pendingToolCards) sess.pendingToolCards = {};
-    sess.pendingToolCards[key] = { card: card, started: false };
+    // BUG 11 修复：非复用分支创建的卡片也应标记 started=true
+    sess.pendingToolCards[key] = { card: card, started: true };
     if (callId) card.setAttribute('data-call-id', callId);
 
     sess.reasonBuffer = '';
@@ -1099,7 +1144,7 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
     if (sess.sessionId === activeSessionId) scrollToBottom();
 }
 
-function appendContentChunk(sess, text, append, reasonId, taskId) {
+function appendContentChunk(sess, text, append, reasonId, taskId, taskDescription) {
     // 没有 reasonId 的文本块属于最终回答，关闭思考块并清除分组引用
     if (!reasonId) {
         // ★ 先关闭所有未关闭的 reasonGroups，其 thinkingBlockEl 会被清空
@@ -1132,6 +1177,10 @@ function appendContentChunk(sess, text, append, reasonId, taskId) {
             }
         }
     }
+    // BUG 1 修复：有 reasonId 但分组不存在时，自动创建 reason-group（不含思考块）
+    if (reasonId && (!sess.reasonGroups[reasonId] || !sess.reasonGroups[reasonId].groupEl)) {
+        ensureReasonGroup(sess, reasonId);
+    }
     // 有 reasonId 且存在对应分组 → 文本渲染在分组内（思考块与工具卡片之间）
     if (reasonId && sess.reasonGroups[reasonId] && sess.reasonGroups[reasonId].groupEl) {
         var group = sess.reasonGroups[reasonId];
@@ -1157,6 +1206,12 @@ function appendContentChunk(sess, text, append, reasonId, taskId) {
                     }, 300);
                 }
             }
+        }
+        // ★ 如果文本 chunk 有 taskId，但 groupEl 当前不在 task-group 内，移入
+        //   确保子代理输出的文本也归入其 task-group
+        if (taskId && !$(groupEl).closest('.task-group').length) {
+            var taskGroup = ensureTaskGroup(sess, taskId, taskDescription, agentName);
+            $(taskGroup).find('.task-group-body').append(groupEl);
         }
         // 确保组内文本容器存在
         if (!group.groupContentEl) {

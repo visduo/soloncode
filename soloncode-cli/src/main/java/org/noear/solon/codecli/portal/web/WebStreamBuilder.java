@@ -565,6 +565,7 @@ public class WebStreamBuilder {
             if (isMultitask) {
                 // 仅在多任务并行且有内容时输出
                 WebChunk wc = WebChunk.ofText("\n" + resultContent);
+                wc.setReasonId(chunk.getReasonId());
 
                 // 子代理标记
                 if (taskAgentName != null) {
