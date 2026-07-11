@@ -29,6 +29,7 @@ function SessionState(sessionId) {
     this.eventSource = null;
     this.isStreaming = false;
     this.currentBubbleEl = null;
+    this.nextContentBlock = false;
     this.reasonBuffer = '';
     this.thinkingBlockEl = null;
     this.thinkingBodyMdEl = null;
@@ -126,6 +127,7 @@ function scrollToBottom(force) {
 
 function resetStreamState(sess) {
     sess.currentBubbleEl = null;
+    sess.nextContentBlock = false;
     sess.pendingToolStarted = false;
     sess.pendingToolCards = {};
     sess.reasonBuffer = '';
@@ -142,6 +144,9 @@ function resetStreamState(sess) {
         }
     }
     sess.reasonGroups = {};
+    sess.pendingReasonWhitespace = {};
+    sess.pendingGroupWhitespace = {};
+    sess.pendingThinkingWhitespace = '';
     if (sess.contentRafId) { cancelAnimationFrame(sess.contentRafId); sess.contentRafId = null; }
     if (sess.reasonRafId) { cancelAnimationFrame(sess.reasonRafId); sess.reasonRafId = null; }
 }

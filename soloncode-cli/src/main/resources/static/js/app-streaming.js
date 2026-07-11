@@ -307,7 +307,14 @@ function finishStream(sess) {
         $(doneRow).find('.msg-actions').show();
     }
 
-    // 清理空的 md-content 节点（无 data-md-raw 且无文本内容且无子元素）
+    // 清理未落到任何实际内容块的前置空白缓存：这些空白没有对应的服务端正文，
+    // 不应创建 DOM；已关联到正文的空白此前会原样拼回 buffer，绝不 trim。
+    sess.pendingReasonWhitespace = {};
+    sess.pendingGroupWhitespace = {};
+    sess.pendingThinkingWhitespace = '';
+
+    // 清理空的 md-content 节点（无 data-md-raw、无实际文本、无子元素）。
+    // trim 仅用于判断 DOM 是否可回收，不会回写或修改服务端流式内容。
     if (doneRow) {
         $(doneRow).find('.msg-bubble .md-content').each(function() {
             if (!this.getAttribute('data-md-raw') && (!this.innerText || !this.innerText.trim()) && !$(this).children().length) {
@@ -318,7 +325,7 @@ function finishStream(sess) {
         // 会把包含空 reason-group-think 的分组误判为非空而残留。
         $(doneRow).find('.reason-group > .reason-group-think').each(function() {
             var body = $(this).find('.reason-group-think-body')[0];
-            var hasContent = body && ((body.innerText && body.innerText.trim()) || $(body).children().length);
+            var hasContent = body && ((body.textContent && /\S/.test(body.textContent)) || $(body).children().length);
             if (!hasContent) {
                 $(this).remove();
             }

@@ -509,10 +509,28 @@ function clearThinkTags(text) {
 }
 
 function appendReasonChunk(sess, text, reasonId, agentName, taskId, taskDescription) {
-    // 推理流会单独发送 <think> / </think> 标签。必须在创建任何 DOM 前过滤，
-    // 否则纯标签或空白 chunk 会留下只有外壳的 reason-group。
+    // 纯 <think> 标签没有内容语义，可直接忽略；纯空白分片中的换行则是 Markdown
+    // 结构的一部分。分组尚未创建时先暂存，等首个可见分片到达后一起写入，
+    // 这样既不会丢换行，也不会因只有空白的流创建空 reason-group。
     var clean = clearThinkTags(text || '');
-    if (!clean.trim()) return;
+    if (!clean) return;
+    if (reasonId) {
+        sess.pendingReasonWhitespace = sess.pendingReasonWhitespace || {};
+        if (!sess.reasonGroups[reasonId] && !clean.trim()) {
+            sess.pendingReasonWhitespace[reasonId] = (sess.pendingReasonWhitespace[reasonId] || '') + clean;
+            return;
+        }
+        if (sess.pendingReasonWhitespace[reasonId]) {
+            clean = sess.pendingReasonWhitespace[reasonId] + clean;
+            delete sess.pendingReasonWhitespace[reasonId];
+        }
+    } else if (!sess.thinkingBlockEl && !clean.trim()) {
+        sess.pendingThinkingWhitespace = (sess.pendingThinkingWhitespace || '') + clean;
+        return;
+    } else if (sess.pendingThinkingWhitespace) {
+        clean = sess.pendingThinkingWhitespace + clean;
+        sess.pendingThinkingWhitespace = '';
+    }
 
     if (reasonId && sess.reasonGroups[reasonId]) {
         // 复用已有 reasonId 的思考块（同一轮次的新思考片段继续追加）
@@ -1055,9 +1073,7 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
 
         if (window._todoChunkHandlers) { /* todo 由 streaming 层单独处理，这里不重复 */ }
         sess.reasonBuffer = '';
-        var pcMd = $('<div>').addClass('md-content')[0];
-        insertBeforeActions(sess, pcMd);
-        sess.currentBubbleEl = pcMd;
+        sess.nextContentBlock = true;
         if (sess.sessionId === activeSessionId) scrollToBottom();
         return;
     }
@@ -1093,9 +1109,7 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
         else $(rc).removeClass('expanded');
         sess.pendingToolCard = rc;
         sess.reasonBuffer = '';
-        var rcMd = $('<div>').addClass('md-content')[0];
-        insertBeforeActions(sess, rcMd);
-        sess.currentBubbleEl = rcMd;
+        sess.nextContentBlock = true;
         if (sess.sessionId === activeSessionId) scrollToBottom();
         return;
     }
@@ -1158,9 +1172,7 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
     if (callId) card.setAttribute('data-call-id', callId);
 
     sess.reasonBuffer = '';
-    var newMd = $('<div>').addClass('md-content')[0];
-    insertBeforeActions(sess, newMd);
-    sess.currentBubbleEl = newMd;
+    sess.nextContentBlock = true;
     if (sess.sessionId === activeSessionId) scrollToBottom();
 }
 
@@ -1197,11 +1209,22 @@ function appendContentChunk(sess, text, append, reasonId, agentName, taskId, tas
             }
         }
     }
-    // 仅包含 <think> 标签或空字符串的带 reasonId chunk 不创建分组，
-    // 避免流式过程中出现空的 reason-group。
+    // 纯 <think> 标签没有内容语义；纯空白分片中的换行属于 Markdown 结构。
+    // 对尚未创建的分组先暂存空白，首个可见分片到达后再原样拼接，避免
+    // 丢失段落/标题边界，同时不会为始终只有空白的流创建 reason-group。
     var clean = clearThinkTags(text || '');
-    if (reasonId && (!clean || !clean.trim())) {
-        return;
+    if (!clean) return;
+    if (reasonId) {
+        sess.pendingGroupWhitespace = sess.pendingGroupWhitespace || {};
+        var hasReasonGroup = sess.reasonGroups[reasonId] && sess.reasonGroups[reasonId].groupEl;
+        if (!hasReasonGroup && !clean.trim()) {
+            sess.pendingGroupWhitespace[reasonId] = (sess.pendingGroupWhitespace[reasonId] || '') + clean;
+            return;
+        }
+        if (sess.pendingGroupWhitespace[reasonId]) {
+            clean = sess.pendingGroupWhitespace[reasonId] + clean;
+            delete sess.pendingGroupWhitespace[reasonId];
+        }
     }
     // BUG 1 修复：有 reasonId 但分组不存在时，自动创建 reason-group（不含思考块）
     if (reasonId && (!sess.reasonGroups[reasonId] || !sess.reasonGroups[reasonId].groupEl)) {
@@ -1266,7 +1289,15 @@ function appendContentChunk(sess, text, append, reasonId, agentName, taskId, tas
         return;
     }
 
-    // 无 reasonId 或没有对应分组 → 正常渲染到主气泡
+    // 无 reasonId 或没有对应分组 → 正常渲染到主气泡。
+    // 工具结果后不预创建空的 md-content；收到下一条实际分片时再建立内容块。
+    if (sess.nextContentBlock) {
+        var nextContentEl = $('<div>').addClass('md-content')[0];
+        insertBeforeActions(sess, nextContentEl);
+        sess.currentBubbleEl = nextContentEl;
+        sess.reasonBuffer = '';
+        sess.nextContentBlock = false;
+    }
     sess.reasonBuffer = append ? sess.reasonBuffer + clean : clean;
     if (!sess.contentRafId) {
         sess.contentRafId = requestAnimationFrame(function() {
@@ -1294,8 +1325,10 @@ function appendErrorChunk(sess, text) {
 /* ===== Trace Badge ===== */
 function appendTraceBadge(sess, chunk) {
     ensureAssistantBubble(sess);
-    // 后端携带的最终答案为权威复制源，写到当前 .md-content 的 data-md-raw（与历史消息统一属性名），供复制按钮读取。
-    if (chunk.finalAnswer != null && sess.currentBubbleEl) {
+    // 后端携带的最终答案为权威复制源，写到实际承载正文的 .md-content。
+    // 工具结束后若尚未收到正文，nextContentBlock 表示当前节点仍是工具前的内容，
+    // 此时不能把最终答案错误挂到旧节点，更不能为 trace 预建空节点。
+    if (chunk.finalAnswer != null && sess.currentBubbleEl && !sess.nextContentBlock) {
         sess.currentBubbleEl.setAttribute('data-md-raw', chunk.finalAnswer);
     }
     function fmtK(n) {
