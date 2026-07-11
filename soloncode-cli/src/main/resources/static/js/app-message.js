@@ -525,19 +525,17 @@ function appendReasonChunk(sess, text, reasonId, agentName, taskId, taskDescript
 
         // ★ 如果存在 task-group，将最终答案的思考块移到最后
         //   避免最终答案的思考块出现在 task-group 上方
-        if (sess.currentBubbleEl) {
+        if (sess.currentBubbleEl && sess.thinkingGroupEl) {
             var $taskGroups = $(sess.currentBubbleEl.parentNode).find('.task-group');
             if ($taskGroups.length > 0) {
-                $($taskGroups.last()).after(sess.thinkingBlockEl);
+                $($taskGroups.last()).after(sess.thinkingGroupEl);
             }
         }
 
         // 如果有 reasonId，thinkBlock 已在 ensureThinkingBlock 中预创建在 reason-group 内
         if (reasonId) {
-            var thinkBlockEl = sess.thinkingBlockEl;
-            if (thinkBlockEl && thinkBlockEl.parentNode) {
-                var group = thinkBlockEl.parentNode;
-                sess.thinkingGroupEl = group;
+            var group = sess.thinkingGroupEl;
+            if (group) {
                 sess.reasonGroups[reasonId] = {
                     groupEl: group,
                     thinkingBlockEl: sess.thinkingBlockEl,
@@ -939,7 +937,7 @@ function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId, agent
         groupEl = sess.thinkingGroupEl;
     }
 
-    if (groupEl) {
+    if (groupEl && $(groupEl).hasClass('reason-group')) {
         $(groupEl).append(card);
     } else {
         insertBeforeActions(sess, card);
@@ -1117,7 +1115,7 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
 
     // 根据 reasonId 查找分组，将工具卡片追加到正确的位置
     var groupEl = getGroupEl();
-    if (groupEl) {
+    if (groupEl && $(groupEl).hasClass('reason-group')) {
         $(groupEl).append(card);
     } else {
         insertBeforeActions(sess, card);
@@ -1188,7 +1186,7 @@ function appendContentChunk(sess, text, append, reasonId, taskId, taskDescriptio
 
         // ★ 如果文本 chunk 没有 taskId，但 groupEl 当前在 task-group 内，移出
         //   避免无 taskId 的文本被误包入子代理分组
-        if (!taskId) {
+        if (!taskId && $(groupEl).hasClass('reason-group')) {
             var $taskGroup = $(groupEl).closest('.task-group');
             if ($taskGroup.length > 0) {
                 $taskGroup.before(groupEl);
@@ -1209,7 +1207,7 @@ function appendContentChunk(sess, text, append, reasonId, taskId, taskDescriptio
         }
         // ★ 如果文本 chunk 有 taskId，但 groupEl 当前不在 task-group 内，移入
         //   确保子代理输出的文本也归入其 task-group
-        if (taskId && !$(groupEl).closest('.task-group').length) {
+        if (taskId && !$(groupEl).closest('.task-group').length && $(groupEl).hasClass('reason-group')) {
             var taskGroup = ensureTaskGroup(sess, taskId, taskDescription, agentName);
             $(taskGroup).find('.task-group-body').append(groupEl);
         }
