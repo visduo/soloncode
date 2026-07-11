@@ -418,7 +418,7 @@ body { font-family: var(--font-sans); background: var(--bg-body); color: var(--t
 .reason-group-think-label { color: var(--text-secondary); font-weight: 500; }
 .reason-group-think-toggle { margin-left: auto; color: var(--text-secondary); font-size: 12px; transition: transform 0.25s; }
 .reason-group-think.expanded .reason-group-think-toggle { transform: rotate(90deg); }
-.reason-group-think-body { padding: 10px 14px; font-size: 13px; color: var(--text-secondary); line-height: 1.7; border-top: 1px solid var(--reason-group-think-border); max-height: 300px; overflow-y: auto; }
+.reason-group-think-body { padding: 8px 14px; font-size: 13px; color: var(--text-secondary); line-height: 1.7; border-top: 1px solid var(--reason-group-think-border); max-height: 300px; overflow-y: auto; }
 .reason-group-think-body .md-content { color: var(--text-secondary); font-size: 13px; }
 .reason-group-think:not(.expanded) .reason-group-think-body { display: none; }
 .reason-group-think.streaming { border-color: var(--accent); }
