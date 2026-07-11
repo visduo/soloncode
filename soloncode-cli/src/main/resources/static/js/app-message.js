@@ -953,8 +953,44 @@ function formatToolArgsStr(args) {
     return argsStr;
 }
 
+/* 为工具调用注册 pending 卡片：有 callId 时必须以 callId 作为唯一键；
+ * 旧流缺少 callId 时才使用带序号的兼容键。 */
+function registerPendingToolCard(sess, card, callId, reasonId) {
+    if (!sess.pendingToolCards) sess.pendingToolCards = {};
+    var key;
+    if (callId) {
+        key = callId;
+    } else {
+        if (!sess._toolCallSeq) sess._toolCallSeq = 0;
+        key = '__legacy__:' + (reasonId || '__default') + ':' + (++sess._toolCallSeq);
+    }
+    sess.pendingToolCards[key] = { card: card, started: true };
+    return key;
+}
+
+/* 按 callId 精确查找 pending 卡片。缺少 callId 的旧流只能按同一 reasonId 的到达顺序兜底。 */
+function findPendingToolCard(sess, callId, reasonId) {
+    var cards = sess.pendingToolCards || {};
+    var key = null;
+    var pending = null;
+    if (callId) {
+        key = callId;
+        pending = cards[key];
+    } else {
+        var legacyPrefix = '__legacy__:' + (reasonId || '__default') + ':';
+        for (var candidateKey in cards) {
+            if (candidateKey.indexOf(legacyPrefix) === 0) {
+                key = candidateKey;
+                pending = cards[candidateKey];
+                break;
+            }
+        }
+    }
+    return { key: key, pending: pending };
+}
+
 /* action_start：工具调用前（来源引擎 ActionChunk）提前渲染 loading 卡片骨架。
-   存为 sess.pendingToolCard，待 action（ObservationChunk 结果）到达时由
+   存为 pendingToolCards，待 action_end（ObservationChunk 结果）到达时由
    appendActionEndChunk 复用此卡片填充结果体并转完成态。 */
 function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId, agentName, taskId, taskDescription, callId) {
     // 如果提供了 reasonId，先结束该推理轮次的思考块（如果有的话）
@@ -1020,13 +1056,8 @@ function appendActionStartChunk(sess, toolName, args, toolTitle, reasonId, agent
         $(taskGroup).find('.task-group-body').append(card);
     }
 
-    // 多槽 map：按 callId 存储 pending 卡片，确保同一 reasonId 下多个同名工具调用互不串扰
-    // 计数器保证同一 reasonId 下多个工具调用 key 唯一，防止后一个覆盖前一个
-    if (!sess._toolCallSeq) sess._toolCallSeq = 0;
-    var seq = ++sess._toolCallSeq;
-    var key = (callId || reasonId || '__default') + ':' + seq;
-    if (!sess.pendingToolCards) sess.pendingToolCards = {};
-    sess.pendingToolCards[key] = { card: card, started: true };
+    // 有 callId 时以其作为唯一键精确关联 action_end；缺失时仅保留旧流兼容键。
+    registerPendingToolCard(sess, card, callId, reasonId);
 
     // 同时存储 callId 到卡片元素，方便 debug
     if (callId) card.setAttribute('data-call-id', callId);
@@ -1047,25 +1078,11 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
         return sess.thinkingGroupEl;
     }
 
-    // 多槽 map：优先按 callId 查找 pending 卡片（精确匹配），fallback 到 reasonId（兼容旧流）
-    // 注意: key 拼接方式必须与 appendActionStartChunk 保持一致（包含 seq 后缀）
-    var key = callId || reasonId || '__default';
-    // 尝试精确匹配（含 seq 后缀），匹配不到则 fallback 到原始 key
-    var pending = (sess.pendingToolCards || {})[key];
-    if (!pending) {
-        // 尝试遍历匹配：找第一个以 key: 开头的 pending 卡片
-        for (var _k in sess.pendingToolCards || {}) {
-            if (_k === key || _k.startsWith(key + ':')) {
-                pending = sess.pendingToolCards[_k];
-                key = _k;
-                break;
-            }
-        }
-    }
-
-    // 如果按 callId 查到且是主动创建的（started=true），直接复用
-    // 如果按 callId 没查到但按 reasonId 有（无 callId 的旧流），fallback
-
+    // 有 callId 时只允许精确关联同一次 action_start，绝不能退化为 reasonId 或工具名匹配。
+    // 无 callId 的旧流才按同一 reasonId 的先入先出顺序做有限兼容。
+    var pendingMatch = findPendingToolCard(sess, callId, reasonId);
+    var key = pendingMatch.key;
+    var pending = pendingMatch.pending;
     // 复用分支：若该工具卡由 action_start 提前创建（loading 中），直接填充结果体并转完成态，避免重复建卡
     if (pending && pending.started) {
         var pc = pending.card;
@@ -1152,7 +1169,7 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
     }
     if (window.cliPrintSimplified === false) $(card).addClass('expanded');
     card.innerHTML = '<div class="tool-card-header">'
-        + '<span class="tool-status-icon loading"></span>'
+        + '<span class="tool-status-icon done"><i class="layui-icon layui-icon-ok" style="font-size:12px"></i></span>'
         + '<span class="tool-name">' + escapeHtml(toolTitle || toolName || 'tool') + '</span>'
         + argsHtml
         + '<i class="layui-icon layui-icon-right tool-toggle"></i>'
@@ -1193,13 +1210,8 @@ function appendActionEndChunk(sess, toolName, text, args, toolTitle, reasonId, a
         var taskGroup = ensureTaskGroup(sess, taskId, taskDescription, agentName);
         $(taskGroup).find('.task-group-body').append(card);
     }
-    // BUG 6+7 修复：统一 pending key 格式（含 seq 后缀），与 appendActionStartChunk 保持一致
-    if (!sess._toolCallSeq) sess._toolCallSeq = 0;
-    var seq = ++sess._toolCallSeq;
-    var key = (callId || reasonId || '__default') + ':' + seq;
-    if (!sess.pendingToolCards) sess.pendingToolCards = {};
-    // BUG 11 修复：非复用分支创建的卡片也应标记 started=true
-    sess.pendingToolCards[key] = { card: card, started: true };
+    // 未收到对应 action_start 的 action_end 已是终态，不应再登记为 pending，
+    // 否则后续同名工具调用可能错误改变这张历史卡片的状态。
     if (callId) card.setAttribute('data-call-id', callId);
 
     sess.reasonBuffer = '';

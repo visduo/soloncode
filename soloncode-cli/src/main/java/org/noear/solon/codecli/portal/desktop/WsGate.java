@@ -390,7 +390,9 @@ public class WsGate extends SimpleWebSocketListener {
         }
 
         ONode node = new ONode().set("type", "action_start")
-                .set("sessionId", finalSessionId);
+                .set("sessionId", finalSessionId)
+                .set("reasonId", chunk.getReasonId())
+                .set("callId", chunk.getCallId());
 
         if (engine.getName().equals(chunk.getAgentName())) {
             node.set("toolName", chunk.getToolName());
@@ -420,7 +422,9 @@ public class WsGate extends SimpleWebSocketListener {
         }
 
         ONode node = new ONode().set("type", "action_end")
-                .set("sessionId", finalSessionId);
+                .set("sessionId", finalSessionId)
+                .set("reasonId", chunk.getReasonId())
+                .set("callId", chunk.getCallId());
 
         if (engine.getName().equals(chunk.getAgentName())) {
             node.set("toolName", chunk.getToolName());
