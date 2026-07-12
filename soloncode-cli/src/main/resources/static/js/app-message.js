@@ -255,13 +255,15 @@ function streamReasonKey(segment, reasonId) {
 function buildTaskGroupAriaLabel(segment, expanded) {
     var title = segment.taskDescription || segment.agentName || '\u5b50\u4efb\u52a1';
     var stateLabel = expanded ? '\u5df2\u5c55\u5f00' : '\u5df2\u6536\u8d77';
+    var meta = formatTaskGroupMeta(segment);
+    var detail = meta ? meta + '\uff0c' : '';
     if (segment.status === 'error') {
-        return title + ' \u5931\u8d25\uff0c' + stateLabel + (expanded ? '' : '\uff0c\u70b9\u51fb\u5c55\u5f00\u67e5\u770b');
+        return title + ' \u5931\u8d25\uff0c' + detail + stateLabel + (expanded ? '' : '\uff0c\u70b9\u51fb\u5c55\u5f00\u67e5\u770b');
     }
     if (segment.status === 'done') {
-        return title + ' \u5df2\u5b8c\u6210\uff0c' + stateLabel;
+        return title + ' \u5df2\u5b8c\u6210\uff0c' + detail + stateLabel;
     }
-    return title + ' \u8fd0\u884c\u4e2d\uff0c' + stateLabel + (expanded ? '' : '\uff0c\u70b9\u51fb\u5c55\u5f00\u67e5\u770b');
+    return title + ' \u8fd0\u884c\u4e2d\uff0c' + detail + stateLabel + (expanded ? '' : '\uff0c\u70b9\u51fb\u5c55\u5f00\u67e5\u770b');
 }
 
 /** 与 tool-card 同系的 22px 状态圆点：running 转圈 / done 绿勾 / error 红叉 */
@@ -282,24 +284,40 @@ function updateTaskGroupStatusIcon(segment) {
     }
 }
 
+/** 当前 task 总耗时：createdAt → finishedAt（运行中则到 now） */
+function formatTaskGroupElapsed(segment) {
+    if (!segment || !segment.createdAt) return '';
+    var endAt = segment.finishedAt || Date.now();
+    var secs = Math.max(0, Math.floor((endAt - segment.createdAt) / 1000));
+    return secs + 's';
+}
+
+/**
+ * L2 目标形态（单行 ellipsis）：
+ *   运行中 · 12s · 3 tools · 读 app-message.js
+ *   已完成 · 45s · 8 tools
+ *   失败了 · 12s · 5 tools · 写 foo.java
+ */
 function formatTaskGroupMeta(segment) {
     if (!segment) return '';
     var parts = [];
-    if (segment.status === 'error') {
-        parts.push('\u5931\u8d25');
-        if (segment.errorCount > 0) parts.push(segment.errorCount + ' err');
-    } else if (segment.status === 'done') {
+    var elapsed = formatTaskGroupElapsed(segment);
+    var status = segment.status || 'running';
+    if (status === 'error') {
+        parts.push('\u5931\u8d25\u4e86');
+        if (elapsed) parts.push(elapsed);
+        if (segment.toolCount > 0) parts.push(segment.toolCount + ' tools');
+        if (segment.lastActionLabel) parts.push(segment.lastActionLabel);
+    } else if (status === 'done') {
         parts.push('\u5df2\u5b8c\u6210');
-        if (segment.createdAt) {
-            var endAt = segment.finishedAt || Date.now();
-            var secs = Math.max(0, Math.floor((endAt - segment.createdAt) / 1000));
-            parts.push(secs + 's');
-        }
+        if (elapsed) parts.push(elapsed);
+        if (segment.toolCount > 0) parts.push(segment.toolCount + ' tools');
     } else {
         parts.push('\u8fd0\u884c\u4e2d');
+        if (elapsed) parts.push(elapsed);
+        if (segment.toolCount > 0) parts.push(segment.toolCount + ' tools');
+        if (segment.lastActionLabel) parts.push(segment.lastActionLabel);
     }
-    if (segment.toolCount > 0) parts.push(segment.toolCount + ' tools');
-    // lastActionLabel 易变长，不进主文案，改由 updateTaskGroupMeta 挂 tooltip
     return parts.join(' \u00b7 ');
 }
 
@@ -310,9 +328,9 @@ function updateTaskGroupMeta(segment) {
     var text = formatTaskGroupMeta(segment);
     $(metaEl).text(text);
     metaEl.style.display = text ? '' : 'none';
-    // 最近动作仅作 tooltip，避免 L2 被 path/参数扯长
-    if (segment.lastActionLabel) {
-        metaEl.setAttribute('title', segment.lastActionLabel);
+    // 主文案可被 ellipsis 截断；title 挂完整 L2，方便 hover 看全
+    if (text) {
+        metaEl.setAttribute('title', text);
     } else {
         metaEl.removeAttribute('title');
     }
@@ -331,6 +349,40 @@ function scheduleTaskGroupMetaUpdate(segment) {
     });
 }
 
+/** 共享 1s 计时：只刷新仍在 running 的 task-group L2 总耗时 */
+function ensureTaskGroupElapsedTimer(sess) {
+    if (!sess || sess._taskGroupElapsedTimerId) return;
+    sess._taskGroupElapsedTimerId = setInterval(function() {
+        tickTaskGroupElapsed(sess);
+    }, 1000);
+}
+
+function tickTaskGroupElapsed(sess) {
+    if (!sess || !sess.taskSegments) {
+        stopTaskGroupElapsedTimer(sess);
+        return;
+    }
+    var hasRunning = false;
+    for (var taskId in sess.taskSegments) {
+        if (!Object.prototype.hasOwnProperty.call(sess.taskSegments, taskId)) continue;
+        var segment = sess.taskSegments[taskId];
+        if (!segment || !segment.groupEl) continue;
+        if (segment.status === 'done' || segment.status === 'error') continue;
+        hasRunning = true;
+        // 计时 tick 直接写 DOM，不走 rAF，避免秒数显示滞后
+        updateTaskGroupMeta(segment);
+    }
+    if (!hasRunning) stopTaskGroupElapsedTimer(sess);
+}
+
+function stopTaskGroupElapsedTimer(sess) {
+    if (!sess) return;
+    if (sess._taskGroupElapsedTimerId) {
+        clearInterval(sess._taskGroupElapsedTimerId);
+        sess._taskGroupElapsedTimerId = null;
+    }
+}
+
 function setTaskGroupStatus(segment, status) {
     if (!segment || !segment.groupEl || !status) return;
     // error 优先；done 不覆盖 error
@@ -342,6 +394,7 @@ function setTaskGroupStatus(segment, status) {
     segment.status = status;
     segment.updatedAt = Date.now();
     if (status === 'done' || status === 'error') {
+        // 定格当前 task 总耗时（createdAt → finishedAt）
         segment.finishedAt = segment.finishedAt || Date.now();
     }
     $(segment.groupEl).removeClass('is-running is-done is-error');
@@ -399,6 +452,8 @@ function finalizeTaskGroups(sess) {
             scheduleTaskGroupMetaUpdate(segment);
         }
     }
+    // 流结束：停止 running 总耗时刷新
+    stopTaskGroupElapsedTimer(sess);
 }
 
 function createTaskGroupElement(sess, segment) {
@@ -421,8 +476,8 @@ function createTaskGroupElement(sess, segment) {
     header.setAttribute('aria-controls', bodyId);
     header.setAttribute('aria-label', buildTaskGroupAriaLabel(segment, false));
     var metaText = formatTaskGroupMeta(segment);
-    var metaTitleAttr = segment.lastActionLabel
-        ? ' title="' + escapeHtmlAttr(segment.lastActionLabel) + '"'
+    var metaTitleAttr = metaText
+        ? ' title="' + escapeHtmlAttr(metaText) + '"'
         : '';
     // L1 与 tool-card 对齐：左侧 22px 状态圆点；L2 仅 meta
     header.innerHTML =
@@ -517,6 +572,8 @@ function ensureStreamSegment(sess, taskId, taskDescription, agentName) {
         insertBeforeActions(sess, task.groupEl);
         sess.streamSegments.push(taskSegment);
         sess.currentStreamSegment = taskSegment;
+        // 启动共享 1s 计时，L2 展示该 task 自 createdAt 起的总耗时
+        ensureTaskGroupElapsedTimer(sess);
         return taskSegment;
     }
 
@@ -692,6 +749,7 @@ function markTaskGroupUpdated(sess, segment) {
     segment.updatedAt = Date.now();
     if (segment.status !== 'error' && segment.status !== 'done') {
         setTaskGroupStatus(segment, 'running');
+        ensureTaskGroupElapsedTimer(sess);
     } else {
         scheduleTaskGroupMetaUpdate(segment);
     }

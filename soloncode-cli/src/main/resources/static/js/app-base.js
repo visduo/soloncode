@@ -131,6 +131,7 @@ function scrollToBottom(force) {
 }
 
 function resetStreamState(sess) {
+    if (typeof stopTaskGroupElapsedTimer === 'function') stopTaskGroupElapsedTimer(sess);
     sess.currentBubbleEl = null;
     sess.nextContentBlock = false;
     sess.pendingToolStarted = false;
