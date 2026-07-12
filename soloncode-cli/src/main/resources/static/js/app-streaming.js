@@ -211,12 +211,14 @@ function onWebChunk(sess, chunk) {
             case 'action_start': appendActionStartChunk(sess, segment, chunk.toolName, chunk.args, chunk.toolTitle, chunk.reasonId, chunk.agentName, chunk.callId); break;
             case 'agent': appendContentChunk(sess, segment, chunk.text, false, chunk.reasonId); break;
             case 'error': finishThinkingBlock(sess); appendErrorChunk(sess, chunk.text, chunk.taskId, chunk.taskDescription, chunk.agentName); break;
+            case 'task_done': if (typeof applyTaskDoneChunk === 'function') applyTaskDoneChunk(sess, chunk); break;
             case 'hitl': finishThinkingBlock(sess); finishPendingTool(sess); appendHitlCard(sess, chunk.toolName, chunk.command); break;
             case 'trace': finishThinkingBlock(sess); finishPendingTool(sess); appendTraceBadge(sess, chunk); break;
             case 'context_size': if (typeof updateContextIndicator === 'function' && sess.sessionId === activeSessionId) updateContextIndicator(chunk); break;
         }
         // task-group 展开状态尊重用户操作；有输出时刷新状态图标与 meta。
-        if (segment && segment.taskId) markTaskGroupUpdated(sess, segment);
+        // task_done 已自行结算状态，不再 mark 回 running。
+        if (segment && segment.taskId && chunk.type !== 'task_done') markTaskGroupUpdated(sess, segment);
         sess.silenceTimer = setTimeout(function() {
             if (sess.isStreaming && !sess.thinkingBlockEl) showInlineThinking(sess);
         }, 1000);

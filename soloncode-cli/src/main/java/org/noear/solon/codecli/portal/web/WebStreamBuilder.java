@@ -217,7 +217,8 @@ public class WebStreamBuilder {
                         if (twc.getRealChunk() instanceof ContextSizeChunk ||
                                 twc.getRealChunk() instanceof ActionChunk ||
                                 twc.getRealChunk() instanceof ObservationChunk ||
-                                twc.getRealChunk() instanceof ReasonChunk) {
+                                twc.getRealChunk() instanceof ReasonChunk ||
+                                twc.getRealChunk() instanceof ReActChunk) {
                             // RunStartChunk
                             runId = twc.getParentRunId();
                             taskId = twc.getTaskId();
@@ -225,6 +226,14 @@ public class WebStreamBuilder {
                             taskDescription = twc.getTaskDescription();
                             isMultitask = twc.isMultitask();
                             chunk = twc.getRealChunk();
+
+                            if (chunk instanceof ReActChunk) {
+                                // 子代理 ReAct 结束：发 task_done，让前端立刻结算该 task-group
+                                // （主流转 done 仍会 finalize 兜底，但并行任务不必互相等待）
+                                return onTaskDoneChunk((ReActChunk) chunk, runId, taskId,
+                                        taskAgentName, taskDescription);
+                            }
+
                         } else {
                             return WebChunk.EMPTY;
                         }
@@ -627,6 +636,63 @@ public class WebStreamBuilder {
         }
 
         return WebChunk.EMPTY;
+    }
+
+    /**
+     * 处理子代理任务结束（TaskWrapChuck 内层为 ReActChunk）。
+     *
+     * <p>产出 {@code task_done} WebChunk，携带 taskId 与 status（done/error）。
+     * 前端据此将对应 task-group 立即标为绿勾/红叉，不必等主会话整流转 done。
+     * 异常时附带错误文本，供 task-group 内展示。</p>
+     *
+     * @param chunk           子代理最终 ReActChunk
+     * @param runId           父 runId（主会话 run）
+     * @param taskId          子任务 id
+     * @param taskAgentName   子代理名
+     * @param taskDescription 子任务描述（task-group 标题）
+     * @return task_done 类型 WebChunk
+     */
+    private WebChunk onTaskDoneChunk(ReActChunk chunk, String runId, String taskId,
+                                     String taskAgentName, String taskDescription) {
+        boolean abnormal = chunk.isAbnormal();
+        WebChunk wc = WebChunk.ofTaskDone(abnormal ? "error" : "done");
+
+        if (runId != null) {
+            wc.setRunId(runId);
+        } else if (chunk.getRunId() != null) {
+            wc.setRunId(chunk.getRunId());
+        }
+        if (taskId != null) {
+            wc.setTaskId(taskId);
+            wc.setTaskDescription(taskDescription);
+        }
+        if (taskAgentName != null) {
+            wc.setAgentName(taskAgentName);
+        }
+
+        // 异常时把内容带给前端，写入 task-group 错误区；正常完成不重复推最终正文
+        // （multitask 的结果文本已由 ThoughtChunk 路径输出）
+        if (abnormal) {
+            String errText = chunk.getContent();
+            if (Assert.isNotEmpty(errText)) {
+                errText = errText.replaceAll("(?s)<\\s*/?think\\s*>", "");
+                wc.setText(errText);
+            }
+        }
+
+        // 附带耗时，便于前端定格 task 总耗时（秒）
+        try {
+            ReActTrace trace = chunk.getTrace();
+            if (trace != null) {
+                long startMs = trace.getBeginTimeMs();
+                if (startMs > 0) {
+                    wc.setElapsedSeconds(Duration.ofMillis(System.currentTimeMillis() - startMs).getSeconds());
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+
+        return wc;
     }
 
     /**

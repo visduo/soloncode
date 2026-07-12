@@ -422,7 +422,8 @@ function recordTaskGroupToolStart(segment, toolName, toolTitle, args) {
     var argsStr = formatToolArgsStr(args);
     segment.lastActionLabel = argsStr ? (name + ' ' + argsStr) : name;
     segment.updatedAt = Date.now();
-    if (segment.status !== 'error') setTaskGroupStatus(segment, 'running');
+    // 已 task_done 的终态不因迟到 action_start 打回 running
+    if (segment.status !== 'error' && segment.status !== 'done') setTaskGroupStatus(segment, 'running');
     else scheduleTaskGroupMetaUpdate(segment);
 }
 
@@ -437,7 +438,8 @@ function recordTaskGroupReason(segment) {
     if (!segment || !segment.taskId) return;
     segment.reasonCount = (segment.reasonCount || 0) + 1;
     segment.updatedAt = Date.now();
-    if (segment.status !== 'error') setTaskGroupStatus(segment, 'running');
+    // 已 task_done 的终态不因迟到 reason 打回 running
+    if (segment.status !== 'error' && segment.status !== 'done') setTaskGroupStatus(segment, 'running');
     else scheduleTaskGroupMetaUpdate(segment);
 }
 
@@ -448,6 +450,7 @@ function finalizeTaskGroups(sess) {
         var segment = sess.taskSegments[taskId];
         if (!segment || !segment.groupEl) continue;
         // 非 error → done（绿勾）；error 保留红叉与 is-error 左边框
+        // 已由 task_done 提前结算的 segment 会走 status 短路，只刷新 meta
         if (segment.status !== 'error') setTaskGroupStatus(segment, 'done');
         else {
             segment.finishedAt = segment.finishedAt || Date.now();
@@ -457,6 +460,51 @@ function finalizeTaskGroups(sess) {
     }
     // 流结束：停止 running 总耗时刷新
     stopTaskGroupElapsedTimer(sess);
+}
+
+/**
+ * 处理后端 task_done WebChunk：子代理任务结束时立即结算对应 task-group。
+ * status=error → 红叉（可附带错误文本）；其它 → 绿勾。
+ * 不依赖主流 done；主流 finalizeTaskGroups 仍作兜底。
+ */
+function applyTaskDoneChunk(sess, chunk) {
+    if (!sess || !chunk || !chunk.taskId) return;
+    var segment = ensureStreamSegment(sess, chunk.taskId, chunk.taskDescription, chunk.agentName);
+    if (!segment || !segment.taskId) return;
+
+    var status = (chunk.status === 'error') ? 'error' : 'done';
+
+    // 后端 elapsedSeconds 可用于定格耗时（createdAt 缺失时按 now 回推）
+    if (chunk.elapsedSeconds != null && !segment.finishedAt) {
+        var secs = Math.max(0, Number(chunk.elapsedSeconds) || 0);
+        segment.finishedAt = Date.now();
+        if (!segment.createdAt) {
+            segment.createdAt = segment.finishedAt - secs * 1000;
+        }
+    }
+
+    if (status === 'error' && chunk.text) {
+        // 异常正文写入 task-group，避免只有图标没有原因
+        appendErrorChunkToSegment(sess, segment, chunk.text);
+        // appendErrorChunkToSegment 已 set error；再兜底一次状态
+        setTaskGroupStatus(segment, 'error');
+    } else {
+        setTaskGroupStatus(segment, status);
+    }
+
+    // 若已无 running 任务，提前停掉共享计时器
+    if (sess.taskSegments) {
+        var hasRunning = false;
+        for (var tid in sess.taskSegments) {
+            if (!Object.prototype.hasOwnProperty.call(sess.taskSegments, tid)) continue;
+            var seg = sess.taskSegments[tid];
+            if (seg && seg.groupEl && seg.status !== 'done' && seg.status !== 'error') {
+                hasRunning = true;
+                break;
+            }
+        }
+        if (!hasRunning) stopTaskGroupElapsedTimer(sess);
+    }
 }
 
 function createTaskGroupElement(sess, segment) {
@@ -762,6 +810,7 @@ function finishThinkingBlock(sess, reasonId) {
 function markTaskGroupUpdated(sess, segment) {
     if (!segment || !segment.groupEl || !segment.taskId) return;
     segment.updatedAt = Date.now();
+    // 已 task_done 的终态不再被后续迟到 chunk 打回 running
     if (segment.status !== 'error' && segment.status !== 'done') {
         setTaskGroupStatus(segment, 'running');
         ensureTaskGroupElapsedTimer(sess);

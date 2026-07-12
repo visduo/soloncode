@@ -22,6 +22,7 @@ import java.util.Map;
  *   <tr><td>{@code hitl}</td><td>人机协同中断（Human-in-the-Loop），暂停执行以等待人工审批或确认</td></tr>
  *   <tr><td>{@code rewind}</td><td>回退指令，表示需要撤销或回退之前若干步操作</td></tr>
  *   <tr><td>{@code done}</td><td>完成信号，表示当前响应流已全部发送完毕</td></tr>
+ *   <tr><td>{@code task_done}</td><td>子代理任务完成信号；携带 taskId 与 status（done/error），前端据此立即结算对应 task-group</td></tr>
  *   <tr><td>{@code error}</td><td>错误信息，表示处理过程中发生了异常</td></tr>
  *   <tr><td>{@code trace}</td><td>追踪信息，包含模型名称、token 消耗和推理耗时（仅在最终汇总时输出）</td></tr>
  *   <tr><td>{@code context_size}</td><td>上下文大小信息，包含当前上下文的消息数和 token 数（每次推理前推送）</td></tr>
@@ -117,6 +118,13 @@ public class WebChunk {
      */
     private String taskDescription;
 
+    /**
+     * 状态标记。
+     * <p>目前用于 {@code task_done}：取值 {@code done}（正常完成）或 {@code error}（异常终止）。
+     * 前端据此将对应 task-group 立即切换为绿勾 / 红叉，无需等待主流转 {@code done}。</p>
+     */
+    private String status;
+
     /** 消息来源通道标识，如 "wechat" / "feishu" / "dingtalk" / "web"。 */
     private String source;
 
@@ -150,6 +158,23 @@ public class WebChunk {
     public static WebChunk ofDone() {
         WebChunk tmp = new WebChunk();
         tmp.type = "done";
+        tmp.createdAt = Instant.now().toEpochMilli();
+
+        return tmp;
+    }
+
+    /**
+     * 创建「子代理任务完成」消息块。
+     * <p>type 为 {@code task_done}，表示某个子代理任务（task / multitask）已结束。
+     * 与流级 {@link #ofDone()} 不同：本块只结算单个 task-group，主会话可能仍在继续。</p>
+     *
+     * @param status 终态：{@code done} 正常完成，{@code error} 异常终止；其它值按 {@code done} 处理
+     * @return 携带 status 的任务完成信号块（taskId/agentName 等由调用方后续填充）
+     */
+    public static WebChunk ofTaskDone(String status) {
+        WebChunk tmp = new WebChunk();
+        tmp.type = "task_done";
+        tmp.status = ("error".equals(status) ? "error" : "done");
         tmp.createdAt = Instant.now().toEpochMilli();
 
         return tmp;
