@@ -28,6 +28,7 @@ import org.noear.solon.codecli.channel.Channel;
 import org.noear.solon.codecli.channel.ChunkedSender;
 import org.noear.solon.codecli.portal.web.WebGate;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,15 +78,6 @@ public class FeishuLink implements Channel, Runnable {
      */
     private final Map<String, String> openIdToSession = new ConcurrentHashMap<>();
 
-    /**
-     * 消息处理调度器（单线程顺序处理）
-     */
-    private final ExecutorService messageExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "feishu-message");
-        t.setDaemon(true);
-        return t;
-    });
-
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     public FeishuLink(HarnessEngine engine, WebGate webGate) {
@@ -127,7 +119,7 @@ public class FeishuLink implements Channel, Runnable {
             return;
         }
 
-        messageExecutor.execute(() -> {
+        RunUtil.async(() -> {
             try {
                 sendReplyDo(binding, reply);
             } catch (Exception e) {
@@ -208,7 +200,6 @@ public class FeishuLink implements Channel, Runnable {
             conn.stop();
         }
         connections.clear();
-        messageExecutor.shutdownNow();
         LOG.info("[Feishu] Link stopped");
     }
 
@@ -519,7 +510,7 @@ public class FeishuLink implements Channel, Runnable {
 
         final String finalSessionId = sessionId;
         final String finalText = text;
-        messageExecutor.execute(() -> {
+        RunUtil.async(() -> {
             try {
                 webGate.safeChatInput(finalSessionId, finalText, "Feishu");
             } catch (Exception e) {
@@ -766,11 +757,6 @@ public class FeishuLink implements Channel, Runnable {
             stopHeartbeat();
             if (pingIntervalMs > 0) {
                 final int sid = serviceId;
-                heartbeatScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-                    Thread t = new Thread(r, "feishu-heartbeat");
-                    t.setDaemon(true);
-                    return t;
-                });
                 heartbeatFuture = heartbeatScheduler.scheduleAtFixedRate(() -> {
                     try {
                         if (wsClient != null && wsClient.isOpen()) {

@@ -22,6 +22,7 @@ import org.noear.solon.codecli.channel.Channel;
 import org.noear.solon.codecli.channel.ChunkedSender;
 import org.noear.solon.codecli.portal.web.WebGate;
 import org.noear.solon.core.util.Assert;
+import org.noear.solon.core.util.RunUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,15 +76,6 @@ public class DingTalkLink implements Channel, Runnable {
      * 用于 AI 回复时通过 WebSocket Stream 直接发送，无需 webhook，无过期问题。
      */
     private final Map<String, ReplyChannel> replyChannels = new ConcurrentHashMap<>();
-
-    /**
-     * 消息处理调度器（单线程顺序处理）
-     */
-    private final ExecutorService messageExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "dingtalk-message");
-        t.setDaemon(true);
-        return t;
-    });
 
     public DingTalkLink(HarnessEngine engine, WebGate webGate) {
         this.engine = engine;
@@ -218,7 +210,6 @@ public class DingTalkLink implements Channel, Runnable {
             conn.stop();
         }
         connections.clear();
-        messageExecutor.shutdownNow();
         LOG.info("[DingTalk] Link stopped");
     }
 
@@ -489,7 +480,7 @@ public class DingTalkLink implements Channel, Runnable {
         final String finalSessionId = sessionId;
         final String finalText = text;
 
-        messageExecutor.execute(() -> {
+        RunUtil.async(() -> {
             try {
                 webGate.safeChatInput(finalSessionId, finalText, "DingTalk");
             } catch (Exception e) {

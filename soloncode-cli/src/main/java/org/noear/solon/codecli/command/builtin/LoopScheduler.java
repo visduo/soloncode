@@ -22,6 +22,7 @@ import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.harness.HarnessEngine;
 import org.noear.solon.codecli.config.AgentSettings;
 import org.noear.solon.codecli.config.entity.LoopGroupDo;
+import org.noear.solon.core.util.RunUtil;
 import org.noear.solon.scheduling.ScheduledAnno;
 import org.noear.solon.scheduling.scheduled.manager.IJobManager;
 import org.noear.solon.scheduling.simple.JobManager;
@@ -34,9 +35,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 定时循环任务调度管理器
@@ -64,22 +62,20 @@ public class LoopScheduler {
     private final ConcurrentHashMap<String, List<LoopTask>> sessionTasks = new ConcurrentHashMap<>();
     private final LoopPromptBuilder promptBuilder;
 
-    // 共享线程池：续行调度 + 异常重试
-    private final ScheduledExecutorService asyncExecutor = Executors.newScheduledThreadPool(
-            Math.max(4, Runtime.getRuntime().availableProcessors()), r -> {
-        Thread t = new Thread(r, "loop-async");
-        t.setDaemon(true);
-        return t;
-    });
-
-    private volatile List<TaskExecutor> taskExecutors = new ArrayList<>();
+    private volatile List<TaskHandler> taskHandlers = new ArrayList<>();
     private volatile List<BusyChecker> busyCheckers = new ArrayList<>();
 
+    /**
+     * 任务处理者
+     */
     @FunctionalInterface
-    public interface TaskExecutor {
-        String execute(String sessionId, String prompt, String agentName);
+    public interface TaskHandler {
+        String handle(String sessionId, String prompt, String agentName);
     }
 
+    /**
+     * 繁忙检测者
+     */
     @FunctionalInterface
     public interface BusyChecker {
         boolean isBusy(String sessionId);
@@ -101,8 +97,8 @@ public class LoopScheduler {
         return loop;
     }
 
-    public void addTaskExecutor(TaskExecutor executor) {
-        this.taskExecutors.add(executor);
+    public void addTaskExecutor(TaskHandler executor) {
+        this.taskHandlers.add(executor);
     }
 
     public void addBusyChecker(BusyChecker busyChecker) {
@@ -151,7 +147,6 @@ public class LoopScheduler {
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 LOG.info("JVM shutting down, pausing active goals");
                 pauseAllGoals();
-                asyncExecutor.shutdown();
             }, "goal-shutdown-hook"));
             LOG.info("ShutdownHook installed for auto-pausing active goals");
         } catch (Throwable e) {
@@ -332,7 +327,7 @@ public class LoopScheduler {
 
         for (LoopTask t : tasks) {
             if (t.getId().equals(taskId)) {
-                asyncExecutor.submit(() -> onTrigger(sessionId, t));
+                RunUtil.parallel(() -> onTrigger(sessionId, t));
                 return;
             }
         }
@@ -671,8 +666,7 @@ public class LoopScheduler {
         if (!busy) {
             LOG.debug("Loop task '{}' continuing (event-driven)", task.getId());
             // 最小 1s 冷却间隙，防止紧循环空转
-            asyncExecutor.schedule(() -> onTrigger(sessionId, task),
-                    1, TimeUnit.SECONDS);
+            RunUtil.delay(() -> onTrigger(sessionId, task), 1_000L);
         }
     }
 
@@ -704,11 +698,11 @@ public class LoopScheduler {
                     long delay = 5L * errors; // 5s, 10s, 15s ...
                     LOG.info("Loop task '{}' scheduling error retry in {}s (attempt {})",
                             task.getId(), delay, errors);
-                    asyncExecutor.schedule(() -> {
+                    RunUtil.delay(() -> {
                         if (!task.isCancelled()) {
                             onTrigger(sessionId, task);
                         }
-                    }, delay, TimeUnit.SECONDS);
+                    }, delay * 1_000L);
                 }
             }
         }
@@ -776,8 +770,8 @@ public class LoopScheduler {
     // ==================== 执行 ====================
 
     private LoopExecutionResult executeSingle(String sessionId, String effectivePrompt, String agentName) {
-        for (TaskExecutor taskExecutor : taskExecutors) {
-            String result = taskExecutor.execute(sessionId, effectivePrompt, agentName);
+        for (TaskHandler taskExecutor : taskHandlers) {
+            String result = taskExecutor.handle(sessionId, effectivePrompt, agentName);
             if (result != null) {
                 // 优先使用 LLM 返回的真实 token 消耗（Web 端通过 session attrs 传递）
                 long tokensUsed = 0;

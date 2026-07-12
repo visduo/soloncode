@@ -9,7 +9,7 @@ server.http:
   maxThreads: 16
 
 solon.threads:
-  parallelPoolSize: 4
+  parallelPoolSize: 8
   scheduledPoolSize: 4
 
 solon.app:

@@ -54,12 +54,6 @@ public class WeChatLink implements Channel, Runnable {
      */
     private final Map<String, Future<?>> pollWorkers = new ConcurrentHashMap<>();
 
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4, r -> {
-        Thread t = new Thread(r, "wechat-poll");
-        t.setDaemon(true);
-        return t;
-    });
-
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     public WeChatLink(HarnessEngine engine, WebGate webGate) {
@@ -171,14 +165,13 @@ public class WeChatLink implements Channel, Runnable {
         for (String sid : new ArrayList<>(pollWorkers.keySet())) {
             stopPolling(sid);
         }
-        scheduler.shutdownNow();
         LOG.info("[WeChat] Link stopped");
     }
 
     private void startPolling(String sessionId) {
         stopPolling(sessionId); // 防止重复
 
-        Future<?> future = scheduler.scheduleWithFixedDelay(() -> {
+        Future<?> future = RunUtil.timer().scheduleWithFixedDelay(() -> {
             if (!running.get()) return;
             try {
                 pollOnce(sessionId);
