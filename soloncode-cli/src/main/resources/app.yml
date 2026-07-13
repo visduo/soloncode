@@ -8,9 +8,13 @@ server.http:
   coreThreads: 2
   maxThreads: 16
 
-solon.threads:
-  parallelPoolSize: 8
-  scheduledPoolSize: 4
+solon.task:
+  execution:
+    pool:
+      size: 8
+  scheduling:
+    pool:
+      size:4
 
 solon.app:
   name: "soloncode"
