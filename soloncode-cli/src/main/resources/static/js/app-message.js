@@ -606,7 +606,6 @@ function ensureThinkingBlockInGroup(sess, group) {
     var block = $('<div>').addClass('reason-group-think streaming')[0];
     if (initiallyExpanded) $(block).addClass('expanded');
     block.innerHTML = '<div class="reason-group-think-header" aria-expanded="' + initiallyExpanded + '"><span class="reason-group-think-label">思考</span>'
-        + '<span class="thinking-timer-wrap" style="margin-left:4px"><span class="thinking-current-timer">0s</span></span>'
         + '<i class="layui-icon layui-icon-right reason-group-think-toggle"></i></div>'
         + '<div class="reason-group-think-body"><div class="md-content"></div></div>';
     $(group.groupEl).append(block);
@@ -618,7 +617,6 @@ function ensureThinkingBlockInGroup(sess, group) {
     group.thinkingBlockEl = block;
     group.thinkingBodyMdEl = $(block).find('.reason-group-think-body .md-content')[0];
     group.thinkingBodyWrapEl = $(block).find('.reason-group-think-body')[0];
-    group.thinkingStartTime = Date.now();
     return block;
 }
 
@@ -653,9 +651,6 @@ function finishThinkingBlock(sess, reasonId) {
             sess.thinkingBuffer = '';
             return;
         }
-        // 保存计时起始时间，防止 stopThinkingTimer 清空后引用丢失
-        var blockStartTime = sess.thinkingBlockStartTime;
-        stopThinkingTimer(sess, 'thinkingBlockTimerId', 'thinkingBlockStartTime');
         if (group.reasonRafId) {
             cancelAnimationFrame(group.reasonRafId);
             group.reasonRafId = null;
@@ -670,14 +665,9 @@ function finishThinkingBlock(sess, reasonId) {
         if (window.cliPrintSimplified !== false) {
             $(group.thinkingBlockEl).removeClass('expanded');
         }
-        var elapsed = '';
-        if (blockStartTime) {
-            elapsed = ' (' + Math.floor((Date.now() - blockStartTime) / 1000) + 's)';
-        }
         var label = $(group.thinkingBlockEl).find('.reason-group-think-label')[0];
-        if (label) $(label).text('思考' + elapsed);
+        if (label) $(label).text('思考');
         $(group.thinkingBlockEl).find('.reason-group-think-dots').remove();
-        $(group.thinkingBlockEl).find('.thinking-timer-wrap').remove();
 
         // ★ 清空组内引用 + 顶层引用，防止 finishStream 再次包裹
         group.thinkingBlockEl = null;
@@ -695,7 +685,6 @@ function finishThinkingBlock(sess, reasonId) {
 
     // 旧式逻辑（无 reasonId 时）：结束当前 thinkingBlockEl 并包裹分组
     if (sess.thinkingBlockEl) {
-        stopThinkingTimer(sess, 'thinkingBlockTimerId', 'thinkingBlockStartTime');
         if (sess.reasonRafId) {
             cancelAnimationFrame(sess.reasonRafId);
             sess.reasonRafId = null;
@@ -710,14 +699,9 @@ function finishThinkingBlock(sess, reasonId) {
         if (window.cliPrintSimplified !== false) {
             $(sess.thinkingBlockEl).removeClass('expanded');
         }
-        var elapsed = '';
-        if (sess.thinkingBlockStartTime) {
-            elapsed = ' (' + Math.floor((Date.now() - sess.thinkingBlockStartTime) / 1000) + 's)';
-        }
         var label = $(sess.thinkingBlockEl).find('.reason-group-think-label')[0];
-        if (label) $(label).text('思考' + elapsed);
+        if (label) $(label).text('思考');
         $(sess.thinkingBlockEl).find('.reason-group-think-dots').remove();
-        $(sess.thinkingBlockEl).find('.thinking-timer-wrap').remove();
 
         // reason-group 已在 ensureThinkingBlock 中预创建，无需再做 DOM 包裹
         sess.thinkingGroupEl = sess.thinkingBlockEl.parentNode;

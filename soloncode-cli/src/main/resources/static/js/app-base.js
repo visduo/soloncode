@@ -47,8 +47,6 @@ function SessionState(sessionId) {
     this.thinkingStartTime = null;
     this.inlineThinkingTimerId = null;
     this.inlineThinkingStartTime = null;
-    this.thinkingBlockTimerId = null;
-    this.thinkingBlockStartTime = null;
     this.messageStartTime = null;
     // Context 条本轮总计时：发送起算，finishStream 定格
     this.roundStartedAt = null;
