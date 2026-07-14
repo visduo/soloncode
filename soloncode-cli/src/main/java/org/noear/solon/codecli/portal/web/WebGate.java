@@ -18,6 +18,7 @@ package org.noear.solon.codecli.portal.web;
 import org.noear.snack4.ONode;
 import org.noear.solon.ai.agent.AgentSession;
 import org.noear.solon.ai.agent.react.ReActAgent;
+import org.noear.solon.ai.agent.react.ReActTrace;
 import org.noear.solon.ai.agent.react.intercept.HITL;
 import org.noear.solon.ai.agent.react.intercept.HITLTask;
 import org.noear.solon.ai.chat.ChatModel;
@@ -791,6 +792,13 @@ public class WebGate extends SimpleWebSocketListener {
                 disposable.dispose();
             }
             session.addMessage(ChatMessage.ofAssistant("用户已取消任务."));
+            emitToClient(sessionId, WebChunk.ofError("用户已取消任务.")); // 或 ofError
+            ReActTrace trace = session.getContext().getAs("__main");
+
+            if(trace != null){
+                emitToClient(sessionId, streamBuilder.onFinalChunk(session, trace, true, "用户已取消任务."));
+            }
+
             emitToClient(sessionId, WebChunk.ofDone());
             LOG.info("[WebGate] Session {} interrupted", sessionId);
         } catch (Exception e) {

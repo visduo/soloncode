@@ -707,11 +707,13 @@ public class WebStreamBuilder {
      * @return 包含追踪信息的 trace 类型 WebChunk
      */
     private WebChunk onFinalChunk(AgentSession session, ReActChunk chunk) {
-        ReActTrace trace = chunk.getTrace();
+        return onFinalChunk(session, chunk.getTrace(), chunk.isAbnormal(), chunk.getContent());
+    }
 
-        if (chunk.isAbnormal()) {
+    public WebChunk onFinalChunk(AgentSession session, ReActTrace trace, boolean isAbnormal, String finalAnswer) {
+        if (isAbnormal) {
             // 通知 IM 任务完成了
-            replyToBoundChannel(session.getSessionId(), chunk.getContent(), true);
+            replyToBoundChannel(session.getSessionId(), finalAnswer, true);
         }
 
         // 结构化 trace 数据，供前端独立渲染
@@ -721,7 +723,6 @@ public class WebStreamBuilder {
         Long elapsedSeconds = startMs > 0 ? Duration.ofMillis(System.currentTimeMillis() - startMs).getSeconds() : null;
 
         // 最终答案全量文本（去除 think 标签，与正文输出保持一致），供前端复制使用
-        String finalAnswer = chunk.getContent();
         if (finalAnswer != null) {
             finalAnswer = finalAnswer.replaceAll("(?s)<\\s*/?think\\s*>", "");
         }
