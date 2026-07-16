@@ -48,7 +48,7 @@
 <parent>
     <groupId>org.noear</groupId>
     <artifactId>solon-parent</artifactId>
-    <version>4.0.2</version>
+    <version>4.0.3</version>
     <relativePath/> <!-- 从仓库查找 -->
 </parent>
 ```
@@ -509,7 +509,7 @@ JPA（Hibernate 实现）。
 </dependency>
 ```
 
-> **说明：** Solon 的安全模型与 Spring Security 差异较大，认证鉴权的用法需要适配。`solon-security-auth` 提供基于注解和过滤器的轻量鉴权方案。
+> **说明：** Solon 的安全模型与 Spring Security 差异较大，认证鉴权的用法需要适配。`solon-security-auth` 提供基于注解和过滤器的轻量鉴权方案。详细迁移见 `references/security_migration.md`。
 
 ---
 
@@ -978,7 +978,7 @@ org.springframework.cloud   →  org.noear
     <parent>
         <groupId>org.noear</groupId>
         <artifactId>solon-parent</artifactId>
-        <version>4.0.2</version>
+        <version>4.0.3</version>
         <relativePath/>
     </parent>
 
@@ -1107,20 +1107,20 @@ org.springframework.cloud   →  org.noear
 ### 6.4 版本管理
 
 - 使用 `solon-parent` 作为 Parent POM 后，大部分 Solon 依赖无需指定版本号（由 Parent 统一管理）。
-- 当前目标版本为 **Solon 4.0.2**，请确保所有 Solon 插件使用相同版本。
+- 当前目标版本为 **Solon 4.0.3**，请确保所有 Solon 插件使用相同版本。
 
 ### 6.5 快速对照速查表
 
 | Spring Boot Starter | Solon Plugin | 类别 |
 |---|---|---|
 | spring-boot-starter-web | solon-web | Web |
-| spring-boot-starter-webflux | solon-web | Web |
+| spring-boot-starter-webflux | solon-web（需评估响应式差异） | Web |
 | spring-boot-starter-websocket | solon-server-websocket | Web |
 | spring-boot-starter-servlet | solon-web-servlet | Web |
 | spring-boot-starter-undertow | solon-server-undertow | 容器 |
 | spring-boot-starter-jetty | solon-server-jetty | 容器 |
 | spring-boot-starter-tomcat | solon-server-tomcat / solon-server-jetty / solon-server-undertow | 容器 |
-| spring-boot-starter-jdbc | solon-data | 数据 |
+| spring-boot-starter-jdbc | solon-data + solon-data-sqlutils（替代 JdbcTemplate） | 数据 |
 | spring-boot-starter-data-jpa | solon-data-jpa | 数据 |
 | mybatis-spring-boot-starter | mybatis-solon-plugin | 数据 |
 | mybatis-plus-spring-boot-starter | mybatis-plus-solon-plugin | 数据 |
@@ -1132,7 +1132,7 @@ org.springframework.cloud   →  org.noear
 | spring-kafka | kafka-solon-cloud-plugin | 消息 |
 | spring-boot-starter-thymeleaf | solon-view-thymeleaf | 模板 |
 | spring-boot-starter-freemarker | solon-view-freemarker | 模板 |
-| spring-boot-starter-security | solon-security-auth | 安全 |
+| spring-boot-starter-security | solon-security-auth（见 security_migration.md） | 安全 |
 | spring-boot-starter-test | solon-test-junit5 | 测试 |
 | spring-boot-starter-logging | solon-logging | 日志 |
 | spring-boot-starter-actuator | solon-health | 运维 |

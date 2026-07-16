@@ -156,7 +156,7 @@ spring:
                 name: userCircuitBreaker
 ```
 
-**Solon Cloud Gateway (application.yml)：**
+**Solon Cloud Gateway (app.yml)：**
 ```yaml
 solon:
   cloud:
@@ -323,7 +323,7 @@ spring:
           group: order-group
 ```
 
-**Solon Cloud Event (application.yml)：**
+**Solon Cloud Event (app.yml)：**
 ```yaml
 solon:
   cloud:

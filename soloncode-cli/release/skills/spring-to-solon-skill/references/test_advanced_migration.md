@@ -90,7 +90,7 @@ class LinuxOnlyTest {
 **Spring Boot / Solon（完全一致）：**
 
 ```java
-@SolonTest(App.class)  // 或 @SpringBootTest
+@SolonTest(App.class)
 class UserApiTest {
     @Nested
     @DisplayName("用户查询测试")
@@ -139,9 +139,9 @@ void testUserMapping(Long id, String expectedName) {
 **Spring Boot / Solon（完全一致）：**
 
 ```java
-@SolonTest(App.class)  // 或 @SpringBootTest
+@SolonTest(App.class)
 class UserServiceTest {
-    @Inject  // 或 @Autowired
+    @Inject
     private UserRepository userRepository;
 
     @BeforeEach
@@ -301,12 +301,14 @@ class UserRepositoryTest {
 - 内存数据库配置：
 
 ```yaml
-# src/test/resources/application.yml
-solon:
-  app:
-    name: test-app
-  dataSources:
-    url: jdbc:h2:mem:testdb
+# src/test/resources/app.yml
+solon.app:
+  name: test-app
+
+solon.dataSources:
+  db1!:
+    class: "com.zaxxer.hikari.HikariDataSource"
+    jdbcUrl: jdbc:h2:mem:testdb
     driverClassName: org.h2.Driver
 ```
 

@@ -1,6 +1,8 @@
 # Spring → Solon 注解对照表
 
-> 基于 Solon 4.0.x / Spring Boot 2.7 / 3.x | 官方来源: https://solon.noear.org/article/compare-springboot
+> 基于 Solon 4.0.x（默认 4.0.3）/ Spring Boot 2.7 / 3.x | 官方来源: https://solon.noear.org/article/compare-springboot
+>
+> **本文件为注解对照权威表**（短示例即可）。完整 Before/After、陷阱与 Checklist 见各 `*_migration.md`，避免两套长示例漂移。
 
 ---
 

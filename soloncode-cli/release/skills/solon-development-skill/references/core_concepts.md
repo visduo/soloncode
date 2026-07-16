@@ -2,9 +2,11 @@
 
 > 适用场景：理解 Solon 的 IoC 容器、配置系统、插件机制、表达式语言，以及与 Spring 的区别。
 >
-> 基于官方文档整理，目标版本 4.0.2。
+> 基于官方文档整理，目标版本 4.0.3。注解速查表保留精简对照；完整 Spring 迁移请用 `spring-to-solon-skill`。EventBus 完整 API 见 `api_annotations.md`；生态子项目总览见 `quick_start.md`。
 
 ## Annotations Mapping (Solon vs Spring equivalents)
+
+> 详细迁移对照与工程改造步骤见 **`spring-to-solon-skill`**。下表仅作速查；**右侧注解禁止出现在 Solon 代码中**。
 
 | Solon | Purpose | Spring Equivalent (DO NOT USE) |
 |---|---|---|
@@ -52,6 +54,18 @@
 - Access the container: `Solon.context()`
 - Get a bean: `Solon.context().getBean(UserService.class)`
 - Register a bean: `Solon.context().wrapAndPut(DemoService.class)`
+
+### ScopeLocal（作用域变量）
+
+用于在调用链内传递上下文（类似增强版 ThreadLocal，支持结构化作用域）：
+
+```java
+static ScopeLocal<User> LOCAL = ScopeLocal.newInstance();
+
+LOCAL.with(user, () -> {
+    String name = LOCAL.get().getName();
+});
+```
 
 ### IoC/AOP Core Concepts
 
@@ -190,23 +204,11 @@ public class Demo {
 
 ## Local Event Bus
 
-Solon's built-in event bus is **strongly typed**, based on a **publish/subscribe** model, and uses **synchronous dispatch** (can propagate exceptions, supporting transaction rollback).
+Solon 内置事件总线：**强类型**、发布/订阅、默认同步派发（可传导异常，便于事务回滚）。
 
-For topic-based local bus needs, consider [DamiBus](https://gitee.com/noear/damibus).
-
-### Custom Event Usage
+完整 API 与示例见 **`api_annotations.md` → EventBus**；最短用法见 `common_patterns.md`。主题型本地总线可考虑 [DamiBus](https://gitee.com/noear/damibus)。
 
 ```java
-// 1. Define event model
-@Getter
-public class HelloEvent {
-    private String name;
-    public HelloEvent(String name) {
-        this.name = name;
-    }
-}
-
-// 2. Subscribe (annotation mode)
 @Component
 public class HelloEventListener implements EventListener<HelloEvent> {
     @Override
@@ -215,14 +217,8 @@ public class HelloEventListener implements EventListener<HelloEvent> {
     }
 }
 
-// 2. Subscribe (manual mode)
-EventBus.subscribe(HelloEvent.class, event -> {
-    System.out.println(event.getName());
-});
-
-// 3. Publish
-EventBus.publish(new HelloEvent("world"));          // sync, can propagate exceptions
-EventBus.publishAsync(new HelloEvent("world"));     // async, cannot propagate exceptions
+EventBus.publish(new HelloEvent("world"));
+EventBus.publishAsync(new HelloEvent("world"));
 ```
 
 ## Configuration System
@@ -699,26 +695,9 @@ SnEL is Solon's built-in expression language for evaluation. Zero dependency, ~4
 | Container registration | Must configure `name` to register by name | Auto-registers by class name |
 | Setter injection | Not supported | Supported |
 
-## Ecosystem
+## Ecosystem & Tools
 
-| Component | Description |
-|---|---|
-| Solon | Core framework |
-| Solon AI | AI/LLM development module |
-| Solon Cloud | Distributed development suite |
-| Nami | Rpc client (similar to Feign, supports HTTP and Socket.D) |
-| Liquor | Dynamic compilation as a service |
-| DamiBus | Topic-based local event bus |
-| SnackJson | JSON library (snack4) |
-| Socket.D | Network protocol framework |
-
-## Development Tools
-
-| Tool | Description |
-|---|---|
-| Idea Plugin (21380-solon) | IntelliJ IDEA plugin for Solon |
-| SolonCode CLI | CLI code generation tool |
-| SolonClaw | Enhanced development tooling |
+子项目仓库与能力总览见 **`quick_start.md` → Ecosystem Overview**。常用周边：Nami（RPC 客户端）、DamiBus（主题事件）、Snack4（JSON）、Socket.D、Liquor（动态编译）、IDEA 插件 `21380-solon`、SolonCode CLI / SolonClaw。
 
 ## Important Constraints
 

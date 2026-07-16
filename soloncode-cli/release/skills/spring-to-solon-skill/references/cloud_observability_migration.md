@@ -89,7 +89,7 @@ resilience4j:
         waitDurationInOpenState: 60000
 ```
 
-**Solon Cloud Breaker (application.yml)：**
+**Solon Cloud Breaker (app.yml)：**
 ```yaml
 solon:
   cloud:

@@ -1,7 +1,7 @@
 # API & Annotations Reference — 注解与配置参考
 
 > 适用场景：查找具体注解用法、配置文件属性、WebSocket/EventBus/Filter API。
-> 目标版本：4.0.2
+> 目标版本：4.0.3。本文件为 WebSocket / EventBus / Filter 的**权威 API 参考**；`common_patterns.md` 仅保留最短示例。
 
 ## 1. Core Annotations
 
