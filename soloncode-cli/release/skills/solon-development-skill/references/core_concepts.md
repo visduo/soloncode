@@ -3,6 +3,8 @@
 > 适用场景：理解 Solon 的 IoC 容器、配置系统、插件机制、表达式语言，以及与 Spring 的区别。
 >
 > 基于官方文档整理，目标版本 4.0.3。注解速查表保留精简对照；完整 Spring 迁移请用 `spring-to-solon-skill`。EventBus 完整 API 见 `api_annotations.md`；生态子项目总览见 `quick_start.md`。
+>
+> **阅读建议**：业务开发优先看注解对照、IoC/配置、`@Inject`。文中 SPI / E-SPI / H-SPI 为插件进阶，普通业务生成代码时**不必**通读。
 
 ## Annotations Mapping (Solon vs Spring equivalents)
 
@@ -682,7 +684,7 @@ SnEL is Solon's built-in expression language for evaluation. Zero dependency, ~4
 | Package size | 50-90% smaller | Larger |
 | Memory | ~50% less | More |
 | Concurrency | Up to 700% higher (TechEmpower) | Lower |
-| JDK support | Java 8 ~ 25 + GraalVM | Java 17+ (Spring Boot 3) |
+| JDK support | Java 8 ~ 26 + GraalVM | Java 17+ (Spring Boot 3) |
 | Config file | `app.yml` / `app.properties` | `application.yml` / `application.properties` |
 | Entry point | `Solon.start(App.class, args)` | `SpringApplication.run(App.class, args)` |
 | DI annotation | `@Inject` | `@Autowired` |

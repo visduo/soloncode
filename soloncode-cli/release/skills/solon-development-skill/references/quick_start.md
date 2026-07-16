@@ -1,6 +1,8 @@
 # Quick Start — 项目初始化与构建部署
 
 > 适用场景：从零创建 Solon 项目、配置 Maven、打包部署。
+>
+> 目标版本：4.0.3。Parent POM：`org.noear:solon-parent`。
 
 ## Maven pom.xml
 

@@ -95,7 +95,7 @@ public ChatModel chatModel(ChatConfig config, McpClientProvider clientProvider) 
 
 ## RAG — 检索增强生成
 
-Dependency: `solon-ai-rag`
+Dependency: `solon-ai` 或 `solon-ai-core`（含 `InMemoryRepository` / `EmbeddingModel` / `RerankingModel`）；文档加载器按需引入 `solon-ai-load-*`；向量库按需引入 `solon-ai-repo-*`。**无**独立 `solon-ai-rag` 坐标。
 
 ### EmbeddingModel 嵌入模型
 
@@ -163,9 +163,9 @@ public RerankingModel rerankingModel(@Inject("${solon.ai.rerank.demo}") Rerankin
 
 调用：
 ```java
-// 标准调用
+// 标准调用：input(query, documents)
 RerankingResponse resp = rerankingModel
-        .input("比较原始的风格", "能表达内在的大概过程", "太阳升起来了")
+        .input(query, documents)
         .call();
 
 // 快捷调用：为文档重新排序
@@ -204,10 +204,10 @@ ChatMessage msg = ChatMessage.ofUserAugment("查询问题", context);
 | `solon-ai-load-ppt` | PowerPoint (.ppt/.pptx) | `PptLoader` |
 
 ```java
-// 加载示例（各 Loader 用法一致）
+// 加载示例（各 Loader 用法一致；写入用 save，不要用 insert）
 PdfLoader loader = new PdfLoader(new File("data.pdf"));
 List<Document> docs = loader.load();
-repository.insert(docs);
+repository.save(docs);
 ```
 
 ### RAG Vector Repositories
@@ -235,7 +235,7 @@ repository.insert(docs);
 
 Dependency: `solon-ai-mcp`
 
-支持 MCP_2025-03-26 版本协议。支持 Java 8, 11, 17, 21, 25。也可嵌入到第三方框架生态（Solon、SpringBoot、jFinal、Vert.X、Quarkus、Micronaut）。
+支持 MCP_2025-03-26 版本协议。支持 Java 8, 11, 17, 21, 25, 26。也可嵌入到第三方框架生态（Solon、SpringBoot、jFinal、Vert.X、Quarkus、Micronaut）。
 
 ### 四种传输方式
 
@@ -364,9 +364,10 @@ GenerateResponse resp = generateModel.prompt("一只猫的插画").call();
 
 | Artifact | Description |
 |---|---|
-| `solon-ai-core` | AI 核心模块（ChatModel/ToolCall/ChatSession） |
-| `solon-ai` | 核心 AI 模块（包含 solon-ai-core 及所有方言包） |
-| `solon-ai-rag` | RAG 检索增强生成 |
+| `solon-ai-core` | AI 核心模块（ChatModel/ToolCall/ChatSession/**RAG 核心**） |
+| `solon-ai` | 聚合模块（solon-ai-core + 方言包） |
+| `solon-ai-load-*` | RAG 文档加载器（pdf/word/excel/html/markdown/ppt 等） |
+| `solon-ai-repo-*` | RAG 向量库（milvus/pgvector/es/redis 等） |
 | `solon-ai-mcp` | MCP 协议支持 |
 | `solon-ai-flow` | AI + Flow 集成 |
 | `solon-ai-search-baidu` | 百度联网搜索 |

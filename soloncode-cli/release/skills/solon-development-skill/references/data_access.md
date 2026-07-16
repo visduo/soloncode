@@ -347,8 +347,36 @@ OrderMapper orderMapper2;
 
 | Artifact | 说明 |
 |---|---|
+| `solon-cache` | 本地缓存（默认） |
 | `solon-cache-jedis` | Redis（Jedis） |
 | `solon-cache-redisson` | Redis（Redisson） |
 | `solon-cache-spymemcached` | Memcached |
 
-业务缓存注解：`@Cache` / `@CacheRemove`（见 `api_annotations.md` / `core_concepts.md`）。
+### 业务缓存注解最小例
+
+```java
+import org.noear.solon.data.annotation.Cache;
+import org.noear.solon.data.annotation.CachePut;
+import org.noear.solon.data.annotation.CacheRemove;
+
+@Component
+public class UserCacheService {
+    // tags / key 支持 ${param} 与 ${.field} 表达式；seconds 为过期秒数
+    @Cache(tags = "user_${id}", seconds = 60)
+    public User getById(long id) {
+        return loadFromDb(id);
+    }
+
+    @CachePut(tags = "user_${user.id}")
+    public User update(User user) {
+        return saveToDb(user);
+    }
+
+    @CacheRemove(tags = "user_${id}")
+    public void remove(long id) {
+        deleteFromDb(id);
+    }
+}
+```
+
+> 注解包名：`org.noear.solon.data.annotation`。完整属性与更多模式见官网「缓存」章节；依赖索引见 `modules_reference.md`。

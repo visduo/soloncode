@@ -27,12 +27,13 @@ description: "Specialized knowledge for developing Java applications with the So
 
 ## 执行流程
 
-1. **判定场景** → 只 `read` 下表中对应的 1～2 个 reference（避免一次加载全部）。
+1. **判定场景** → 只 `read` 下表中对应的 1～2 个 reference（**禁止一次加载全部**，合计约 6000 行）。
 2. **生成代码前**核对 Critical Rules（尤其：`app.yml`、`@Component`、`@Inject`、无 Spring 依赖）。
-3. **数据访问**优先读 `references/data_access.md`（SqlUtils / 事务 / MyBatis）。
-4. **AI 场景**：Chat/RAG/MCP → `ai_chat_rag_mcp.md`；Agent/Talent/Harness → `ai_agent_harness.md`。
+3. **数据访问**优先读 `references/data_access.md`（SqlUtils / 事务 / MyBatis / `@Cache`）。
+4. **AI 场景**：Chat/RAG/MCP → `ai_chat_rag_mcp.md`；Agent/Talent/Harness/Loop/A2A → `ai_agent_harness.md`。
 5. **从 Spring 迁移** → 使用 `spring-to-solon-skill`，本 skill 仅保留精简对照。
 6. 用户中文提问 → 中文回复与注释；默认版本 **4.0.3**。
+7. **API 不确定时**查 reference 或源码；禁止用 Spring 习惯或臆造坐标补全（例如不存在 `solon-ai-rag` / `solon-ai-a2a`）。
 
 ## Scene Navigation
 
@@ -100,7 +101,22 @@ description: "Specialized knowledge for developing Java applications with the So
 
 ## 4.0.3 要点（相对 4.0.2）
 
-- 官网当前稳定版：**4.0.3**
+- 官网当前稳定版：**4.0.3**；JDK **8 ~ 26**
 - AI：`solon-ai-loop`；`solon-ai-talent-code`（从 harness 拆出）；`GenerateTool` → `GenerateTalent`
+- A2A：`TeamProtocols.A2A`（`solon-ai-agent`），无独立 `solon-ai-a2a` 模块
+- RAG：核心在 `solon-ai-core`；loader=`solon-ai-load-*`；repo=`solon-ai-repo-*`；写入 API 为 `save`（非 `insert`）
+- Harness Builder：`modelAdd(ChatConfig)`；运行时才是 `engine.addModel(...)`
+- Nami 默认 snack4：`Snack4Decoder` / `Snack4Encoder`
 - 核心：`ScopeLocal` 等能力持续演进；服务器可选 `solon-server-feathttp`
 - 详细 AI 变更见 `ai_chat_rag_mcp.md` / `ai_agent_harness.md`
+
+## Reference 阅读优先级（Agent 友好）
+
+| 优先级 | 文件 | 何时读 |
+|---|---|---|
+| 必读入口 | `quick_start.md` / `common_patterns.md` | 新建项目、REST/MVC |
+| 按需 | `data_access.md` / `testing.md` / `security.md` | 数据、测试、鉴权 |
+| 按需 | `ai_chat_rag_mcp.md` / `ai_agent_harness.md` | AI 相关 |
+| 按需 | `remoting.md` / `cloud_native.md` / `flow_orchestration.md` | RPC/云/流程 |
+| 查阅 | `api_annotations.md` / `modules_reference.md` | 注解/依赖索引 |
+| 进阶 | `core_concepts.md` 后半 SPI/E-SPI/H-SPI | 插件开发时再读 |

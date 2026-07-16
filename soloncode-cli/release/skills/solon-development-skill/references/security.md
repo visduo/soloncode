@@ -1,6 +1,8 @@
 # Security — 安全（认证/鉴权/CORS/加密）
 
 > 适用场景：跨域处理、用户认证、路径鉴权、角色权限控制。
+>
+> 目标版本：4.0.3。
 
 ## CORS — 跨域处理
 
@@ -430,78 +432,11 @@ public class WhitelistCheckerNew implements WhitelistChecker {
 }
 ```
 
-### 扩展自定义校验注解
+### 扩展自定义校验注解（指引）
 
-#### 1. 定义注解
-
-```java
-@Target({ElementType.PARAMETER, ElementType.FIELD})
-@Retention(RetentionPolicy.RUNTIME)
-public @interface Date {
-    String value() default "";      // 日期表达式
-    String message() default "";   // 提示消息
-    Class<?>[] groups() default {}; // 校验分组
-}
-```
-
-#### 2. 实现校验器
-
-```java
-public class DateValidator implements Validator<Date> {
-    @Override
-    public String message(Date anno) {
-        return anno.message();
-    }
-
-    @Override
-    public Class<?>[] groups(Date anno) {
-        return anno.groups();
-    }
-
-    /** 校验实体字段（注入后校验） */
-    @Override
-    public Result validateOfValue(Date anno, Object val0, StringBuilder tmp) {
-        if (val0 != null && !(val0 instanceof String)) {
-            return Result.failure();
-        }
-        String val = (String) val0;
-        if (verify(anno, val)) {
-            return Result.succeed();
-        } else {
-            return Result.failure();
-        }
-    }
-
-    /** 校验上下文参数（注入前校验） */
-    @Override
-    public Result validateOfContext(Context ctx, Date anno, String name, StringBuilder tmp) {
-        String val = ctx.param(name);
-        if (verify(anno, val)) {
-            return Result.succeed();
-        } else {
-            return Result.failure(name);
-        }
-    }
-
-    private boolean verify(Date anno, String val) {
-        if (Utils.isEmpty(val)) {
-            return true; // 为空算通过，由 @NotNull 等进一步控制
-        }
-        try {
-            if (Utils.isEmpty(anno.value())) {
-                DateTimeFormatter.ISO_LOCAL_DATE_TIME.parse(val);
-            } else {
-                DateTimeFormatter.ofPattern(anno.value()).parse(val);
-            }
-            return true;
-        } catch (Exception ex) {
-            return false;
-        }
-    }
-}
-```
-
-#### 3. 注册校验器
+1. 定义注解（含 `message` / `groups` 等约定属性）
+2. 实现 `Validator<YourAnno>`（`validateOfValue` + `validateOfContext`）
+3. 注册：`ValidatorManager.register(YourAnno.class, new YourValidator())`
 
 ```java
 @Configuration
@@ -512,3 +447,5 @@ public class Config {
     }
 }
 ```
+
+> 完整自定义校验器实现较长，按需查官网「验证器」或源码 `solon-validation`；Agent 生成业务代码时优先用内置注解（`@NotNull` / `@NotEmpty` / `@Email` / `@Pattern` 等）。

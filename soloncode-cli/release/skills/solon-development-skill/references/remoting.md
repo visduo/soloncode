@@ -1,6 +1,37 @@
 # Remoting — RPC / Socket.D 通信
 
 > 适用场景：服务间 RPC 调用、Socket.D 双向通信协议。
+>
+> 目标版本：4.0.3。默认 JSON 序列化栈为 **snack4**（`nami-coder-snack4` / `solon-serialization-snack4`）。
+
+---
+
+## 5 分钟最小 RPC 闭环
+
+服务端（`solon-web`）与客户端（`solon-rpc`）共用同一接口定义：
+
+```java
+// 1) 接口（双方依赖）
+public interface UserService {
+    User getById(long userId);
+}
+
+// 2) 服务端实现
+@Mapping("/rpc/v1/user")
+@Remoting
+public class UserServiceImpl implements UserService {
+    @Override
+    public User getById(long userId) {
+        return new User(userId, "demo");
+    }
+}
+
+// 3) 客户端消费
+@NamiClient(url = "http://localhost:9001/rpc/v1/user", headers = ContentTypes.JSON)
+UserService userService;
+```
+
+> 更完整的接口实体、配置、负载均衡与 Socket.D 见下文。
 
 ---
 
@@ -144,8 +175,8 @@ public class Config {
         return new NamiConfiguration() {
             @Override
             public void config(NamiClient client, NamiBuilder builder) {
-                builder.decoder(SnackDecoder.instance);
-                builder.encoder(SnackTypeEncoder.instance);
+                builder.decoder(Snack4Decoder.instance);
+                builder.encoder(Snack4Encoder.instance);
             }
         };
     }
@@ -165,8 +196,8 @@ UserService userService;
 UserService userService = Nami.builder()
         .name("userapi")
         .path("/rpc/v1/user")
-        .decoder(SnackDecoder.instance)
-        .encoder(SnackTypeEncoder.instance)
+        .decoder(Snack4Decoder.instance)
+        .encoder(Snack4Encoder.instance)
         .create(UserService.class);
 ```
 
@@ -389,8 +420,8 @@ public interface IComplexModelService extends Filter {
     default Result doFilter(Invocation inv) throws Throwable {
         inv.headers.put("Token", "Xxx");
         inv.headers.put("TraceId", Utils.guid());
-        inv.config.setDecoder(SnackDecoder.instance);
-        inv.config.setEncoder(SnackEncoder.instance);
+        inv.config.setDecoder(Snack4Decoder.instance);
+        inv.config.setEncoder(Snack4Encoder.instance);
         return inv.invoke();
     }
 }
@@ -407,8 +438,8 @@ public class NamiFilterImpl implements org.noear.nami.Filter {
     public Result doFilter(Invocation inv) throws Throwable {
         inv.headers.put("Token", "Xxx");
         inv.headers.put("TraceId", Utils.guid());
-        inv.config.setDecoder(SnackDecoder.instance);
-        inv.config.setEncoder(SnackEncoder.instance);
+        inv.config.setDecoder(Snack4Decoder.instance);
+        inv.config.setEncoder(Snack4Encoder.instance);
         return inv.invoke();
     }
 }
@@ -420,11 +451,14 @@ public class NamiFilterImpl implements org.noear.nami.Filter {
 NamiManager.reg(inv -> {
     inv.headers.put("Token", "Xxx");
     inv.headers.put("TraceId", Utils.guid());
-    inv.config.setDecoder(SnackDecoder.instance);
-    inv.config.setEncoder(SnackEncoder.instance);
+    inv.config.setDecoder(Snack4Decoder.instance);
+    inv.config.setEncoder(Snack4Encoder.instance);
     return inv.invoke();
 });
 ```
+
+> snack4 import：`org.noear.nami.coder.snack4.Snack4Decoder` / `Snack4Encoder`。  
+> 若仍使用 snack3，类名为 `SnackDecoder` / `SnackEncoder`（`nami-coder-snack3`），勿与 snack4 混用。
 
 ---
 
@@ -738,4 +772,27 @@ System.out.println("MVC result:: " + rpc.hello("noear"));
 
 ### 借用 HTTP Server 端口
 
-Socket.D 可以与 HTTP Server 共享同一端口，简化部署。
+通过 WebSocket 把 Socket.D 挂在 HTTP 端口上，避免再开独立 socket 端口：
+
+```java
+// 依赖：solon-web + solon-net + socket.d
+// 启动时启用 WebSocket：Solon.start(App.class, args, app -> app.enableWebSocket(true));
+
+@ServerEndpoint("/sd")
+public class SocketdOnHttp extends ToSocketdWebSocketListener {
+    public SocketdOnHttp() {
+        super(new ConfigDefault(false), new EventListener()
+                .doOnOpen(s -> System.out.println("open: " + s.sessionId()))
+                .doOnMessage((s, m) -> System.out.println("msg: " + m)));
+    }
+}
+```
+
+客户端连接（走 HTTP 端口上的 WebSocket 路径）：
+
+```java
+// 假设 HTTP 端口 8080
+ClientSession session = SocketD.createClient("sd:ws://127.0.0.1:8080/sd").open();
+```
+
+> 独立 Socket.D 服务（`solon-server-socketd`）仍使用 `server.socket.port` 及 tcp/udp/ws 偏移端口；与 HTTP 共享端口时优先用 `ToSocketdWebSocketListener`。

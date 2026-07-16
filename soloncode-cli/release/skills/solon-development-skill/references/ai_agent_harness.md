@@ -24,8 +24,12 @@ ChatModel chatModel = ChatModel.of("https://api.moark.com/v1/chat/completions")
         .model("Qwen3-32B")
         .build();
 
+// 工具有两种写法（二选一）：
+// 1) 继承 AbsToolProvider，可直接 defaultToolAdd
+// 2) 普通 POJO + MethodToolProvider 包装后再 defaultToolAdd
 SimpleAgent robot = SimpleAgent.of(chatModel)
-        .defaultToolAdd(new TimeTool()) // v4：POJO 需用 MethodToolProvider 包装
+        .role("你是一个时间助手") 
+        .defaultToolAdd(new TimeTool())
         .build();
 
 String answer = robot.prompt("现在几点了？")
@@ -38,6 +42,10 @@ public static class TimeTool extends AbsToolProvider {
         return LocalDateTime.now().toString();
     }
 }
+
+// 普通 POJO 写法：
+// public class SearchTools { @ToolMapping ... }
+// .defaultToolAdd(new MethodToolProvider(new SearchTools()))
 ```
 
 ### ReActAgent（自主推理 + 工具调用）
@@ -45,7 +53,7 @@ public static class TimeTool extends AbsToolProvider {
 ```java
 ReActAgent agent = ReActAgent.of(chatModel)
     .name("assistant")
-    .defaultToolAdd(new MethodToolProvider(new SearchTools())) // v4：POJO 需用 MethodToolProvider 包装
+    .defaultToolAdd(new MethodToolProvider(new SearchTools())) // 普通 POJO 需包装
     .maxTurns(5)        // v4：原 maxSteps 已更名为 maxTurns
     .autoRethink(true)  // 最大步数自动续航（由 LLM 反思控制）
     .build();
@@ -55,9 +63,11 @@ String answer = agent.prompt("搜索并总结...").call().getContent();
 ### TeamAgent（多 Agent 协作）
 
 ```java
+// TeamProtocols 预置：NONE / SEQUENTIAL / HIERARCHICAL / MARKET_BASED /
+// CONTRACT_NET / BLACKBOARD / SWARM / A2A（共 8 种）
 TeamAgent team = TeamAgent.of(chatModel)
     .name("DevTeam")
-    .protocol(TeamProtocols.SEQUENTIAL) // 支持 SEQUENTIAL, A2A, SWARM, HIERARCHICAL, NONE
+    .protocol(TeamProtocols.SEQUENTIAL)
     .agentAdd(coder, reviewer)
     .build();
 String result = team.prompt("写一个单例模式").call().getContent();
@@ -148,7 +158,11 @@ const { messages, input, handleSubmit, status } = useChat({
 ### 自定义 Data Part
 
 ```java
-DataPart weatherPart = DataPart.of("weather", Map.of("location", "SF", "temperature", 100));
+// JDK8：用 HashMap，不要 Map.of（Java 9+）
+Map<String, Object> data = new HashMap<>();
+data.put("location", "SF");
+data.put("temperature", 100);
+DataPart weatherPart = DataPart.of("weather", data);
 // → {"type":"data-weather","data":{"location":"SF","temperature":100}}
 ```
 
@@ -156,7 +170,7 @@ DataPart weatherPart = DataPart.of("weather", Map.of("location", "SF", "temperat
 
 Dependency: `solon-ai-acp`
 
-提供 ACP 协议支持（stdio、websocket），支持完整的 ACP 能力开发。
+提供 ACP 协议支持（stdio、websocket）。最小 WebSocket Agent 传输示例：
 
 ```xml
 <dependency>
@@ -165,17 +179,33 @@ Dependency: `solon-ai-acp`
 </dependency>
 ```
 
+```java
+// 在 Solon 应用内注册 ACP WebSocket 传输（路径可自定义）
+McpJsonMapper jsonMapper = ...;
+WebSocketSolonAcpAgentTransport transport =
+        new WebSocketSolonAcpAgentTransport("/acp", jsonMapper);
+// 客户端使用 WebSocketSolonAcpClientTransport 连接 ws://host:port/acp
+```
+
+> 完整会话/工具能力以 `solon-ai-acp` 与 ACP SDK 为准；本 skill 只保证依赖与传输入口正确。
+
 ## A2A — Agent to Agent
 
-Dependency: `solon-ai-a2a`
-
-提供智能体间通信协议支持。
+A2A **不是**独立 artifact。入口在 `solon-ai-agent` 的 `TeamProtocols.A2A`：
 
 ```xml
 <dependency>
     <groupId>org.noear</groupId>
-    <artifactId>solon-ai-a2a</artifactId>
+    <artifactId>solon-ai-agent</artifactId>
 </dependency>
+```
+
+```java
+TeamAgent team = TeamAgent.of(chatModel)
+        .protocol(TeamProtocols.A2A)
+        .agentAdd(designer, developer)
+        .build();
+String result = team.prompt("设计并实现一个登录接口").call().getContent();
 ```
 
 ## AI Talents — 才能体系
@@ -299,11 +329,12 @@ public class DemoApp {
 
         //--- 1. 初始化（v4：流式构建，不再使用 HarnessProperties）
         HarnessEngine engine = HarnessEngine.of("work", ".soloncode/") // 工作区、马具主目录
-                .systemPrompt("xxx")                  // 主代理系统提示词
-                .addModel(new ChatConfig())           // 添加大模型配置（可多个，第一个为默认）
+                .systemPrompt("xxx")                  // Harness 侧：systemPrompt(String)
+                .modelAdd(new ChatConfig())           // Builder：modelAdd（可多个，第一个为默认）
                 .toolsAdd(ToolPermission.TOOL_WEBSEARCH) // 设定工具权限
                 .sessionProvider(sessionProvider)
                 .build();
+        // 构建后运行时动态加模型用：engine.addModel(new ChatConfig());
 
         //--- 用主代理执行
         case1(engine, "hello");
@@ -499,7 +530,9 @@ HarnessEngine engine = HarnessEngine.of("work", ".soloncode/")
         .sessionProvider(sessionProvider)
         .extensionAdd((agentName, agentBuilder) -> {
             if ("main".equals(agentName)) {
-                agentBuilder.systemPrompt(context -> "你是一个专业的业务助手...");
+                // Agent 侧 systemPrompt 接受 AgentSystemPrompt（trace -> String），不是任意 context
+                agentBuilder.systemPrompt(trace -> "你是一个专业的业务助手...");
+                // 或更常用：agentBuilder.instruction("你是一个专业的业务助手...");
             }
         })
         .build();
@@ -576,9 +609,11 @@ engine.removeModel("model-name");
 支持基于 Markdown 模板的命令加载机制（兼容 Claude Code Custom Commands 规范），支持 `$ARGUMENTS` 和 `$1`/`$2` 位置变量替换。
 
 ```java
+import java.nio.file.Paths;
+
 CommandRegistry registry = engine.getCommandRegistry();
-registry.load(Path.of(".solon/commands"));  // 从目录加载 Markdown 命令
-registry.register(myCommand);                // 注册自定义命令
+registry.load(Paths.get(".solon/commands"));  // JDK8：用 Paths.get，不要 Path.of
+registry.register(myCommand);                  // 注册自定义命令
 
 Command cmd = registry.find("/compact");
 CommandResult result = cmd.execute(ctx);
@@ -594,12 +629,12 @@ CommandResult result = cmd.execute(ctx);
 
 ### 内置代理
 
-AgentManager 内置 4 个代理：`bash`, `explore`, `plan`, `general`。可通过 `agentPools` 扩展。
+AgentManager 内置代理：`bash`, `explore`, `plan`, `general`（及 `git-summary` 等）。自定义代理用 `addAgent`；挂载目录代理由 `MountManager` 解析，**无** `agentPool(...)` API。
 
 ```java
 AgentManager agentManager = engine.getAgentManager();
-agentManager.addAgent(myAgentDefinition);           // 注册自定义代理
-agentManager.agentPool(Path.of(".solon/agents"));    // 从目录加载
+agentManager.addAgent(myAgentDefinition); // 注册自定义代理定义
+// 挂载点代理：通过 Harness 工作区 / MountManager 加载 agents/*.md，按名称 getAgent("xxx")
 ```
 
 ### 典型示例：PiAgent
@@ -608,8 +643,8 @@ agentManager.agentPool(Path.of(".solon/agents"));    // 从目录加载
 
 ```java
 HarnessEngine engine = HarnessEngine.of("work", ".soloncode/")
-        .toolsAdd(ToolPermission.TOOL_PI) //微形命令行工具
-        .addModel(new ChatConfig()) //设定大模型配置
+        .toolsAdd(ToolPermission.TOOL_PI) // 微型命令行工具
+        .modelAdd(new ChatConfig())       // Builder 用 modelAdd
         .sessionProvider(sessionProvider)
         .build();
 
@@ -622,7 +657,7 @@ engine.prompt("网络调查 ai mcp 协议，生成一个 mcp.md 报告").call();
 HarnessEngine engine = HarnessEngine.of("work", ".soloncode/")
         .toolsAdd(ToolPermission.TOOL_CODESEARCH,
                 ToolPermission.TOOL_WEBSEARCH, ToolPermission.TOOL_WEBFETCH)
-        .addModel(new ChatConfig()) //设定大模型配置
+        .modelAdd(new ChatConfig())
         .sessionProvider(sessionProvider)
         .build();
 
@@ -637,10 +672,9 @@ engine.prompt("solon ai 有哪些常用的注解？").call();
 
 | Artifact | Description |
 |---|---|
-| `solon-ai-agent` | Agent 框架（Simple/ReAct/Team） |
+| `solon-ai-agent` | Agent 框架（Simple/ReAct/Team，含 `TeamProtocols.A2A`） |
 | `solon-ai-ui-aisdk` | AI UI — Vercel AI SDK 协议 |
 | `solon-ai-acp` | ACP 协议（stdio/websocket） |
-| `solon-ai-a2a` | A2A 智能体间通信 |
 | `solon-ai-harness` | 智能体马具框架 |
 | `solon-ai-loop` | 循环执行引擎（4.0.3+） |
 | `solon-ai-talent-cli` | CLI 才能 |
@@ -648,6 +682,38 @@ engine.prompt("solon ai 有哪些常用的注解？").call();
 | `solon-ai-talent-web` | Web 才能 |
 | `solon-ai-talent-gateway` | 网关才能 |
 | `solon-ai-talent-*` | 其它预置才能（见上文表格） |
+
+## Loop — 循环执行引擎（4.0.3+）
+
+Dependency: `solon-ai-loop`
+
+```java
+// 默认引擎（内存状态）
+LoopEngine engine = LoopAutoConfiguration.createDefaultEngine();
+
+// 或磁盘状态 + 监控
+LoopEngine engine = new LoopAutoConfiguration()
+        .useDiskState("/path/to/project")
+        .enableMonitoring(true)
+        .build();
+
+RalphLoopStrategy strategy = RalphLoopStrategy.builder()
+        .verificationRequired(false)
+        .maxIterations(5)
+        .build();
+
+LoopConfig config = LoopConfig.builder()
+        .taskDescription("Implement user login feature")
+        .strategy(strategy)
+        .maxIterations(5)
+        .build();
+
+LoopSession session = engine.start(config);
+session.waitForCompletion(java.time.Duration.ofSeconds(30));
+LoopResult result = session.getResult();
+```
+
+> 详细策略（Ralph / Team / UltraQA）、管线与状态目录见 `solon-ai-loop` 模块 README。
 
 ## 4.0.3 AI 增量要点
 
@@ -657,6 +723,7 @@ engine.prompt("solon ai 有哪些常用的注解？").call();
 | `solon-ai-talent-code` | 代码工程规范才能（从 harness 拆出） |
 | `GenerateTalent` | 原 harness 内 `GenerateTool` 更名为 `GenerateTalent`，便于动态启停 |
 | `Talent.setEnabled` | 接口级开关 |
+| A2A | 使用 `TeamProtocols.A2A`（`solon-ai-agent`），无独立 `solon-ai-a2a` 模块 |
 
 ### 依赖示例
 

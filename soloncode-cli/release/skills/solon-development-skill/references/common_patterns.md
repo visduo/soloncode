@@ -2,6 +2,7 @@
 
 > 适用场景：REST API、Service、Filter、定时任务、全局异常处理的最短可运行片段。
 >
+> 目标版本：4.0.3。  
 > WebSocket / EventBus 完整 API → `api_annotations.md`  
 > 单元测试 / HTTP 测试 → `testing.md`  
 > 数据访问 / 事务 → `data_access.md`

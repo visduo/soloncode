@@ -1,6 +1,8 @@
 # Flow Orchestration — 流程编排
 
 > 适用场景：计算编排、业务规则引擎、可中断/可恢复流程（快照持久化）、AI Agent 系统。
+>
+> 目标版本：4.0.3。
 
 Dependency: `solon-flow`
 

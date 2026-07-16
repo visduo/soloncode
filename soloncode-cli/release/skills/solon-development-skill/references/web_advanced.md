@@ -1,6 +1,8 @@
 # Web Advanced — SSE / Reactive / I18n
 
 > 适用场景：服务端推送 (SSE)、响应式 Web、国际化。
+>
+> 目标版本：4.0.3。
 
 ## SSE — Server-Sent Events
 
@@ -60,7 +62,7 @@ public class DemoController {
     @Mapping("case2")
     public Flux<ChatMessage> case2(String prompt) {
         return Flux.from(chatModel.prompt(prompt).stream())
-                .filter(resp -> resp.haContent())
+                .filter(resp -> resp.hasContent())
                 .map(resp -> resp.getMessage());
     }
 }

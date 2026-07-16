@@ -1,6 +1,8 @@
 # Cloud Native — 微服务与分布式
 
 > 适用场景：服务注册与发现、配置中心、消息队列、文件存储、分布式任务调度、熔断限流、网关。
+>
+> 目标版本：4.0.3。优先用 `CloudClient` 统一 API；中间件只换插件依赖。
 
 ## 核心用法（统一 API）
 
@@ -83,6 +85,44 @@ solon.cloud.nacos:
   config:
     group: "DEFAULT_GROUP"
 ```
+
+### Nacos 最小端到端（配置 + 注册发现）
+
+```xml
+<!-- 按 Nacos 大版本选其一：nacos / nacos2 / nacos3 -->
+<dependency>
+    <groupId>org.noear</groupId>
+    <artifactId>nacos2-solon-cloud-plugin</artifactId>
+</dependency>
+```
+
+```yaml
+solon.app:
+  group: "demo"
+  name: "user-service"
+
+solon.cloud.nacos:
+  server: "127.0.0.1:8848"
+  namespace: "dev"
+  config:
+    group: "DEFAULT_GROUP"
+  discovery:
+    group: "DEFAULT_GROUP"
+```
+
+```java
+// 配置注入（Nacos 中存在 demo.db.url 时自动拉取/刷新）
+@Component
+public class DbProps {
+    @CloudConfig("demo.db.url")
+    String url;
+}
+
+// 或手动拉取
+String yaml = CloudClient.config().pull("DEFAULT_GROUP", "demo.db.url");
+```
+
+> 注册发现在引入 cloud discovery 插件并配置 `solon.app.name/group` 后通常自动完成；消费者用 `@NamiClient(name="user-service")` 或 `CloudClient.discovery().find(...)`。
 
 ---
 
