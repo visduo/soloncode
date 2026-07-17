@@ -172,6 +172,30 @@ public class SkinServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.exportZip("default"));
     }
 
+    @Test
+    @DisplayName("从本地 zip 文件路径安装（一键安装链路）")
+    void installFromZipFilePath() throws Exception {
+        byte[] zip = buildZip(false, "quick",
+                "{\n  \"name\": \"quick\",\n  \"displayName\": \"快装\"\n}",
+                "[data-skin=\"quick\"] { --accent: #444; }\n");
+        Path zipPath = tempHome.resolve("quick.zip");
+        Files.write(zipPath, zip);
+
+        String name = service.installZipFile(zipPath);
+        assertEquals("quick", name);
+        assertTrue(service.isInstalled("quick"));
+        assertTrue(Files.isRegularFile(service.skinsRoot().resolve("quick").resolve("skin.css")));
+    }
+
+    @Test
+    @DisplayName("installZipFile 对不存在路径应失败")
+    void installZipFileMissing() {
+        Path missing = tempHome.resolve("no-such.zip");
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> service.installZipFile(missing));
+        assertTrue(ex.getMessage().contains("不存在"));
+    }
+
     private static byte[] buildZip(boolean wrapInDir, String dirName, String skinJson, String skinCss) {
         try {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();

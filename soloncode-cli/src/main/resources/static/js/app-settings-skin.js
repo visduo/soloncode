@@ -5,10 +5,13 @@
  *
  * 后端接口：
  *   GET  /web/settings/skins/list
- *   POST /web/settings/skins/install   multipart file
+ *   POST /web/settings/skins/install   multipart file  或  ?file=workspace相对路径.zip
  *   POST /web/settings/skins/activate  {name}
  *   POST /web/settings/skins/uninstall {name}
  *   GET  /web/settings/skins/export?name=xxx  导出本地皮肤 zip
+ *
+ * 聊天一键安装链接（Markdown）：
+ *   [点击安装](/web/settings/skins/install?file=aurora.zip)
  */
 (function () {
     'use strict';
@@ -201,6 +204,30 @@
         });
     }
 
+    function onInstallSuccess(resp) {
+        if (resp && resp.code === 200) {
+            var name = resp.data && resp.data.name;
+            showToast('安装成功' + (name ? (': ' + name) : ''));
+            // 先刷新列表，再自动启用（避免 LOCAL_SKINS 尚未更新）
+            $.get('/web/settings/skins/list').done(function (listResp) {
+                if (listResp && listResp.code === 200 && listResp.data) {
+                    _skinsCache = listResp.data.skins || [];
+                    _activeSkin = listResp.data.activeSkin || 'default';
+                    applyLocalRegistry(_skinsCache);
+                    renderCards(_skinsCache, _activeSkin);
+                }
+                if (name) activateSkin(name);
+                else loadSkins();
+            }).fail(function () {
+                loadSkins();
+                if (name) activateSkin(name);
+            });
+            return true;
+        }
+        showToast((resp && resp.message) || '安装失败', 'error');
+        return false;
+    }
+
     function installSkinFile(file) {
         if (!file) return;
         var fd = new FormData();
@@ -213,29 +240,69 @@
             contentType: false,
             dataType: 'json'
         }).done(function (resp) {
-            if (resp && resp.code === 200) {
-                var name = resp.data && resp.data.name;
-                showToast('安装成功' + (name ? (': ' + name) : ''));
-                // 先刷新列表，再自动启用（避免 LOCAL_SKINS 尚未更新）
-                $.get('/web/settings/skins/list').done(function (listResp) {
-                    if (listResp && listResp.code === 200 && listResp.data) {
-                        _skinsCache = listResp.data.skins || [];
-                        _activeSkin = listResp.data.activeSkin || 'default';
-                        applyLocalRegistry(_skinsCache);
-                        renderCards(_skinsCache, _activeSkin);
-                    }
-                    if (name) activateSkin(name);
-                    else loadSkins();
-                }).fail(function () {
-                    loadSkins();
-                    if (name) activateSkin(name);
-                });
-            } else {
-                showToast((resp && resp.message) || '安装失败', 'error');
-            }
+            onInstallSuccess(resp);
         }).fail(function () {
             showToast('上传失败', 'error');
         });
+    }
+
+    /**
+     * 从工作区相对路径一键安装（聊天链接 / 技能输出协议）。
+     * @param {string} relativeFile 相对 workspace 的 zip 路径，推荐 .uploads/aurora.zip
+     */
+    function installSkinFromPath(relativeFile) {
+        if (!relativeFile) return;
+        var file = String(relativeFile).trim().replace(/^\.\//, '');
+        if (!file || file.indexOf('..') >= 0) {
+            showToast('非法皮肤路径', 'error');
+            return;
+        }
+        showToast('正在安装皮肤…');
+        $.ajax({
+            url: '/web/settings/skins/install?file=' + encodeURIComponent(file),
+            method: 'POST',
+            dataType: 'json'
+        }).done(function (resp) {
+            onInstallSuccess(resp);
+        }).fail(function (xhr) {
+            var msg = '安装失败';
+            try {
+                if (xhr && xhr.responseJSON && xhr.responseJSON.message) {
+                    msg = xhr.responseJSON.message;
+                }
+            } catch (e) {}
+            showToast(msg, 'error');
+        });
+    }
+
+    /**
+     * 解析 href 是否为皮肤一键安装链接，返回 file 参数或 null。
+     * 支持：/web/settings/skins/install?file=xxx.zip （含相对路径、绝对同源路径）
+     */
+    function parseSkinInstallHref(href) {
+        if (!href) return null;
+        try {
+            var raw = String(href).trim();
+            // 允许相对路径与同源绝对路径
+            var url;
+            if (/^https?:\/\//i.test(raw)) {
+                url = new URL(raw);
+                if (url.origin !== window.location.origin) return null;
+            } else {
+                url = new URL(raw, window.location.origin);
+            }
+            var path = url.pathname || '';
+            if (path !== '/web/settings/skins/install' && !path.endsWith('/web/settings/skins/install')) {
+                return null;
+            }
+            var file = url.searchParams.get('file');
+            if (!file) return null;
+            file = String(file).trim().replace(/^\.\//, '');
+            if (!file || !/\.zip$/i.test(file) || file.indexOf('..') >= 0) return null;
+            return file;
+        } catch (e) {
+            return null;
+        }
     }
 
     // ===== 事件绑定 =====
@@ -298,9 +365,20 @@
         if (name && name !== _activeSkin) activateSkin(name);
     });
 
+    // 聊天消息中的一键安装链接：拦截默认跳转，改为 POST 安装并自动启用
+    $(document).on('click', 'a[href]', function (e) {
+        var href = this.getAttribute('href') || '';
+        var file = parseSkinInstallHref(href);
+        if (!file) return;
+        e.preventDefault();
+        e.stopPropagation();
+        installSkinFromPath(file);
+    });
+
     // 挂在「通用 → 界面效果」下，进入通用 Tab 时调用 loadSkins；切换/安装统一走 activate API
 
     window._settingsSkin = {
-        load: loadSkins
+        load: loadSkins,
+        installFromPath: installSkinFromPath
     };
 })();

@@ -342,21 +342,33 @@ public class WebSettingsController {
     }
 
     /**
-     * 安装本地 zip 皮肤
+     * 安装本地 zip 皮肤。
+     *
+     * <p>两种方式：</p>
+     * <ul>
+     *   <li>multipart 上传：表单字段 {@code file}</li>
+     *   <li>工作区路径：查询参数 {@code file=xxx.zip}（相对当前 workspace，供聊天一键安装链接）</li>
+     * </ul>
      */
     @Post
     @Mapping("/web/settings/skins/install")
-    public Result skinsInstall(Context ctx) throws Exception {
-        UploadedFile file = ctx.file("file");
-        if (file == null) {
-            return Result.failure("请上传皮肤 zip 文件");
-        }
-        String filename = file.getName();
-        if (filename == null || !filename.toLowerCase(Locale.ROOT).endsWith(".zip")) {
-            return Result.failure("仅支持 .zip 皮肤包");
-        }
+    public Result skinsInstall(Context ctx, String file) throws Exception {
         try {
-            String name = skinService.installZip(file.getContent(), filename);
+            String name;
+            if (!Assert.isEmpty(file)) {
+                // 聊天一键安装：从工作区相对路径读取 zip
+                name = installSkinFromWorkspaceFile(file);
+            } else {
+                UploadedFile uploaded = ctx.file("file");
+                if (uploaded == null) {
+                    return Result.failure("请上传皮肤 zip 文件，或提供 file 工作区路径参数");
+                }
+                String filename = uploaded.getName();
+                if (filename == null || !filename.toLowerCase(Locale.ROOT).endsWith(".zip")) {
+                    return Result.failure("仅支持 .zip 皮肤包");
+                }
+                name = skinService.installZip(uploaded.getContent(), filename);
+            }
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("name", name);
             return Result.succeed(data);
@@ -366,6 +378,36 @@ public class WebSettingsController {
             LOG.warn("Install skin failed: {}", e.getMessage());
             return Result.failure("安装失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 从当前 workspace 相对路径安装皮肤 zip（防路径穿越，仅 .zip）。
+     */
+    private String installSkinFromWorkspaceFile(String relativeFile) throws Exception {
+        if (Assert.isEmpty(relativeFile)) {
+            throw new IllegalArgumentException("缺少 file 参数");
+        }
+        String rel = relativeFile.trim().replace('\\', '/');
+        while (rel.startsWith("./")) {
+            rel = rel.substring(2);
+        }
+        if (rel.startsWith("/") || rel.contains(":") || rel.contains("..")) {
+            throw new IllegalArgumentException("非法文件路径");
+        }
+        if (!rel.toLowerCase(Locale.ROOT).endsWith(".zip")) {
+            throw new IllegalArgumentException("仅支持 .zip 皮肤包");
+        }
+
+        Path workspace = Paths.get(engine.getWorkspace()).toAbsolutePath().normalize();
+        Path zipPath = workspace.resolve(rel).normalize();
+        if (!zipPath.startsWith(workspace)) {
+            throw new IllegalArgumentException("非法文件路径");
+        }
+        if (!Files.isRegularFile(zipPath)) {
+            throw new IllegalArgumentException("皮肤 zip 不存在: " + rel);
+        }
+
+        return skinService.installZipFile(zipPath);
     }
 
     /**

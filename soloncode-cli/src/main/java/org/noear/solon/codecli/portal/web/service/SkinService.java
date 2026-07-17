@@ -130,6 +130,19 @@ public class SkinService {
     }
 
     /**
+     * 从本地 zip 文件安装皮肤。返回安装后的 name。
+     */
+    public String installZipFile(Path zipFile) throws Exception {
+        if (zipFile == null || !Files.isRegularFile(zipFile)) {
+            throw new IllegalArgumentException("皮肤 zip 不存在");
+        }
+        String filename = zipFile.getFileName() != null ? zipFile.getFileName().toString() : "skin.zip";
+        try (InputStream in = Files.newInputStream(zipFile)) {
+            return installZip(in, filename);
+        }
+    }
+
+    /**
      * 安装 zip 皮肤。返回安装后的 name。
      */
     public String installZip(InputStream zipStream, String originalFilename) throws Exception {
