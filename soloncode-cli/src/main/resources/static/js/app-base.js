@@ -26,6 +26,10 @@ function SessionState(sessionId) {
     $(this.container).addClass('messages-inner');
     $(this.container).hide();
     $(messagesWrap).append(this.container);
+    // 监听会话容器高度变化，异步内容增高时保持贴底
+    if (typeof observeMessagesHeight === 'function') {
+        observeMessagesHeight(this.container);
+    }
     this.eventSource = null;
     this.isStreaming = false;
     // 用户点 Stop 后等待服务端 error/trace/done；期间禁止迟到 chunk 再拉起新流
@@ -129,6 +133,10 @@ var _programmaticScrollUntil = 0;
 var _scrollStickUntil = 0;
 var scrollRafPending = false;
 var scrollFollowTimer = null;
+/* force 贴底默认窗口：覆盖首条切页布局、图片解码、hljs/mermaid 异步增高 */
+var SCROLL_FORCE_STICK_MS = 1200;
+var SCROLL_STREAM_STICK_MS = 280;
+var SCROLL_PROGRAMMATIC_MS = 160;
 
 function _markUserScrolledUp() {
     userScrolledUp = true;
@@ -170,8 +178,38 @@ $(messagesWrap).on('scroll', function() {
 
 function _applyScrollBottom() {
     if (!messagesWrap || userScrolledUp) return;
-    _programmaticScrollUntil = Date.now() + 80;
+    _programmaticScrollUntil = Date.now() + SCROLL_PROGRAMMATIC_MS;
     messagesWrap.scrollTop = messagesWrap.scrollHeight;
+}
+
+/**
+ * 内容异步增高时补贴底（图片 onload / mermaid / hljs / ResizeObserver）。
+ * 仅在用户未主动上滑时生效，不 force 清掉 userScrolledUp。
+ */
+function scheduleScrollToBottom() {
+    if (userScrolledUp) return;
+    // 延长短粘底窗口，让 followTick 跟上晚到的布局
+    _scrollStickUntil = Math.max(_scrollStickUntil, Date.now() + SCROLL_STREAM_STICK_MS);
+    scrollToBottom(false);
+}
+
+/**
+ * 监听消息容器高度变化：图片解码、异步图表、字体回流后自动贴底。
+ * 用户上滑后不打扰；回到底部后由 scroll 逻辑恢复粘底。
+ */
+var _messagesResizeObserver = null;
+function observeMessagesHeight(el) {
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    if (!_messagesResizeObserver) {
+        _messagesResizeObserver = new ResizeObserver(function() {
+            if (userScrolledUp) return;
+            // 只延长粘底窗口并请求贴底；scrollToBottom 内部合并 RAF
+            scheduleScrollToBottom();
+        });
+    }
+    try {
+        _messagesResizeObserver.observe(el);
+    } catch (e) {}
 }
 
 /**
@@ -184,11 +222,11 @@ function scrollToBottom(force) {
     if (!force && userScrolledUp) return;
     if (force) {
         userScrolledUp = false;
-        // force 时给更长粘底窗口，覆盖 finishThinking + 多 tool 连续插入
-        _scrollStickUntil = Math.max(_scrollStickUntil, Date.now() + 400);
+        // force 时给更长粘底窗口，覆盖首条切页、图片解码、finishThinking + 多 tool 连续插入
+        _scrollStickUntil = Math.max(_scrollStickUntil, Date.now() + SCROLL_FORCE_STICK_MS);
     } else if (!userScrolledUp) {
         // 普通流式输出：短粘底，覆盖同帧后到的布局增高
-        _scrollStickUntil = Math.max(_scrollStickUntil, Date.now() + 220);
+        _scrollStickUntil = Math.max(_scrollStickUntil, Date.now() + SCROLL_STREAM_STICK_MS);
     }
     if (scrollRafPending) return;
     scrollRafPending = true;
@@ -202,14 +240,14 @@ function scrollToBottom(force) {
             _applyScrollBottom();
         });
         // 短窗口跟随：处理节流 MD / 多 tool 连续增高 / 异步渲染
+        // 每次 tick 读最新 _scrollStickUntil，便于图片/ResizeObserver 延长窗口后继续跟
         if (scrollFollowTimer) clearTimeout(scrollFollowTimer);
-        var followUntil = _scrollStickUntil;
         function followTick() {
             scrollFollowTimer = null;
             if (userScrolledUp) return;
-            if (Date.now() > followUntil) return;
+            if (Date.now() > _scrollStickUntil) return;
             _applyScrollBottom();
-            if (Date.now() < followUntil && !userScrolledUp) {
+            if (Date.now() < _scrollStickUntil && !userScrolledUp) {
                 scrollFollowTimer = setTimeout(followTick, 48);
             }
         }

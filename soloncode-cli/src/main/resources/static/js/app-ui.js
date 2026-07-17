@@ -557,6 +557,8 @@ function highlightCodeBlocks(container) {
                     try { hljs.highlightElement(this); } catch (e) {}
                 }
             });
+            // 高亮可能改变 pre 高度，补贴底
+            if (typeof scheduleScrollToBottom === 'function') scheduleScrollToBottom();
         }
         if (window.requestIdleCallback) {
             requestIdleCallback(doHighlight, { timeout: 300 });
@@ -625,7 +627,15 @@ function processMermaidBlocks(container) {
         }
 
         if (nodes.length > 0 && mermaid.run) {
-            mermaid.run({ nodes: nodes, suppressErrors: true }).catch(function() {});
+            mermaid.run({ nodes: nodes, suppressErrors: true })
+                .then(function() {
+                    if (typeof scheduleScrollToBottom === 'function') scheduleScrollToBottom();
+                })
+                .catch(function() {
+                    if (typeof scheduleScrollToBottom === 'function') scheduleScrollToBottom();
+                });
+        } else if (nodes.length > 0) {
+            if (typeof scheduleScrollToBottom === 'function') scheduleScrollToBottom();
         }
     });
 }
@@ -691,6 +701,18 @@ function switchToChatMode() {
     $(welcomeView).hide();
     $(chatView).addClass('active');
     chatInput.focus();
+    // 欢迎页 → 聊天页后布局/clientHeight 可能晚一帧才稳定，双 rAF + 短延时强制贴底
+    if (typeof scrollToBottom === 'function') {
+        requestAnimationFrame(function() {
+            scrollToBottom(true);
+            requestAnimationFrame(function() {
+                scrollToBottom(true);
+            });
+        });
+        setTimeout(function() {
+            if (typeof scrollToBottom === 'function') scrollToBottom(true);
+        }, 80);
+    }
 }
 function switchToWelcomeMode() {
     inChatMode = false;

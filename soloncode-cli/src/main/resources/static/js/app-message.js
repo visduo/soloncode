@@ -21,12 +21,24 @@ function appendUserMessage(sess, text, imageDataUrls, fileAttachments, createdAt
 
     // 来源标签（仅非空且非 "Web" 时显示；会在时间戳左侧追加）
 
-    // Multiple images
+    // Multiple images（解码完成后再补滚，避免占位高度 0 导致贴底失效）
     if (imageDataUrls && imageDataUrls.length > 0) {
         var imgWrap = $('<div>').addClass('user-attach-imgs')[0];
         for (var i = 0; i < imageDataUrls.length; i++) {
             var img = $('<img>').attr('src', imageDataUrls[i].dataUrl || imageDataUrls[i])
                 .attr('style', 'max-height:120px;max-width:200px;border-radius:8px;object-fit:cover;')[0];
+            (function(imgEl) {
+                function onImgLayout() {
+                    if (typeof scheduleScrollToBottom === 'function') scheduleScrollToBottom();
+                    else if (typeof scrollToBottom === 'function') scrollToBottom(false);
+                }
+                if (imgEl.complete) {
+                    // 缓存图可能已 complete，下一帧再补一次高度
+                    requestAnimationFrame(onImgLayout);
+                } else {
+                    $(imgEl).one('load error', onImgLayout);
+                }
+            })(img);
             $(imgWrap).append(img);
         }
         $(bubble).append(imgWrap);
@@ -109,8 +121,15 @@ function appendUserMessage(sess, text, imageDataUrls, fileAttachments, createdAt
 
     addImageLightbox(bubble);
     $(sess.container).append(row);
+    if (typeof observeMessagesHeight === 'function') observeMessagesHeight(row);
     // 容器不在 DOM 树中（如 loadMessages 的临时容器阶段）时跳过滚动，避免无效回流
-    if (sess.sessionId === activeSessionId && document.contains(sess.container)) scrollToBottom(true);
+    if (sess.sessionId === activeSessionId && document.contains(sess.container)) {
+        scrollToBottom(true);
+        // 再补一帧：欢迎页首条 / 宽用户气泡布局稳定后贴底
+        requestAnimationFrame(function() {
+            if (sess.sessionId === activeSessionId && !userScrolledUp) scrollToBottom(true);
+        });
+    }
 }
 
 /* 刷新用户消息的时间戳，在编辑/重发时调用 */
@@ -155,8 +174,9 @@ function ensureAssistantBubble(sess) {
             + '<button class="user-copy-btn del-btn" title="删除此处及之后消息">' + DELETE_SVG + '</button>'
             + '</div></div>';
         $(sess.container).append(row);
+        if (typeof observeMessagesHeight === 'function') observeMessagesHeight(row);
         sess.currentBubbleEl = $(row).find('.md-content')[0];
-
+        
         // AI 回复不显示来源标签
         var copyBtn = $(row).find('.copy-btn')[0];
         // 复制目标为「最终答案」：统一从 .md-content 的 data-md-raw 读取。
@@ -1344,6 +1364,7 @@ function showThinking(sess) {
         + '<span class="thinking-current-timer">0s</span>'
         + '</span></div>';
     $(sess.container).append(sess.thinkingEl);
+    if (typeof observeMessagesHeight === 'function') observeMessagesHeight(sess.thinkingEl);
     var currentTimerSpan = $(sess.thinkingEl).find('.thinking-current-timer')[0];
     startThinkingTimerDual(sess, 'thinkingTimerId', 'thinkingStartTime', currentTimerSpan, null);
     if (sess.sessionId === activeSessionId) scrollToBottom(true);
@@ -1552,6 +1573,16 @@ function addImageLightbox(container) {
         if ($(imgs[i]).data('lightbox')) continue;
         $(imgs[i]).data('lightbox', '1');
         imgs[i].style.cursor = 'zoom-in';
+        // MD 内嵌图解码后补滚（用户附件图在 appendUserMessage 已绑）
+        (function(imgEl) {
+            function onImgLayout() {
+                if (typeof scheduleScrollToBottom === 'function') scheduleScrollToBottom();
+                else if (typeof scrollToBottom === 'function') scrollToBottom(false);
+            }
+            if (!imgEl.complete) {
+                $(imgEl).one('load error', onImgLayout);
+            }
+        })(imgs[i]);
         $(imgs[i]).on('click', function(e) {
             e.stopPropagation();
             openLightbox(this.src);
