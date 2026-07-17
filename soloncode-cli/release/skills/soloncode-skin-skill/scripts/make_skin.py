@@ -8,10 +8,20 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_ROOT = SCRIPT_DIR.parent
+
+
+def stamp_yyyyMMddHH(dt: datetime | None = None) -> str:
+    return (dt or datetime.now()).strftime("%Y%m%d%H")
+
+
+def default_zip_basename(name: str, dt: datetime | None = None) -> str:
+    safe = (name or "skin").strip() or "skin"
+    return f"{safe}-{stamp_yyyyMMddHH(dt)}.zip"
 
 
 def run_py(script: Path, args: list[str]) -> None:
@@ -33,7 +43,7 @@ def main() -> int:
         "-o",
         "--output",
         default=None,
-        help="output zip path (default: .uploads/{name}.zip)",
+        help="output zip path (default: .uploads/{name}-yyyyMMddHH.zip)",
     )
     parser.add_argument("--work-dir", default=None, help="keep working dir (default: temp)")
     parser.add_argument("--no-preview", action="store_true", help="skip preview.png (default: generate)")
@@ -48,11 +58,11 @@ def main() -> int:
     name = args.name.strip()
     recipe = (args.recipe or "b").strip().lower()
     theme = (args.theme or "aurora").strip().lower()
-    # Default under .uploads/ to align with Web attachments and keep project root clean.
+    # Default under .uploads/ with hour stamp to avoid clobbering previous builds.
     out_zip = (
         Path(args.output).expanduser().resolve()
         if args.output
-        else (Path.cwd() / ".uploads" / f"{name}.zip").resolve()
+        else (Path.cwd() / ".uploads" / default_zip_basename(name)).resolve()
     )
     out_zip.parent.mkdir(parents=True, exist_ok=True)
     if out_zip.exists() and not args.force:

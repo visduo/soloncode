@@ -3,10 +3,11 @@
 ## 一键（推荐）
 
 ```bash
-# 在目标 workspace 下执行（默认 zip 落 .uploads/）
+# 在目标 workspace 下执行
+# 默认 zip：.uploads/{name}-yyyyMMddHH.zip（如 aurora-2026071715.zip）
 python3 scripts/make_skin.py \
   --name aurora --recipe c --theme aurora \
-  --with-assets -o .uploads/aurora.zip --force
+  --with-assets --force
 ```
 
 ## 分步
@@ -14,8 +15,8 @@ python3 scripts/make_skin.py \
 ```bash
 python3 scripts/scaffold_skin.py --name aurora --recipe b --theme ocean --out /tmp/aurora-skin --preview
 python3 scripts/validate_skin.py /tmp/aurora-skin
-mkdir -p .uploads
-python3 scripts/pack_skin.py /tmp/aurora-skin -o .uploads/aurora.zip
+# 不传 -o 时默认 .uploads/{name}-yyyyMMddHH.zip
+python3 scripts/pack_skin.py /tmp/aurora-skin
 ```
 
 ## 模板表

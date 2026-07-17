@@ -8,6 +8,7 @@ import importlib.util
 import json
 import sys
 import zipfile
+from datetime import datetime
 from pathlib import Path
 
 MAX_ZIP_BYTES = 8 * 1024 * 1024
@@ -39,6 +40,17 @@ def resolve_skin_root(path: Path) -> Path:
     raise FileNotFoundError("未找到 skin.json + skin.css（支持扁平或单层目录）")
 
 
+def stamp_yyyyMMddHH(dt: datetime | None = None) -> str:
+    """Local timestamp for zip file names: yyyyMMddHH (hour precision)."""
+    return (dt or datetime.now()).strftime("%Y%m%d%H")
+
+
+def default_zip_basename(name: str, dt: datetime | None = None) -> str:
+    """{name}-yyyyMMddHH.zip — avoids overwrite when regenerating the same skin."""
+    safe = (name or "skin").strip() or "skin"
+    return f"{safe}-{stamp_yyyyMMddHH(dt)}.zip"
+
+
 def default_out_path(skin_root: Path, out: Path | None) -> Path:
     if out is not None:
         return out
@@ -49,7 +61,8 @@ def default_out_path(skin_root: Path, out: Path | None) -> Path:
     except Exception:  # noqa: BLE001
         pass
     # Align with Web attachments dir (.uploads is gitignored).
-    return Path.cwd() / ".uploads" / f"{name}.zip"
+    # Stamp hour so re-generate does not clobber the previous zip / install link.
+    return Path.cwd() / ".uploads" / default_zip_basename(name)
 
 
 def should_include(rel: str, path: Path) -> bool:
@@ -97,7 +110,11 @@ def pack(skin_root: Path, out_zip: Path) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Pack SolonCode skin directory to zip")
     parser.add_argument("skin_dir", help="skin directory (flat or one-level wrapper)")
-    parser.add_argument("-o", "--output", help="output zip path (default: .uploads/{name}.zip)")
+    parser.add_argument(
+        "-o",
+        "--output",
+        help="output zip path (default: .uploads/{name}-yyyyMMddHH.zip)",
+    )
     parser.add_argument("--skip-validate", action="store_true", help="skip validation before pack")
     args = parser.parse_args()
 
