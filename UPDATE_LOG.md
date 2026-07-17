@@ -1,6 +1,6 @@
 ### v2026.7.17
 
-* 添加 soloncode web 皮肤功能（自带生成的 skill）
+* 添加 soloncode web 皮肤功能（自带生成的 skill），可开启花花世界
 * 优化 soloncode web 流式消息处理性能
 * 优化 soloncode web 流式消息 done 原子处理
 * 改进 solon-development-skill
