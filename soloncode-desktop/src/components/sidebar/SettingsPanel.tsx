@@ -35,6 +35,7 @@ interface SettingsPanelProps {
   settings: Settings;
   onSettingsChange: (settings: Settings) => void;
   onClose: () => void;
+  onSkillInstalled?: (skillName: string) => void;
   backendPort?: number | null;
   workspacePath?: string | null;
   sessionId?: string;
@@ -55,7 +56,7 @@ const menuItems: { key: SettingsMenuKey; icon: IconName; label: string }[] = [
   ...(import.meta.env.DEV ? [{ key: 'logs' as SettingsMenuKey, icon: 'terminal' as IconName, label: '日志' }] : []),
 ];
 
-export function SettingsPanel({ visible, settings, onSettingsChange, onClose, backendPort, workspacePath, sessionId }: SettingsPanelProps) {
+export function SettingsPanel({ visible, settings, onSettingsChange, onClose, onSkillInstalled, backendPort, workspacePath, sessionId }: SettingsPanelProps) {
   const [activeMenu, setActiveMenu] = useState<SettingsMenuKey>('general');
   const [localSettings, setLocalSettings] = useState(settings);
 
@@ -238,7 +239,7 @@ export function SettingsPanel({ visible, settings, onSettingsChange, onClose, ba
               />
             )}
             {activeMenu === 'skills' && (
-              <SkillsSettings backendPort={backendPort} />
+              <SkillsSettings backendPort={backendPort} onSkillInstalled={onSkillInstalled} />
             )}
             {activeMenu === 'prompts' && (
               <PromptsSettings
@@ -1127,8 +1128,11 @@ function LspSettings({ servers, onAdd, onRemove, onUpdate }: {
 }
 
 /* ==================== Skills 设置（挂载池 + 市场） ==================== */
-function SkillsSettings({ backendPort }: { backendPort?: number | null }) {
-  const [mounts, setMounts] = useState<Array<{ alias: string; path: string; system: boolean }>>([]);
+function SkillsSettings({ backendPort, onSkillInstalled }: {
+  backendPort?: number | null;
+  onSkillInstalled?: (skillName: string) => void;
+}) {
+  const [mounts, setMounts] = useState<Array<{ alias: string; path: string; system: boolean; type?: string }>>([]);
   const [poolSkills, setPoolSkills] = useState<Record<string, Array<{ name: string; description: string }>>>({});
   const [loading, setLoading] = useState(false);
   const [showAddPool, setShowAddPool] = useState(false);
@@ -1174,10 +1178,11 @@ function SkillsSettings({ backendPort }: { backendPort?: number | null }) {
     setLoading(true);
     try {
       const list = await fetchJson("/web/settings/mounts") || [];
-      setMounts(list);
+      const skillMounts = list.filter((mount: { type?: string }) => !mount.type || mount.type === "SKILLS");
+      setMounts(skillMounts);
       const skillsMap: Record<string, Array<{ name: string; description: string }>> = {};
-      await Promise.all(list.map(async (m: any) => {
-        try { skillsMap[m.alias] = await fetchJson("/web/settings/mounts/skills", { alias: m.alias }) || []; }
+      await Promise.all(skillMounts.map(async (m: any) => {
+        try { skillsMap[m.alias] = await fetchJson("/web/settings/mounts/content", { alias: m.alias, type: "SKILLS" }) || []; }
         catch { skillsMap[m.alias] = []; }
       }));
       setPoolSkills(skillsMap);
@@ -1237,7 +1242,16 @@ function SkillsSettings({ backendPort }: { backendPort?: number | null }) {
   const handleInstall = async (slug: string, mountAlias: string) => {
     if (!backendPort) return;
     setInstallingSlug(slug);
-    try { await postJson("/web/settings/skills/install", { slug, marketName: selectedMarket, mountAlias }); await loadMounts(); }
+    try {
+      await postJson("/web/settings/skills/install", { slug, marketName: selectedMarket, mountAlias });
+      if (mountAlias) {
+        try { await postJson("/desktop/settings/mounts/refresh", { alias: mountAlias }); }
+        catch (err) { console.warn("refresh installed skill failed:", err); }
+      }
+      await loadMounts();
+      const installedItem = marketItems.find(item => item.slug === slug);
+      onSkillInstalled?.(installedItem?.displayName || installedItem?.name || slug);
+    }
     catch (err) { console.warn("install failed:", err); }
     finally { setInstallingSlug(null); }
   };
