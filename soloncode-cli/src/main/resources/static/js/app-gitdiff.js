@@ -741,8 +741,11 @@
                 var d = (res && res.data) ? res.data : {};
                 var diffText = d.diff || '';
                 if (!diffText.trim()) {
+                    // 后端已对未跟踪文件生成整文件新增 diff；此处仅作兜底空态
                     gitViewerContent.innerHTML = '<div style="padding:20px;color:var(--text-secondary)">'
-                        + (status === '?' ? '新文件（未跟踪），暂无可比较的差异内容。' : '无变更内容。')
+                        + (status === '?'
+                            ? '新文件（未跟踪）。若内容无法以文本差异展示（如二进制），可先「添加到 Git」后再查看。'
+                            : '无变更内容。')
                         + '</div>';
                 } else {
                     renderViewerDiff(diffText);

@@ -346,6 +346,7 @@ public class GitService {
     /**
      * 获取 Git Diff 内容。
      * <p>分别执行未暂存变更和已暂存变更的 diff 查询，合并输出结果。
+     * 单文件若为未跟踪文件，则按“整文件新增”生成 diff（git diff --no-index）。
      * 单文件 diff 超过 2000 行时自动截断。</p>
      *
      * @param path 可选的文件路径，为空时查看全部变更
@@ -376,6 +377,16 @@ public class GitService {
             fullDiff += "\n" + stagedResult.stdout;
         }
 
+        // 未跟踪文件：普通 git diff 无输出，按整文件新增生成 diff
+        String stat = "";
+        if (hasPath && fullDiff.trim().isEmpty()) {
+            String untrackedDiff = untrackedFileDiff(path);
+            if (!untrackedDiff.isEmpty()) {
+                fullDiff = untrackedDiff;
+                stat = untrackedFileStat(path);
+            }
+        }
+
         // 截断保护：单文件 diff 限制 2000 行
         if (hasPath) {
             String[] lines = fullDiff.split("\n");
@@ -385,18 +396,20 @@ public class GitService {
             }
         }
 
-        // stat 摘要
-        List<String> statCmd = new ArrayList<>(Arrays.asList("git", "diff", "--stat"));
-        if (hasPath) { statCmd.add("--"); statCmd.add(path); }
-        ProcessResult statResult = runGitCommand(statCmd.toArray(new String[0]));
+        // 已跟踪文件：stat 摘要
+        if (stat.isEmpty()) {
+            List<String> statCmd = new ArrayList<>(Arrays.asList("git", "diff", "--stat"));
+            if (hasPath) { statCmd.add("--"); statCmd.add(path); }
+            ProcessResult statResult = runGitCommand(statCmd.toArray(new String[0]));
 
-        List<String> statCachedCmd = new ArrayList<>(Arrays.asList("git", "diff", "--cached", "--stat"));
-        if (hasPath) { statCachedCmd.add("--"); statCachedCmd.add(path); }
-        ProcessResult statCachedResult = runGitCommand(statCachedCmd.toArray(new String[0]));
+            List<String> statCachedCmd = new ArrayList<>(Arrays.asList("git", "diff", "--cached", "--stat"));
+            if (hasPath) { statCachedCmd.add("--"); statCachedCmd.add(path); }
+            ProcessResult statCachedResult = runGitCommand(statCachedCmd.toArray(new String[0]));
 
-        String stat = statResult.stdout;
-        if (!statCachedResult.stdout.isEmpty()) {
-            stat += (stat.isEmpty() ? "" : "\n") + statCachedResult.stdout;
+            stat = statResult.stdout;
+            if (!statCachedResult.stdout.isEmpty()) {
+                stat += (stat.isEmpty() ? "" : "\n") + statCachedResult.stdout;
+            }
         }
 
         Map<String, Object> data = new LinkedHashMap<>();
@@ -404,6 +417,64 @@ public class GitService {
         data.put("stat", stat);
 
         return Result.succeed(data);
+    }
+
+    /**
+     * 判断路径是否为工作区中的未跟踪普通文件。
+     */
+    private boolean isUntrackedFile(String path) throws Exception {
+        if (path == null || path.trim().isEmpty()) {
+            return false;
+        }
+        File file = new File(workspaceDir, path);
+        if (!file.isFile()) {
+            return false;
+        }
+        // 已被 Git 跟踪则 ls-files 会输出路径
+        ProcessResult tracked = runGitCommand("git", "ls-files", "--", path);
+        return tracked.stdout.trim().isEmpty();
+    }
+
+    /**
+     * 为未跟踪文件生成“整文件新增”形式的 unified diff。
+     * <p>使用 {@code git diff --no-index} 对比空文件与工作区文件；
+     * 有差异时 Git 退出码为 1，属正常情况。</p>
+     */
+    private String untrackedFileDiff(String path) throws Exception {
+        if (!isUntrackedFile(path)) {
+            return "";
+        }
+        String nullDevice = nullDevicePath();
+        ProcessResult result = runGitCommand("git", "diff", "--no-index", "--", nullDevice, path);
+        // exitCode 1 = 有差异；0 = 内容相同（空对空）；其它为失败
+        if (result.exitCode != 0 && result.exitCode != 1) {
+            return "";
+        }
+        return result.stdout != null ? result.stdout : "";
+    }
+
+    /**
+     * 未跟踪文件的简要 stat 文本。
+     */
+    private String untrackedFileStat(String path) throws Exception {
+        if (!isUntrackedFile(path)) {
+            return "";
+        }
+        String nullDevice = nullDevicePath();
+        ProcessResult result = runGitCommand("git", "diff", "--no-index", "--stat", "--", nullDevice, path);
+        if (result.exitCode != 0 && result.exitCode != 1) {
+            return path + " | 新文件（未跟踪）\n";
+        }
+        String out = result.stdout != null ? result.stdout.trim() : "";
+        return out.isEmpty() ? path + " | 新文件（未跟踪）\n" : out + "\n";
+    }
+
+    /**
+     * 当前平台的空设备路径（用于 git diff --no-index）。
+     */
+    private static String nullDevicePath() {
+        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+        return os.contains("win") ? "NUL" : "/dev/null";
     }
 
     /**
@@ -580,8 +651,14 @@ public class GitService {
                 if (!cachedResult.stdout.isEmpty()) {
                     diff += "\n" + cachedResult.stdout;
                 }
+                // 未跟踪文件：补充整文件新增 diff，便于 AI 生成摘要
                 if (diff.trim().isEmpty()) {
-                    diff = "(无差异内容)";
+                    String untrackedDiff = untrackedFileDiff(filePath);
+                    if (!untrackedDiff.isEmpty()) {
+                        diff = untrackedDiff;
+                    } else {
+                        diff = "(无差异内容)";
+                    }
                 }
                 // 单文件截断 500 行
                 String[] lines = diff.split("\n");
