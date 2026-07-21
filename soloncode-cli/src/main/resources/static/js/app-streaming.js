@@ -16,6 +16,7 @@ $(chatSendBtn).on('click', function() {
         if (sess.messageQueue && sess.messageQueue.length) {
             sess.messageQueue = [];
             if (typeof renderQueueDock === 'function') renderQueueDock();
+            if (typeof schedulePersistMessageQueue === 'function') schedulePersistMessageQueue(sess);
         }
         if (typeof updateStreamingPlaceholder === 'function') updateStreamingPlaceholder();
         // 提交 interrupt；不在本地立即 finishStream
@@ -55,9 +56,185 @@ $(newChatBtn).on('click', function() {
 });
 
 /* ===== Message Queue (运行中 follow-up 排队) ===== */
-var _queueEnqueueToastAt = 0;
-    
-    function buildDisplayText(text, filesToSend) {
+var QUEUE_PERSIST_DEBOUNCE_MS = 250;
+
+/** 序列化为可落盘结构（V1：文本+模型元数据，不写附件二进制） */
+function serializeQueueForPersist(queue) {
+    var q = queue || [];
+    var out = [];
+    for (var i = 0; i < q.length; i++) {
+        var item = q[i];
+        if (!item) continue;
+        var text = item.text || '';
+        var displayText = item.displayText || '';
+        var hasFiles = !!(item.files && item.files.length) || !!item.hasFiles;
+        // 无文本的纯附件项无法跨刷新恢复，跳过落盘
+        if (!String(text).trim() && !String(displayText).trim()) continue;
+        var row = {
+            id: item.id,
+            text: text,
+            displayText: displayText,
+            createdAt: item.createdAt || Date.now()
+        };
+        if (item.model) row.model = item.model;
+        if (item.reasoningEffort) row.reasoningEffort = item.reasoningEffort;
+        if (hasFiles) row.hasFiles = true;
+        out.push(row);
+    }
+    return out;
+}
+
+var _queuePersistFailToastAt = 0;
+
+function schedulePersistMessageQueue(sess) {
+    if (!sess || !sess.sessionId) return;
+    // 一旦本地发生变更，本地即为权威源（避免清空后因未 hydrate 而跳过写盘）
+    sess._queueLoaded = true;
+    if (sess._queuePersistTimer) clearTimeout(sess._queuePersistTimer);
+    sess._queuePersistTimer = setTimeout(function() {
+        sess._queuePersistTimer = null;
+        persistMessageQueueNow(sess, false);
+    }, QUEUE_PERSIST_DEBOUNCE_MS);
+}
+window.schedulePersistMessageQueue = schedulePersistMessageQueue;
+
+/**
+ * 立即落盘任务排队。
+ * @param {boolean} [useKeepalive] 页面卸载路径传 true，提高关闭时请求存活率
+ */
+function persistMessageQueueNow(sess, useKeepalive) {
+    if (!sess || !sess.sessionId) return;
+    var payload = {
+        sessionId: sess.sessionId,
+        updatedAt: Date.now(),
+        items: serializeQueueForPersist(sess.messageQueue || [])
+    };
+    try {
+        var opts = {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        };
+        if (useKeepalive) opts.keepalive = true;
+        fetch('/web/chat/queue', opts)
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function(res) {
+                if (res && res.code === 200) return;
+                var msg = (res && res.description) || (res && res.message) || '保存任务排队失败';
+                console.warn('[queue] persist rejected:', msg);
+                var now = Date.now();
+                if (typeof showToast === 'function' && now - _queuePersistFailToastAt > 8000) {
+                    _queuePersistFailToastAt = now;
+                    showToast('任务排队保存失败，刷新可能丢失', 'error', 2500);
+                }
+            })
+            .catch(function(err) {
+                console.warn('[queue] persist failed:', err);
+                // unload 路径不弹 toast，避免关页时打扰
+                if (useKeepalive) return;
+                var now = Date.now();
+                if (typeof showToast === 'function' && now - _queuePersistFailToastAt > 8000) {
+                    _queuePersistFailToastAt = now;
+                    showToast('任务排队保存失败，刷新可能丢失', 'error', 2500);
+                }
+            });
+    } catch (e) {
+        console.warn('[queue] persist failed:', e);
+    }
+}
+window.persistMessageQueueNow = persistMessageQueueNow;
+
+/** 从会话目录 queue-tasks.json 恢复排队（仅文本；附件需重新添加）。冷恢复只展示，不自动发送。 */
+function loadMessageQueue(sess) {
+    if (!sess || !sess.sessionId) return;
+    if (sess._queueLoaded || sess._queueLoading) return;
+    sess._queueLoading = true;
+    var sid = sess.sessionId;
+    fetch('/web/chat/queue?sessionId=' + encodeURIComponent(sid))
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+            if (!sessionMap[sid]) return;
+            var target = sessionMap[sid];
+            target._queueLoading = false;
+            target._queueLoaded = true;
+
+            // 加载期间用户已本地入队：本地为准，并写回服务端
+            if (target.messageQueue && target.messageQueue.length) {
+                schedulePersistMessageQueue(target);
+                if (sid === activeSessionId) {
+                    if (typeof renderQueueDock === 'function') renderQueueDock();
+                    if (typeof updateStreamingPlaceholder === 'function') updateStreamingPlaceholder();
+                }
+                return;
+            }
+
+            if (res && res.code && res.code !== 200) {
+                console.warn('[queue] load rejected:', res.description || res.message || res.code);
+                return;
+            }
+
+            var items = (res && res.data && res.data.items) ? res.data.items : [];
+            var restored = [];
+            for (var i = 0; i < items.length; i++) {
+                var it = items[i];
+                if (!it) continue;
+                restored.push({
+                    id: it.id || ('q_' + Date.now().toString(36) + '_' + i),
+                    text: it.text || '',
+                    displayText: it.displayText || it.text || '',
+                    files: [],
+                    hasFiles: !!it.hasFiles,
+                    model: it.model || null,
+                    reasoningEffort: it.reasoningEffort || null,
+                    createdAt: it.createdAt || Date.now()
+                });
+            }
+            target.messageQueue = restored;
+
+            if (sid === activeSessionId) {
+                if (typeof renderQueueDock === 'function') renderQueueDock();
+                if (typeof updateStreamingPlaceholder === 'function') updateStreamingPlaceholder();
+                // 冷恢复：只 hydrate UI，不自动 drain。用户 Enter 空发或带新消息入队后会续发。
+                if (restored.length && typeof showToast === 'function') {
+                    showToast('已恢复 ' + restored.length + ' 条任务排队，Enter 继续发送', 'info', 2800);
+                    if (typeof expandFilerPanel === 'function') {
+                        try { expandFilerPanel(); } catch (e) {}
+                    }
+                }
+            }
+        })
+        .catch(function(err) {
+            if (sessionMap[sid]) {
+                sessionMap[sid]._queueLoading = false;
+                // 失败也标记 loaded，避免反复打接口；本地队列仍可用
+                sessionMap[sid]._queueLoaded = true;
+            }
+            console.warn('[queue] load failed:', err);
+        });
+}
+window.loadMessageQueue = loadMessageQueue;
+
+// 页面关闭/刷新前冲刷未落盘的 debounce，尽量减少丢队
+function flushAllMessageQueuesNow() {
+    try {
+        Object.keys(sessionMap || {}).forEach(function(sid) {
+            var s = sessionMap[sid];
+            if (!s) return;
+            if (s._queuePersistTimer) {
+                clearTimeout(s._queuePersistTimer);
+                s._queuePersistTimer = null;
+                persistMessageQueueNow(s, true);
+            }
+        });
+    } catch (e) {}
+}
+window.addEventListener('beforeunload', flushAllMessageQueuesNow);
+window.addEventListener('pagehide', flushAllMessageQueuesNow);
+
+function buildDisplayText(text, filesToSend) {
     var displayText = text || '';
     if (!displayText && filesToSend && filesToSend.length > 0) {
         var first = filesToSend[0];
@@ -115,6 +292,7 @@ var _queueEnqueueToastAt = 0;
         text: text || '',
         displayText: displayText,
         files: filesSnap,
+        hasFiles: filesSnap.length > 0,
         model: typeof getSelectedModel === 'function' ? getSelectedModel() : null,
         reasoningEffort: typeof getSelectedReasoning === 'function' ? getSelectedReasoning() : null,
         createdAt: Date.now()
@@ -123,11 +301,10 @@ var _queueEnqueueToastAt = 0;
     clearAttachmentPreview();
     if (typeof renderQueueDock === 'function') renderQueueDock();
     if (typeof updateStreamingPlaceholder === 'function') updateStreamingPlaceholder();
-    // 连续入队节流，避免 toast 刷屏
-    var now = Date.now();
-    if (now - _queueEnqueueToastAt > 1200) {
-        _queueEnqueueToastAt = now;
-        showToast('已加入排队', 'info', 1200);
+    if (typeof schedulePersistMessageQueue === 'function') schedulePersistMessageQueue(sess);
+    // 首次入队且右栏折叠时自动展开，避免「队列进了黑洞」
+    if (sess.messageQueue.length === 1 && typeof window.expandFilerPanel === 'function') {
+        window.expandFilerPanel();
     }
     return true;
     }
@@ -197,6 +374,7 @@ var _queueEnqueueToastAt = 0;
         var item = sess.messageQueue.shift();
         if (typeof renderQueueDock === 'function') renderQueueDock();
         if (typeof updateStreamingPlaceholder === 'function') updateStreamingPlaceholder();
+        if (typeof schedulePersistMessageQueue === 'function') schedulePersistMessageQueue(sess);
         sendQueuedItem(sess, item);
     } finally {
         sess._queueDraining = false;
@@ -211,6 +389,7 @@ var _queueEnqueueToastAt = 0;
             var removed = sess.messageQueue.splice(i, 1)[0];
             if (typeof renderQueueDock === 'function') renderQueueDock();
             if (typeof updateStreamingPlaceholder === 'function') updateStreamingPlaceholder();
+            if (typeof schedulePersistMessageQueue === 'function') schedulePersistMessageQueue(sess);
             return removed;
         }
     }
@@ -233,6 +412,7 @@ function cancelLastQueuedToInput(sess) {
     var item = sess.messageQueue.pop();
     if (typeof renderQueueDock === 'function') renderQueueDock();
     if (typeof updateStreamingPlaceholder === 'function') updateStreamingPlaceholder();
+    if (typeof schedulePersistMessageQueue === 'function') schedulePersistMessageQueue(sess);
     applyQueuedItemToInput(item);
     return true;
         }
@@ -242,129 +422,168 @@ function cancelLastQueuedToInput(sess) {
     sess.messageQueue = [];
     if (typeof renderQueueDock === 'function') renderQueueDock();
     if (typeof updateStreamingPlaceholder === 'function') updateStreamingPlaceholder();
+    if (typeof schedulePersistMessageQueue === 'function') schedulePersistMessageQueue(sess);
     }
 
     var _queueDockExpanded = false;
-    
-        function renderQueueDock() {
-    var dock = document.getElementById('chatQueueDock');
-    if (!dock) return;
-    var sess = activeSessionId && sessionMap[activeSessionId];
-    var q = (sess && sess.messageQueue) || [];
-    if (!q.length) {
-        dock.style.display = 'none';
-        return;
+
+    function renderQueueDock() {
+        var dock = document.getElementById('chatQueueDock');
+        if (!dock) return;
+        var sess = activeSessionId && sessionMap[activeSessionId];
+        var q = (sess && sess.messageQueue) || [];
+        // 折叠按钮角标：即使 strip 不可见也能感知排队数
+        if (typeof window.updateFilerQueueBadge === 'function') {
+            window.updateFilerQueueBadge(q.length);
+        }
+        if (!q.length) {
+            dock.style.display = 'none';
+            return;
+        }
+        // 右栏底部 strip：用 flex 布局，避免 display:block 破坏 filer-panel 列排布
+        dock.style.display = 'flex';
+        if (_queueDockExpanded) $(dock).removeClass('collapsed');
+        else $(dock).addClass('collapsed');
+
+        var titleEl = document.getElementById('chatQueueTitle');
+        if (titleEl) titleEl.textContent = String(q.length);
+
+        var previewEl = document.getElementById('chatQueuePreview');
+        if (previewEl) {
+            previewEl.textContent = '下一则：' + truncateQueueText(q[0].displayText || q[0].text, 36);
+            previewEl.style.display = _queueDockExpanded ? 'none' : 'block';
+        }
+
+        var toggleEl = document.getElementById('chatQueueToggle');
+        if (toggleEl) {
+            toggleEl.title = _queueDockExpanded ? '收起' : '展开';
+            toggleEl.setAttribute('aria-label', _queueDockExpanded ? '收起' : '展开');
+            if (_queueDockExpanded) toggleEl.classList.add('expanded');
+            else toggleEl.classList.remove('expanded');
+        }
+
+        var listEl = document.getElementById('chatQueueList');
+        if (!listEl) return;
+        var html = '';
+        for (var i = 0; i < q.length; i++) {
+            var item = q[i];
+            var fileCount = (item.files && item.files.length) ? item.files.length : 0;
+            var attachBadge = (fileCount > 0 || item.hasFiles)
+                ? '<span class="queue-item-attach" title="' +
+                    (fileCount > 0 ? (fileCount + ' 个附件') : '附件未持久化，发送前请重新添加') +
+                    '">📎' + (fileCount > 0 ? fileCount : '!') + '</span>'
+                : '';
+            html += '<div class="queue-item" data-qid="' + escapeHtml(item.id) + '">' +
+                '<span class="queue-item-idx">' + (i + 1) + '.</span>' +
+                '<span class="queue-item-text" title="' + escapeHtml(item.displayText || item.text || '') + '">' +
+                    escapeHtml(truncateQueueText(item.displayText || item.text, 48)) +
+                '</span>' + attachBadge +
+                '<span class="queue-item-actions">' +
+                    '<button type="button" data-act="edit">编辑</button>' +
+                    '<button type="button" data-act="cancel">取消</button>' +
+                '</span></div>';
+        }
+        listEl.innerHTML = html;
     }
-    dock.style.display = 'block';
-    if (_queueDockExpanded) $(dock).removeClass('collapsed');
-    else $(dock).addClass('collapsed');
-        
-    var titleEl = document.getElementById('chatQueueTitle');
-    if (titleEl) titleEl.textContent = q.length + ' 条消息排队中';
-        
-    var previewEl = document.getElementById('chatQueuePreview');
-    if (previewEl) {
-        previewEl.textContent = '下一则：' + truncateQueueText(q[0].displayText || q[0].text, 48);
-        previewEl.style.display = _queueDockExpanded ? 'none' : 'block';
-    }
-                
-    var toggleEl = document.getElementById('chatQueueToggle');
-    if (toggleEl) {
-        toggleEl.title = _queueDockExpanded ? '收起' : '展开';
-        toggleEl.setAttribute('aria-label', _queueDockExpanded ? '收起' : '展开');
-        if (_queueDockExpanded) toggleEl.classList.add('expanded');
-        else toggleEl.classList.remove('expanded');
-    }
-    
-    var listEl = document.getElementById('chatQueueList');
-    if (!listEl) return;
-    var html = '';
-    for (var i = 0; i < q.length; i++) {
-        var item = q[i];
-        var attachBadge = (item.files && item.files.length)
-            ? '<span class="queue-item-attach">📎' + item.files.length + '</span>'
-            : '';
-        html += '<div class="queue-item" data-qid="' + escapeHtml(item.id) + '">'+ 
-            '<span class="queue-item-idx">' + (i + 1) + '.</span>'+
-            '<span class="queue-item-text" title="' + escapeHtml(item.displayText || item.text || '') + '">' +
-                escapeHtml(truncateQueueText(item.displayText || item.text, 60)) +
-            '</span>' + attachBadge +
-            '<span class="queue-item-actions">'+
-                '<button type="button" data-act="edit">编辑</button>'+
-                '<button type="button" data-act="cancel">取消</button>'+
-            '</span></div>';
-    }
-    listEl.innerHTML = html;
-}
     window.renderQueueDock = renderQueueDock;
         
         function updateStreamingPlaceholder() {
     if (!chatInput) return;
     var sess = activeSessionId && sessionMap[activeSessionId];
-    if (!sess || !sess.isStreaming) {
+    if (!sess) {
         chatInput.placeholder = '随便问...';
         return;
     }
-    if (sess.stopRequested) {
-        chatInput.placeholder = '正在停止，请稍候…';
+    if (sess.isStreaming) {
+        if (sess.stopRequested) {
+            chatInput.placeholder = '正在停止，请稍候…';
+            return;
+        }
+        var n = (sess.messageQueue || []).length;
+        chatInput.placeholder = n > 0
+            ? ('继续输入，将排在第 ' + (n + 1) + ' 位…')
+            : '任务进行中，Enter 加入排队…';
         return;
     }
-    var n = (sess.messageQueue || []).length;
-    chatInput.placeholder = n > 0
-        ? ('继续输入，将排在第 ' + (n + 1) + ' 位…')
-        : '任务进行中，Enter 加入排队…';
+    // 空闲但有任务排队：提示 Enter 续发（冷恢复后不自动发）
+    var qn = (sess.messageQueue || []).length;
+    if (qn > 0 && !sess.stopRequested && !sess._stoppedTurn) {
+        chatInput.placeholder = '有 ' + qn + ' 条任务排队，Enter 发送下一条…';
+        return;
+    }
+    chatInput.placeholder = '随便问...';
             }
             window.updateStreamingPlaceholder = updateStreamingPlaceholder;
             
-        // queue-dock 事件（header / 列表）—— DOM 就绪后绑定一次
+        // 任务排队 strip 事件（右栏底部，跨 Tab 常驻）—— DOM 就绪后绑定一次
         (function bindQueueDockEvents() {
-    function bind() {
-        var dock = document.getElementById('chatQueueDock');
-        if (!dock || dock._queueBound) return;
-        dock._queueBound = true;
-            
-        $(dock).on('click', '#chatQueueHeader', function(e) {
-            if ($(e.target).closest('#chatQueueClear, #chatQueueToggle').length) return;
-            _queueDockExpanded = !_queueDockExpanded;
-            renderQueueDock();
-        });
-        $(dock).on('click', '#chatQueueToggle', function(e) {
-            e.stopPropagation();
-            _queueDockExpanded = !_queueDockExpanded;
-            renderQueueDock();
-        });
-        $(dock).on('click', '#chatQueueClear', function(e) {
-            e.stopPropagation();
-            var sess = activeSessionId && sessionMap[activeSessionId];
-            if (!sess || !sess.messageQueue || !sess.messageQueue.length) return;
-            if (sess.messageQueue.length >= 3) {
-                if (!window.confirm('确定清空全部 ' + sess.messageQueue.length + ' 条排队消息？')) return;
+            function bind() {
+                var dock = document.getElementById('chatQueueDock');
+                if (!dock || dock._queueBound) return;
+                dock._queueBound = true;
+
+                $(dock).on('click', '#chatQueueHeader', function(e) {
+                    if ($(e.target).closest('#chatQueueClear, #chatQueueToggle').length) return;
+                    _queueDockExpanded = !_queueDockExpanded;
+                    renderQueueDock();
+                });
+                $(dock).on('click', '#chatQueueToggle', function(e) {
+                    e.stopPropagation();
+                    _queueDockExpanded = !_queueDockExpanded;
+                    renderQueueDock();
+                });
+                $(dock).on('click', '#chatQueueClear', function(e) {
+                    e.stopPropagation();
+                    var sess = activeSessionId && sessionMap[activeSessionId];
+                    if (!sess || !sess.messageQueue || !sess.messageQueue.length) return;
+                    if (sess.messageQueue.length >= 3) {
+                        if (!window.confirm('确定清空全部 ' + sess.messageQueue.length + ' 条排队消息？')) return;
+                    }
+                    clearMessageQueue(sess);
+                });
+                $(dock).on('click', '.queue-item-actions button', function(e) {
+                    e.stopPropagation();
+                    var act = $(this).attr('data-act');
+                    var qid = $(this).closest('.queue-item').attr('data-qid');
+                    var sess = activeSessionId && sessionMap[activeSessionId];
+                    if (!sess || !qid) return;
+                    if (act === 'edit') editQueuedMessageToInput(sess, qid);
+                    else if (act === 'cancel') removeQueuedMessage(sess, qid);
+                });
             }
-            clearMessageQueue(sess);
-        });
-        $(dock).on('click', '.queue-item-actions button', function(e) {
-            e.stopPropagation();
-            var act = $(this).attr('data-act');
-            var qid = $(this).closest('.queue-item').attr('data-qid');
-            var sess = activeSessionId && sessionMap[activeSessionId];
-            if (!sess || !qid) return;
-            if (act === 'edit') editQueuedMessageToInput(sess, qid);
-            else if (act === 'cancel') removeQueuedMessage(sess, qid);
-        });
-    }
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', bind);
-    } else {
-        bind();
-    }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', bind);
+            } else {
+                bind();
+            }
         })();
             
             /* ===== Send ===== */
         function sendMessage() {
     var text = getInputText();
-    if (!text && pendingFiles.length === 0) return;
-    
     var streamSess = activeSessionId && sessionMap[activeSessionId];
+    
+    /* 空闲 + 有排队：允许空 Enter 续发队头；有内容则入队尾再 drain */
+    if (streamSess && !streamSess.isStreaming
+        && !streamSess.stopRequested && !streamSess._stoppedTurn
+        && streamSess.messageQueue && streamSess.messageQueue.length) {
+        if (!text && pendingFiles.length === 0) {
+            drainMessageQueue(streamSess);
+            chatInput.focus();
+            return;
+        }
+        if (text && text.charAt(0) === '/') {
+            showToast('请先清空排队消息，再执行命令', 'error', 2000);
+            return;
+        }
+        // 入队失败（如超限）时仍尝试 drain 已有队列，避免卡住
+        enqueueMessage(streamSess, text, pendingFiles.slice());
+        drainMessageQueue(streamSess);
+        chatInput.focus();
+        return;
+    }
+    
+    if (!text && pendingFiles.length === 0) return;
     
     /* 活动会话 streaming：入队等待，不打断当前轮 */
     if (streamSess && streamSess.isStreaming) {
@@ -378,21 +597,6 @@ function cancelLastQueuedToInput(sess) {
             return;
         }
         enqueueMessage(streamSess, text, pendingFiles.slice());
-        chatInput.focus();
-        return;
-    }
-    
-    /* 空闲但本地仍有排队：新消息只能入队，禁止插到队头前面 */
-    if (streamSess && !streamSess.isStreaming
-        && !streamSess.stopRequested && !streamSess._stoppedTurn
-        && streamSess.messageQueue && streamSess.messageQueue.length) {
-        if (text && text.charAt(0) === '/') {
-            showToast('请先清空排队消息，再执行命令', 'error', 2000);
-            return;
-        }
-        // 入队失败（如超限）时仍尝试 drain 已有队列，避免卡住
-        enqueueMessage(streamSess, text, pendingFiles.slice());
-        drainMessageQueue(streamSess);
         chatInput.focus();
         return;
     }
@@ -825,6 +1029,7 @@ function finishStream(sess) {
     if (sess._pendingClear) {
         sess._pendingClear = false;
         sess.messageQueue = [];
+        if (typeof schedulePersistMessageQueue === 'function') schedulePersistMessageQueue(sess);
         if (sess.sessionId === activeSessionId && typeof renderQueueDock === 'function') {
             renderQueueDock();
         }
@@ -873,6 +1078,7 @@ function finishStream(sess) {
         // Stop 收尾：丢弃残留排队，避免停止后仍自动续发
         if (sess.messageQueue && sess.messageQueue.length) {
             sess.messageQueue = [];
+            if (typeof schedulePersistMessageQueue === 'function') schedulePersistMessageQueue(sess);
             if (sess.sessionId === activeSessionId && typeof renderQueueDock === 'function') {
                 renderQueueDock();
             }
@@ -1147,6 +1353,11 @@ setActiveSession = function(sid) {
         updateDingTalkUI();
         // 切换会话时刷新任务面板
         if (window.loadTodos) window.loadTodos();
+        // 切换会话时恢复任务排队（queue-tasks.json，冷恢复不自动发送）
+        var qSess = sessionMap[sid];
+        if (qSess && typeof window.loadMessageQueue === 'function') {
+            window.loadMessageQueue(qSess);
+        }
         // 切换会话时重置上下文指示器
         if (typeof resetContextIndicator === 'function') resetContextIndicator();
     }, 50);
