@@ -904,7 +904,7 @@
                     doDiscard();
                 }
             });
-            actionBar.appendChild(discardBtn);
+            actionBar.insertBefore(discardBtn, actionBar.firstChild);
             hasAction = true;
         }
 
