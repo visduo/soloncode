@@ -1957,7 +1957,6 @@ body {
 .git-action-discard {
     color: #cf222e;
     border-color: color-mix(in srgb, #cf222e 45%, var(--border-color));
-    margin-left: auto;
 }
 .git-action-discard:hover {
     background: color-mix(in srgb, #cf222e 10%, var(--bg-primary));
