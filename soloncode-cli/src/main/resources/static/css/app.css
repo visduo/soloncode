@@ -48,21 +48,27 @@ body {
 .sidebar-item-del:hover { background: var(--bg-danger-subtle); color: var(--color-danger); }
 .sidebar-item-rename {
     display: none;
-    background: none;
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
     border: none;
-    color: var(--color-text-tertiary);
+    background: none;
+    border-radius: 6px;
     cursor: pointer;
-    padding: 2px 4px;
+    color: var(--text-secondary);
     font-size: 14px;
-    border-radius: 4px;
+    align-items: center;
+    justify-content: center;
+    margin-left: 4px;
+    padding: 0;
     transition: all 0.15s;
 }
 .sidebar-item:hover .sidebar-item-rename {
     display: inline-flex;
 }
 .sidebar-item-rename:hover {
-    color: var(--color-text-primary);
-    background: rgba(127,127,127,0.15);
+    background: var(--bg-danger-subtle);
+    color: var(--accent);
 }
 .sidebar-item-fork {
     display: none;
@@ -183,15 +189,15 @@ body {
 /* Header */
 .main-header { padding: 18px 28px 14px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-shrink: 0; transition: padding-right 0.25s ease; }
 .main-header.filer-collapsed { padding-right: 52px; }
-.theme-toggle { background: none; border: 1px solid var(--border-color); border-radius: 10px; padding: 6px 10px; cursor: pointer; color: var(--text-secondary); font-size: 16px; transition: all 0.2s; display: flex; align-items: center; gap: 4px; }
+.theme-toggle { background: none; border: 1px solid var(--border-color); border-radius: 10px; padding: 6px 10px; cursor: pointer; color: var(--text-secondary); font-size: 16px; transition: all 0.2s; display: flex; align-items: center; }
 .theme-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
-.wechat-btn-header { background: none; border: 1px solid var(--border-color); border-radius: 10px; padding: 6px 10px; cursor: pointer; color: var(--text-secondary); font-size: 16px; transition: all 0.2s; display: flex; align-items: center; gap: 4px; }
+.wechat-btn-header { background: none; border: 1px solid var(--border-color); border-radius: 10px; padding: 6px 10px; cursor: pointer; color: var(--text-secondary); font-size: 16px; transition: all 0.2s; display: flex; align-items: center; }
 .wechat-btn-header:hover { background: var(--bg-hover); color: var(--text-primary); }
 .wechat-btn-header.bound { background: none; border: 1px solid var(--color-wechat); color: var(--color-wechat); }
 .wechat-btn-header .wechat-label { font-size: 12px; }
 
 /* ===== IM Buttons (Feishu / DingTalk) ===== */
-.im-btn-header { border: 1px solid var(--border-color); border-radius: 10px; padding: 6px 10px; background: transparent; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 16px; transition: all 0.2s; }
+.im-btn-header { border: 1px solid var(--border-color); border-radius: 10px; padding: 6px 10px; background: transparent; color: var(--text-secondary); display: flex; align-items: center; cursor: pointer; font-size: 16px; transition: all 0.2s; }
 .im-btn-header:hover { background: var(--bg-hover); color: var(--text-primary); }
 .im-btn-header .im-label { font-size: 12px; }
 
@@ -269,7 +275,9 @@ body {
 .welcome-input-box textarea { border: none; outline: none; resize: none; background: transparent; padding: 18px 20px 8px; font-family: var(--font-sans); font-size: 15px; color: var(--text-primary); min-height: 54px; max-height: 140px; line-height: 1.6; }
 .welcome-input-box textarea::placeholder { color: var(--text-secondary); }
 .welcome-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; gap: 8px; }
-.welcome-send-btn { width: 40px; height: 40px; border-radius: 50%; border: none; background: var(--accent); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: all 0.2s; }
+.welcome-toolbar button { font-size: 18px; }
+.welcome-toolbar button svg { fill: currentColor; }
+.welcome-send-btn { width: 40px; height: 40px; border-radius: 50%; border: none; background: var(--accent); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
 .welcome-send-btn:hover { background: var(--accent-hover); transform: scale(1.06); }
 
 /* ===== Chat View ===== */
@@ -570,6 +578,7 @@ body {
 .input-box textarea { border: none; outline: none; resize: none; background: transparent; padding: 14px 16px 6px; font-family: var(--font-sans); font-size: 14px; color: var(--text-primary); min-height: 44px; max-height: 140px; line-height: 1.6; }
 .input-box textarea::placeholder { color: var(--text-secondary); }
 .input-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; gap: 8px; }
+.input-toolbar button { font-size: 18px; }
 .send-btn { width: 40px; height: 40px; border-radius: 50%; border: none; background: var(--accent); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: all 0.2s; }
 .send-btn:hover { background: var(--accent-hover); }
 .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -690,7 +699,6 @@ body {
 /* Voice Input */
 .voice-btn { width: 40px; height: 40px; border-radius: 50%; border: none; background: var(--accent); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
 .voice-btn:hover { background: var(--accent-hover); transform: scale(1.05); }
-.voice-btn svg { width: 20px; height: 20px; fill: #fff; }
 .voice-btn.recording { background: var(--color-danger); color: #fff; animation: voice-pulse 1.2s ease-in-out infinite; }
 .voice-btn.recording:hover { background: var(--color-danger-hover); color: #fff; }
 .voice-btn.hidden { display: none; }
@@ -2732,5 +2740,3 @@ pre:hover .code-copy-btn { opacity: 1; }
 .context-status-elapsed {
     margin-left: 0.35em;
 }
-
-

@@ -239,7 +239,7 @@ function observeMessagesHeight(el) {
 }
 // 列表根容器：会话增高、滚动条出现导致 clientHeight 变化时也补贴底
 if (messagesWrap) observeMessagesHeight(messagesWrap);
- 
+
  /**
  * 贴底滚动（流式粘底）。
  * - force：强制贴底并清除 userScrolledUp（用户新发消息后应走 force，作废旧上滑状态）
@@ -330,7 +330,7 @@ function setBtnStopMode() {
 }
 function setBtnSendMode() {
     $(chatSendBtn).removeClass('stop-mode');
-    $(chatSendBtn).html('<i class="layui-icon layui-icon-release"></i>');
+    $(chatSendBtn).html('<i class="fa-regular fa-paper-plane fa-sm"></i>');
     chatSendBtn.title = '发送';
     chatSendBtn.disabled = false;
 }

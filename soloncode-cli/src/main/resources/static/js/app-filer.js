@@ -131,27 +131,20 @@
         }
     }
 
-    /** 设置折叠按钮箭头文字，保留内部角标等子节点 */
+    /** 设置折叠按钮图标，保留内部角标等子节点 */
     function setToggleBtnArrow(collapsed) {
         if (!$toggleBtn.length) return;
-        var arrow = collapsed ? '\u2039' : '\u203A';
-        // 只更新文本节点，避免 .html() 清掉 .filer-queue-badge
-        var el = $toggleBtn[0];
-        var textNode = null;
-        for (var i = 0; i < el.childNodes.length; i++) {
-            if (el.childNodes[i].nodeType === 3) {
-                textNode = el.childNodes[i];
-                break;
-            }
+        var $arrow = $toggleBtn.children('i').first();
+        if (!$arrow.length) {
+            $arrow = $('<i class="fa-solid fa-xs"></i>');
+            $toggleBtn.prepend($arrow);
         }
-        if (textNode) {
-            textNode.nodeValue = arrow;
-        } else {
-            el.insertBefore(document.createTextNode(arrow), el.firstChild);
-        }
+        $arrow
+            .removeClass('fa-angle-left fa-angle-right')
+            .addClass(collapsed ? 'fa-angle-left' : 'fa-angle-right');
         $toggleBtn.attr('title', collapsed ? '\u5C55\u5F00\u6587\u4EF6\u6811' : '\u6536\u7F29\u6587\u4EF6\u6811');
     }
-    
+
     if ($toggleBtn.length) {
         $toggleBtn.on('click', function() {
             $panel.toggleClass('collapsed');
@@ -920,7 +913,7 @@
         syncToggleBtnPosition();
         return true;
     }
-    
+
     /** 折叠态下在 toggle 按钮显示排队条数；展开或无排队时隐藏 */
     function updateFilerQueueBadge(count) {
         if (!$toggleBtn.length) return;
@@ -937,7 +930,7 @@
         }
         $badge.text(label);
     }
-    
+
     // ---- 暴露全局函数 ----
     window.loadTree = loadTree;
     window.onFilerChange = onFilerChange;

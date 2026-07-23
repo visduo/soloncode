@@ -691,7 +691,10 @@ $(themeBtn).on('click', function() {
     }
 });
 function updateThemeIcon() {
-    $(themeIcon).html(currentTheme === 'light' ? '&#xe6c2;' : '&#xe748;');
+    $(themeIcon)
+        .empty()
+        .removeClass('fa-sun fa-moon')
+        .addClass(currentTheme === 'light' ? 'fa-moon' : 'fa-sun');
     $(themeBtn).prop('title', currentTheme === 'light' ? '切换至暗色' : '切换至浅色');
 }
 window.updateThemeIcon = updateThemeIcon;
@@ -1018,7 +1021,7 @@ initVoice();
         sidebar.toggleClass('collapsed');
         var collapsed = sidebar.hasClass('collapsed');
         btn.toggleClass('collapsed', collapsed);
-        btn.html(collapsed ? '›' : '‹');
+        btn.html(collapsed ? '<i class="fa-solid fa-angle-right fa-xs"></i>' : '<i class="fa-solid fa-angle-left fa-xs"></i>');
         btn.prop('title', collapsed ? '展开侧边栏' : '收起侧边栏');
         localStorage.setItem('sidebar-collapsed', collapsed ? '1' : '0');
     });
@@ -1103,7 +1106,7 @@ initVoice();
             $sidebar.toggleClass('collapsed');
             var collapsed = $sidebar.hasClass('collapsed');
             $toggleBtn.toggleClass('collapsed', collapsed);
-            $toggleBtn.html(collapsed ? '\u203A' : '\u2039');
+            $toggleBtn.html(collapsed ? '<i class="fa-solid fa-angle-right fa-xs"></i>' : '<i class="fa-solid fa-angle-left fa-xs"></i>');
             $toggleBtn.prop('title', collapsed ? '展开侧边栏' : '收起侧边栏');
             localStorage.setItem('sidebar-collapsed', collapsed ? '1' : '0');
             syncTogglePosition();

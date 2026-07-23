@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="/css/theme.css"/>
     <link rel="stylesheet" href="/css/app.css"/>
     <link rel="stylesheet" href="/css/settings.css"/>
+    <link rel="stylesheet" href="/fontawesome/css/all.min.css"/>
     <!-- 当前皮肤：由 app-ui.js 按 static/skin/<name>/skin.css 动态加载 -->
     <link rel="stylesheet" id="skin-style" href="/skin/default/skin.css"/>
     <link rel="stylesheet" href="/highlight/github.min.css" media="(prefers-color-scheme: light)" id="hljs-light-theme"/>
@@ -22,7 +23,7 @@
 <div class="sidebar">
     <div class="sidebar-header">
         <button class="new-chat-btn" id="newChatBtn">
-            <i class="layui-icon layui-icon-addition"></i> 新对话
+            <i class="fa-solid fa-plus"></i> 新对话
         </button>
     </div>
     <div class="sidebar-title">最近对话</div>
@@ -37,7 +38,9 @@
         </button>
     </div>
 </div>
-<button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="收起侧边栏">‹</button>
+<button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="收起侧边栏">
+    <i class="fa-solid fa-angle-left fa-xs"></i>
+</button>
 <button class="mobile-menu-btn" id="mobileMenuBtn" title="菜单">☰</button>
 <div class="mobile-overlay" id="mobileOverlay"></div>
 
@@ -63,7 +66,7 @@
             <span class="wechat-label" id="wechatHeaderLabel"></span>
         </button>
         <button class="theme-toggle" id="themeBtn" title="切换主题">
-            <i class="layui-icon" id="themeIcon">&#xe748;</i>
+            <i class="fa-solid fa-moon" id="themeIcon"></i>
         </button>
     </div>
 
@@ -116,35 +119,35 @@
                         </div>
                     </div>
                     <button class="attach-btn" id="welcomeAttachBtn" title="添加文件附件">
-                        <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                        <i class="fa-solid fa-paperclip fa-sm"></i>
                     </button>
                     <input type="file" class="attach-input" id="welcomeAttachInput" multiple accept="*/*"/>
                     <button class="attach-btn" id="welcomeImageBtn" title="添加图片附件（多模态）">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                        <i class="fa-solid fa-images fa-sm"></i>
                     </button>
                     <input type="file" class="attach-input" id="welcomeImageInput" multiple accept="image/*"/>
                     <button class="attach-btn" id="welcomeCmdBtn" title="斜杠命令">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20L16 4"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="12" r="2"/></svg>
+                        <i class="fa-solid fa-terminal fa-sm"></i>
                     </button>
                     <button class="attach-btn" id="welcomeSkillBtn" title="技能">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><text x="4" y="18" font-size="18" font-weight="bold" font-family="monospace" fill="currentColor" stroke="none">$</text></svg>
+                        <i class="fa-solid fa-dollar-sign fa-sm"></i>
                     </button>
                     <button class="attach-btn" id="welcomeAgentBtn" title="子代理">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="19" y1="2" x2="19" y2="6"/><line x1="17" y1="4" x2="21" y2="4"/></svg>
+                        <i class="fa-solid fa-user-plus fa-sm"></i>
                     </button>
                     <button class="attach-btn" id="welcomeLoopBtn" title="循环任务">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                        <i class="fa-solid fa-repeat fa-sm"></i>
                     </button>
                     <button class="attach-btn" id="welcomeHistoryBtn" title="历史消息" disabled>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <i class="fa-regular fa-clock fa-sm"></i>
                     </button>
                 </div>
                 <div class="toolbar-right">
                     <button class="voice-btn hidden" id="welcomeVoiceBtn" title="语音输入">
-                        <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                        <i class="fa-solid fa-microphone fa-sm"></i>
                     </button>
                     <button class="welcome-send-btn" id="welcomeSendBtn" title="发送">
-                        <i class="layui-icon layui-icon-release"></i>
+                        <i class="fa-regular fa-paper-plane fa-sm"></i>
                     </button>
                 </div>
             </div>
@@ -201,35 +204,35 @@
                             </div>
                         </div>
                         <button class="attach-btn" id="chatAttachBtn" title="添加文件附件">
-                            <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                            <i class="fa-solid fa-paperclip fa-sm"></i>
                         </button>
                         <input type="file" class="attach-input" id="chatAttachInput" multiple accept="*/*"/>
                         <button class="attach-btn" id="chatImageBtn" title="添加图片附件（多模态）">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                            <i class="fa-solid fa-images fa-sm"></i>
                         </button>
                         <input type="file" class="attach-input" id="chatImageInput" multiple accept="image/*"/>
                         <button class="attach-btn" id="chatCmdBtn" title="斜杠命令">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20L16 4"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="12" r="2"/></svg>
+                            <i class="fa-solid fa-terminal fa-sm"></i>
                         </button>
                         <button class="attach-btn" id="chatSkillBtn" title="技能">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><text x="4" y="18" font-size="18" font-weight="bold" font-family="monospace" fill="currentColor" stroke="none">$</text></svg>
+                            <i class="fa-solid fa-dollar-sign fa-sm"></i>
                         </button>
                         <button class="attach-btn" id="chatAgentBtn" title="子代理">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="19" y1="2" x2="19" y2="6"/><line x1="17" y1="4" x2="21" y2="4"/></svg>
+                            <i class="fa-solid fa-user-plus fa-sm"></i>
                         </button>
                         <button class="attach-btn" id="chatLoopBtn" title="循环任务">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                            <i class="fa-solid fa-repeat fa-sm"></i>
                         </button>
                         <button class="attach-btn" id="chatHistoryBtn" title="历史消息">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            <i class="fa-regular fa-clock fa-sm"></i>
                         </button>
                     </div>
                     <div class="toolbar-right">
                         <button class="voice-btn hidden" id="chatVoiceBtn" title="语音输入">
-                            <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                            <i class="fa-solid fa-microphone fa-sm"></i>
                         </button>
                         <button class="send-btn" id="chatSendBtn" title="发送">
-                            <i class="layui-icon layui-icon-release"></i>
+                            <i class="fa-regular fa-paper-plane fa-sm"></i>
                         </button>
                     </div>
                 </div>
@@ -266,7 +269,9 @@
 </div>
 
 <!-- File Tree Panel (Right Side) -->
-    <button class="filer-panel-toggle-btn collapsed" id="filerToggleBtn" title="展开文件树">‹</button>
+    <button class="filer-panel-toggle-btn collapsed" id="filerToggleBtn" title="展开文件树">
+        <i class="fa-solid fa-angle-left fa-xs"></i>
+    </button>
     <div class="filer-resize-handle" id="filerResizeHandle"></div>
     <div class="filer-panel collapsed" id="filerPanel">
         <div class="filer-tabs">
