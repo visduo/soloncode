@@ -318,8 +318,11 @@
         $overlay.on('click', function(e) {
             if (e.target === this) $overlay.remove();
         });
-        $overlay.on('keypress', 'input', function(e) {
-            if (e.which === 13) doAdd();
+        $overlay.on('keydown', 'input', function(e) {
+            if (e.key === 'Enter' && !isInputComposing(e)) {
+                e.preventDefault();
+                doAdd();
+            }
         });
         setTimeout(function() {
             $overlay.find('#manualModelName').focus();

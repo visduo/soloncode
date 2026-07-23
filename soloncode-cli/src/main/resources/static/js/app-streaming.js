@@ -246,7 +246,7 @@ function buildDisplayText(text, filesToSend) {
     }
     return displayText;
 }
-    
+
     function truncateQueueText(text, maxLen) {
     var s = String(text || '').replace(/\s+/g, ' ').trim();
     if (!s) return '（附件）';
@@ -254,11 +254,11 @@ function buildDisplayText(text, filesToSend) {
     if (s.length <= maxLen) return s;
     return s.slice(0, maxLen) + '…';
 }
-    
+
     function hasDraftInput() {
     return !!(chatInput && chatInput.value.trim()) || (pendingFiles && pendingFiles.length > 0);
         }
-        
+
     function applyQueuedItemToInput(item) {
     if (!item) return;
     if (!inChatMode) switchToChatMode();
@@ -272,7 +272,7 @@ function buildDisplayText(text, filesToSend) {
     }
     chatInput.focus();
     }
-    
+
     function enqueueMessage(sess, text, files) {
     if (!sess) return false;
     // Stop 窗口期：禁止再入队，避免结束后误续发
@@ -308,16 +308,16 @@ function buildDisplayText(text, filesToSend) {
     }
     return true;
     }
-    
+
     function sendMessageCore(sess, text, filesToSend, options) {
     options = options || {};
     filesToSend = filesToSend || [];
     var displayText = options.displayText || buildDisplayText(text, filesToSend);
-    
+
     if (currentChatIndex === -1) {
         saveChatToHistory(displayText);
     }
-    
+
     // 先标记 streaming，再 setActiveSession，避免会话切换时误触发 drain 连发
     sess.isStreaming = true;
     sess.stopRequested = false;
@@ -329,10 +329,10 @@ function buildDisplayText(text, filesToSend) {
 
     if (!inChatMode) switchToChatMode();
     setActiveSession(sess.sessionId);
-    
+
     // 用户主动发消息：作废此前上滑状态，后续 AI 输出必须重新粘底
     if (typeof scrollToBottom === 'function') scrollToBottom(true);
-    
+
     var imageDataUrls = [];
     var fileAttachments = [];
     for (var i = 0; i < filesToSend.length; i++) {
@@ -340,7 +340,7 @@ function buildDisplayText(text, filesToSend) {
         else fileAttachments.push(filesToSend[i]);
     }
     appendUserMessage(sess, displayText, imageDataUrls, fileAttachments);
-        
+
     isStreaming = true;
     setBtnStopMode();
     resetStreamState(sess);
@@ -359,16 +359,16 @@ function buildDisplayText(text, filesToSend) {
         reasoningEffort: item.reasoningEffort
     });
         }
-    
+
     function drainMessageQueue(sess) {
     if (!sess || sess._queueDraining) return;
     if (sess.isStreaming) return;
     if (sess.stopRequested || sess._stoppedTurn) return;
     if (!sess.messageQueue || !sess.messageQueue.length) return;
-    
+
     // 仅 active 会话自动续发，避免后台会话抢焦点
     if (sess.sessionId !== activeSessionId) return;
-    
+
     sess._queueDraining = true;
     try {
         var item = sess.messageQueue.shift();
@@ -381,7 +381,7 @@ function buildDisplayText(text, filesToSend) {
     }
 }
     window.drainMessageQueue = drainMessageQueue;
-    
+
     function removeQueuedMessage(sess, id) {
     if (!sess || !sess.messageQueue) return null;
     for (var i = 0; i < sess.messageQueue.length; i++) {
@@ -395,7 +395,7 @@ function buildDisplayText(text, filesToSend) {
     }
     return null;
     }
-    
+
 function editQueuedMessageToInput(sess, id) {
     if (!sess || !id) return;
     // 先检查草稿，确认后再出队，避免取消时丢队列项
@@ -416,7 +416,7 @@ function cancelLastQueuedToInput(sess) {
     applyQueuedItemToInput(item);
     return true;
         }
-    
+
     function clearMessageQueue(sess) {
     if (!sess) return;
     sess.messageQueue = [];
@@ -486,7 +486,7 @@ function cancelLastQueuedToInput(sess) {
         listEl.innerHTML = html;
     }
     window.renderQueueDock = renderQueueDock;
-        
+
         function updateStreamingPlaceholder() {
     if (!chatInput) return;
     var sess = activeSessionId && sessionMap[activeSessionId];
@@ -514,7 +514,7 @@ function cancelLastQueuedToInput(sess) {
     chatInput.placeholder = '随便问...';
             }
             window.updateStreamingPlaceholder = updateStreamingPlaceholder;
-            
+
         // 任务排队 strip 事件（右栏底部，跨 Tab 常驻）—— DOM 就绪后绑定一次
         (function bindQueueDockEvents() {
             function bind() {
@@ -557,12 +557,12 @@ function cancelLastQueuedToInput(sess) {
                 bind();
             }
         })();
-            
+
             /* ===== Send ===== */
         function sendMessage() {
     var text = getInputText();
     var streamSess = activeSessionId && sessionMap[activeSessionId];
-    
+
     /* 空闲 + 有排队：允许空 Enter 续发队头；有内容则入队尾再 drain */
     if (streamSess && !streamSess.isStreaming
         && !streamSess.stopRequested && !streamSess._stoppedTurn
@@ -582,9 +582,9 @@ function cancelLastQueuedToInput(sess) {
         chatInput.focus();
         return;
     }
-    
+
     if (!text && pendingFiles.length === 0) return;
-    
+
     /* 活动会话 streaming：入队等待，不打断当前轮 */
     if (streamSess && streamSess.isStreaming) {
         if (streamSess.stopRequested) {
@@ -600,7 +600,7 @@ function cancelLastQueuedToInput(sess) {
         chatInput.focus();
         return;
     }
-        
+
     /* /clear 命令：先发送到服务端清后端数据，流结束后再清前端 UI */
     if (text === '/clear') {
         clearInput();
@@ -936,7 +936,7 @@ function finishStream(sess) {
         }
     }
     // ---------------------------------------------------
-        
+
     removeThinking(sess);
     purgeInlineThinking(sess);
     // 关闭所有未完成的 reasonId 分组思考块（内部会 finalize 一次思考内容）
@@ -1638,7 +1638,7 @@ function showFeishuModal() {
 
     // Enter key to confirm
     $appIdInput.add($appSecretInput).on('keydown', function(e) {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !isInputComposing(e)) {
             e.preventDefault();
             $confirmBtn.click();
         }
@@ -2007,7 +2007,7 @@ function showDingTalkModal() {
 
     // Enter key to confirm
     $appKeyInput.add($appSecretInput).on('keydown', function(e) {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !isInputComposing(e)) {
             e.preventDefault();
             $confirmBtn.click();
         }
