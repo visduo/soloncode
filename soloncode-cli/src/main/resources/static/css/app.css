@@ -979,7 +979,7 @@ body {
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
 }
-.filer-search-icon {
+.filer-search-bar i {
     color: var(--text-secondary);
     opacity: 0.5;
     flex-shrink: 0;
@@ -1511,7 +1511,7 @@ body {
 }
 .git-refresh-btn {
     font-size: 11px;
-    padding: 4px 6px;
+    padding: 6px 6px;
     border-radius: 4px;
     border: 1px solid var(--border-color);
     background: transparent;
@@ -2612,7 +2612,7 @@ pre:hover .code-copy-btn { opacity: 1; }
 
 .todo-refresh-btn {
     font-size: 11px;
-    padding: 4px 8px;
+    padding: 6px 6px;
     border-radius: 4px;
     border: 1px solid var(--border-color);
     background: transparent;

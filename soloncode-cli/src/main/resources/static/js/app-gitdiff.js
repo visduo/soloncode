@@ -399,7 +399,7 @@
         // 重置 MD 切换按钮为初始状态（源码态），应对切换文件时图标未复位的问题
         var _mdToggleReset = document.getElementById('gitViewerMdToggle');
         if (_mdToggleReset) {
-            _mdToggleReset.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+            _mdToggleReset.innerHTML = '<i class="fa-regular fa-eye"></i>';
             _mdToggleReset.title = '预览 Markdown';
         }
         // 显示复制按钮（可能在审查详情中被隐藏）
@@ -530,7 +530,7 @@
                             }
 
                             // 切换 SVG 图标为"代码"图标
-                            toggle.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>';
+                            toggle.innerHTML = '<i class="fa-solid fa-code"></i>';
                             toggle.title = '查看源码';
                         } else {
                             // 切换回"源码"模式
@@ -538,7 +538,7 @@
                             wrap.style.display = 'none';
 
                             // 切换 SVG 图标为"眼睛"图标
-                            toggle.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+                            toggle.innerHTML = '<i class="fa-regular fa-eye"></i>';
                             toggle.title = '预览 Markdown';
                         }
                     });
@@ -844,14 +844,14 @@
             discardBtn.title = status === '?'
                 ? '删除此未跟踪文件（不可恢复）'
                 : '丢弃此文件的本地变更，恢复到 HEAD';
-            discardBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg> 回滚';
+            discardBtn.innerHTML = '<i class="fa-solid fa-arrow-rotate-left"></i> 回滚';
             discardBtn.addEventListener('click', function() {
                 var confirmMsg = status === '?'
                     ? '确定删除未跟踪文件「' + path + '」吗？此操作不可恢复。'
                     : '确定回滚「' + path + '」的变更吗？本地修改将丢失且不可恢复。';
                 var confirmTitle = status === '?' ? '确认删除' : '确认回滚';
                 var confirmBtn = status === '?' ? '删除' : '回滚';
-                var discardIconHtml = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg> 回滚';
+                var discardIconHtml = '<i class="fa-solid fa-arrow-rotate-left"></i> 回滚';
 
                 function doDiscard() {
                     discardBtn.disabled = true;
@@ -1038,10 +1038,10 @@
         // 监听全屏状态变化，更新图标
         document.addEventListener('fullscreenchange', function() {
             if (document.fullscreenElement === gitDiffViewer) {
-                gitViewerFullscreen.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6m10-10h-6V4M4 10h6V4m10 10h-6v6"/></svg>';
+                gitViewerFullscreen.innerHTML = '<i class="fa-solid fa-compress"></i>';
                 gitViewerFullscreen.title = '退出全屏';
             } else {
-                gitViewerFullscreen.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
+                gitViewerFullscreen.innerHTML = '<i class="fa-solid fa-expand"></i>';
                 gitViewerFullscreen.title = '全屏';
             }
         });
