@@ -95,7 +95,7 @@
         for (var i = 0; i < modelIconRules.length; i++) {
             if (modelIconRules[i].pattern.test(keywords)) {
                 var icon = modelIconRules[i].icon;
-                return '<img src="/lobe-icons/' + icon + '.svg" alt="" aria-hidden="true"/>';
+                return '<span class="lobe-model-icon" style="--lobe-icon:url(\'/lobe-icons/' + icon + '.svg\')" aria-hidden="true"></span>';
             }
         }
         var fallback = (model || '?').trim().substring(0, 2).toUpperCase();
