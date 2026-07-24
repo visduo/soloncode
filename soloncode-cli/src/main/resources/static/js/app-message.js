@@ -3,13 +3,13 @@
 /* 依赖：app-base.js */
 
 /* 复制图标（icon-only，用户与 AI 消息共用） */
-var COPY_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
-var OK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+var COPY_SVG = '<i class="fa-regular fa-copy"></i>';
+var OK_SVG = '<i class="fa-solid fa-check"></i>';
 /* 重新运行（循环箭头）与继续运行（快进）图标 */
-var RERUN_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>';
-var CONTINUE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>';
+var RERUN_SVG = '<i class="fa-solid fa-arrow-rotate-right"></i>';
+var CONTINUE_SVG = '<i class="fa-solid fa-forward-step"></i>';
 /* 删除图标 */
-var DELETE_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+var DELETE_SVG = '<i class="fa-regular fa-trash-can"></i>';
 
 /* 更新用户消息的「重做」按钮：仅最后一条用户消息显示 */
 function updateUserRerunButtons(container) {
@@ -217,7 +217,7 @@ function ensureAssistantBubble(sess) {
         $(sess.container).append(row);
         if (typeof observeMessagesHeight === 'function') observeMessagesHeight(row);
         sess.currentBubbleEl = $(row).find('.md-content')[0];
-        
+
         // AI 回复不显示来源标签
         var copyBtn = $(row).find('.copy-btn')[0];
         // 复制目标为「最终答案」：统一从 .md-content 的 data-md-raw 读取。
@@ -749,7 +749,7 @@ function finishThinkingBlock(sess, reasonId) {
         if (sess.sessionId === activeSessionId) scrollToBottom();
         return;
     }
-    
+
     // 旧式逻辑（无 reasonId 时）：结束当前 thinkingBlockEl 并包裹分组
     if (sess.thinkingBlockEl) {
         if (sess.reasonRafId) {
@@ -772,10 +772,10 @@ function finishThinkingBlock(sess, reasonId) {
         var label = $(sess.thinkingBlockEl).find('.reason-group-think-label')[0];
         if (label) $(label).text('思考');
         $(sess.thinkingBlockEl).find('.reason-group-think-dots').remove();
-        
+
         // reason-group 已在 ensureThinkingBlock 中预创建，无需再做 DOM 包裹
         sess.thinkingGroupEl = sess.thinkingBlockEl.parentNode;
-        
+
         sess.thinkingBlockEl = null;
         sess.thinkingBodyMdEl = null;
         sess.thinkingBodyWrapEl = null;
@@ -919,7 +919,7 @@ window._toolRenderers.edit = function(bodyEl, text, args) {
         if (isErr) {
             if (diff) html += '<div class="edit-result-sep"></div>';
             html += '<div class="edit-result is-error">'
-                + '<span class="edit-result-label"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> \u5931\u8d25</span>'
+                + '<span class="edit-result-label"><i class="fa-solid fa-triangle-exclamation"></i> \u5931\u8d25</span>'
                 + '<span class="edit-result-text">' + escapeHtml(result) + '</span></div>';
         }
     }
@@ -991,7 +991,7 @@ window._toolRenderers.grep = function(bodyEl, text, args) {
     groups.forEach(function(g) { totalHits += g.hits.length; });
     html += '<div class="tool-summary">' + groups.length + ' \u4e2a\u6587\u4ef6 / ' + totalHits + ' \u5904\u5339\u914d</div>';
     groups.forEach(function(g) {
-        html += '<div class="grep-file"><span class="grep-file-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 1.5h4.75L12.5 5.75V13.5a1 1 0 01-1 1H4a1 1 0 01-1-1V2.5a1 1 0 011-1z" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/><path d="M8.75 1.5v4.25H12.5" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/></svg></span>' + escapeHtml(g.path) + '</div>';
+        html += '<div class="grep-file"><span class="grep-file-icon"><i class="fa-regular fa-file"></i></span>' + escapeHtml(g.path) + '</div>';
         g.hits.forEach(function(h) {
             html += '<div class="grep-hit"><span class="grep-ln">' + escapeHtml(h.ln) + '</span>'
                 + '<span class="grep-code">' + escapeHtml(h.content) + '</span></div>';
@@ -1023,8 +1023,8 @@ function renderFileListing(bodyEl, text, args) {
     var html = '<div class="file-listing"><div class="tool-summary">' + items.length + ' \u9879</div>';
     items.forEach(function(it) {
         var icon = it.dir
-            ? '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4a1 1 0 011-1h3.5l1.5 1.5H13a1 1 0 011 1V12a1 1 0 01-1 1H3a1 1 0 01-1-1V4z" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/></svg>'
-            : '<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 1.5h4.75L12.5 5.75V13.5a1 1 0 01-1 1H4a1 1 0 01-1-1V2.5a1 1 0 011-1z" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/><path d="M8.75 1.5v4.25H12.5" stroke="currentColor" stroke-width="1" stroke-linejoin="round"/></svg>';
+            ? '<i class="fa-regular fa-folder"></i>'
+            : '<i class="fa-regular fa-file"></i>';
         html += '<div class="file-entry' + (it.dir ? ' is-dir' : '') + '">'
             + '<span class="file-entry-icon">' + icon + '</span>'
             + '<span class="file-entry-path">' + escapeHtml(it.path) + '</span></div>';
@@ -1409,7 +1409,7 @@ function startThinkingTimerDual(sess, timerKey, startTimeKey, currentTimerSpan, 
 function showThinking(sess) {
     removeThinking(sess);
     sess.thinkingEl = $('<div>').addClass('thinking-row')[0];
-    sess.thinkingEl.innerHTML = '<div class="thinking-bubble">' + DOTS_HTML 
+    sess.thinkingEl.innerHTML = '<div class="thinking-bubble">' + DOTS_HTML
         + '<span class="thinking-timer-wrap">'
         + '<span class="thinking-current-timer">0s</span>'
         + '</span></div>';
